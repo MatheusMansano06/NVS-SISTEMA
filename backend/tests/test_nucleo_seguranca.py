@@ -54,6 +54,20 @@ def test_limitador_descarta_chaves_vencidas(monkeypatch):
     for i in range(4):
         limitador.permitido(f"k{i}", janela=0)
     import time
-    time.sleep(0.01)
+    time.sleep(0.05)
     limitador.permitido("novo", janela=0)
     assert set(limitador._tentativas) == {"novo"}
+
+
+def test_hash_corrompido_confere_falso_sem_estourar():
+    assert conferir("isto-nao-e-um-hash", "qualquer") is False
+    assert conferir("$argon2id$v=19$m=65536,t=3,p=4$abc$def", "qualquer") is False
+
+
+def test_conferir_concorrente_devolve_resultados_corretos():
+    from concurrent.futures import ThreadPoolExecutor
+    h = gerar("correta-123456")
+    senhas = ["correta-123456", "errada"] * 8
+    with ThreadPoolExecutor(16) as ex:
+        resultados = list(ex.map(lambda s: conferir(h, s), senhas))
+    assert resultados == [True, False] * 8

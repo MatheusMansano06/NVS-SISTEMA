@@ -27,6 +27,7 @@ ESTRUTURA = [
         empresa_id uuid not null references empresas on delete cascade,
         papel text not null check (papel in ('dono','admin','operador','leitura')),
         criado_em timestamptz not null default now(),
+        atualizado_em timestamptz not null default now(),
         primary key (usuario_id, empresa_id))""",
     """create table contas_marketplace (
         id uuid primary key default gen_random_uuid(),
@@ -55,6 +56,8 @@ ESTRUTURA = [
         empresa_id uuid not null,
         modulo text not null,
         habilitada boolean not null default false,
+        criado_em timestamptz not null default now(),
+        atualizado_em timestamptz not null default now(),
         primary key (conta_id, modulo),
         foreign key (conta_id, empresa_id) references contas_marketplace (id, empresa_id) on delete cascade)""",
     """create table oauth_estados (
@@ -63,7 +66,8 @@ ESTRUTURA = [
         usuario_id uuid not null,
         marketplace text not null,
         expira_em timestamptz not null,
-        usado_em timestamptz)""",
+        usado_em timestamptz,
+        criado_em timestamptz not null default now())""",
     """create table auditoria (
         id bigserial primary key,
         empresa_id uuid,
@@ -87,6 +91,8 @@ ESTRUTURA = [
     "where processado_em is null",
 ]
 
+# auditoria e notificacoes_recebidas são append-only: guardam só o instante de criação (criado_em/recebido_em),
+# sem atualizado_em.
 # Sem RLS de propósito: usuarios, empresas e membros são lidos antes de a empresa ser escolhida;
 # oauth_estados é consumido no callback, quando a empresa ainda não é conhecida; notificacoes_recebidas
 # chega do marketplace sem empresa. O acesso a elas é filtrado por usuário na camada de serviço.
@@ -101,6 +107,10 @@ def upgrade() -> None:
         "do $$ begin if not exists (select from pg_roles where rolname = 'nvs_app') then "
         "execute format('create role nvs_app login password %L', current_setting('nvs.senha')); "
         "end if; end $$"))
+    # sempre reaplica, para que girar NVS_APP_SENHA valha e o papel nunca fure o RLS
+    conn.execute(sa.text(
+        "do $$ begin execute format('alter role nvs_app login nosuperuser nobypassrls nocreatedb "
+        "nocreaterole password %L', current_setting('nvs.senha')); end $$"))
     for sql in ESTRUTURA:
         conn.execute(sa.text(sql))
     for t in COM_RLS:
@@ -116,6 +126,13 @@ def upgrade() -> None:
     conn.execute(sa.text("grant select, insert, update, delete on all tables in schema public to nvs_app"))
     conn.execute(sa.text("grant usage on all sequences in schema public to nvs_app"))
     conn.execute(sa.text("revoke update, delete on auditoria from nvs_app"))
+    # o webhook público não tem empresa no contexto; a função, de propósito, enxerga além do RLS
+    conn.execute(sa.text(
+        "create function conta_ml_existe(text) returns boolean language sql stable security definer "
+        "set search_path = public, pg_temp as $$ select exists (select 1 from contas_marketplace "
+        "where marketplace = 'ml' and id_externo = $1 and status <> 'desligada') $$"))
+    conn.execute(sa.text("revoke all on function conta_ml_existe(text) from public"))
+    conn.execute(sa.text("grant execute on function conta_ml_existe(text) to nvs_app"))
 
 
 def downgrade() -> None:

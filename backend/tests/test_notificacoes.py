@@ -1,5 +1,7 @@
 from sqlalchemy import text
 
+from tests.auxiliares import semear_conta
+
 CORPO = {"resource": "/orders/1", "user_id": 42, "topic": "orders_v2", "application_id": 123}
 
 
@@ -9,12 +11,14 @@ def _contar(dono) -> int:
 
 
 def test_grava_e_nao_duplica_pendente(cliente, dono):
+    semear_conta(dono, "now() + interval '1 hour'")
     assert cliente.post("/api/ml/notificacoes", json=CORPO).status_code == 200
     assert cliente.post("/api/ml/notificacoes", json=CORPO).status_code == 200
     assert _contar(dono) == 1
 
 
 def test_processada_permite_nova_notificacao_do_mesmo_recurso(cliente, dono):
+    semear_conta(dono, "now() + interval '1 hour'")
     cliente.post("/api/ml/notificacoes", json=CORPO)
     with dono.begin() as c:
         c.execute(text("update notificacoes_recebidas set processado_em = now()"))
@@ -52,4 +56,19 @@ def test_sem_application_id_e_recusado(cliente, dono):
     corpo = {k: v for k, v in CORPO.items() if k != "application_id"}
     r = cliente.post("/api/ml/notificacoes", json=corpo)
     assert r.status_code == 400
+    assert _contar(dono) == 0
+
+
+def test_user_id_desconhecido_da_200_e_nao_grava(cliente, dono):
+    semear_conta(dono, "now() + interval '1 hour'")
+    r = cliente.post("/api/ml/notificacoes", json=CORPO | {"user_id": 999})
+    assert r.status_code == 200 and r.json() == {}
+    assert _contar(dono) == 0
+
+
+def test_conta_desligada_nao_grava(cliente, dono):
+    semear_conta(dono, "now() + interval '1 hour'")
+    with dono.begin() as c:
+        c.execute(text("update contas_marketplace set status = 'desligada'"))
+    assert cliente.post("/api/ml/notificacoes", json=CORPO).status_code == 200
     assert _contar(dono) == 0

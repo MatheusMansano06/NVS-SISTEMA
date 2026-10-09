@@ -22,6 +22,10 @@ def receber(n: Notificacao) -> dict:
     # o ML não assina o aviso; só confere o app e deixa o processamento para a tarefa, que consulta a API
     if str(n.application_id) != configuracao().ml_client_id:
         raise HTTPException(400, "aplicacao invalida")
+    with transacao() as conn:
+        existe = conn.execute(text("select conta_ml_existe(:u)"), {"u": str(n.user_id)}).scalar_one()
+    if not existe:  # 200 igual ao de sucesso: não revela quais contas existem e evita retentativas do ML
+        return {}
     hash_ = hashlib.sha256(f"{n.user_id}|{n.topic}|{n.resource}".encode()).hexdigest()
     with transacao() as conn:
         conn.execute(text(

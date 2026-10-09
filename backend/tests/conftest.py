@@ -9,7 +9,7 @@ os.environ.setdefault(
     "NVS_DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5433/nvs_test"
 )
 os.environ.setdefault("NVS_APP_SENHA", "senha_teste")
-os.environ.setdefault("NVS_SEGREDO_SESSAO", "segredo-de-teste")
+os.environ.setdefault("NVS_SEGREDO_SESSAO", "segredo-de-teste-com-32-caracteres-ou-mais")
 os.environ.setdefault("NVS_CHAVES_TOKEN", "1:" + base64.b64encode(b"k" * 32).decode())
 os.environ.setdefault("NVS_ML_CLIENT_ID", "123")
 os.environ.setdefault("NVS_ML_CLIENT_SECRET", "segredo-ml")

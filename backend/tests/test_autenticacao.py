@@ -50,3 +50,24 @@ def test_email_ignora_caixa(cliente):
     for email in ("A@x.com", "a@X.com"):
         r = cliente.post("/api/auth/entrar", json={"email": email, "senha": CADASTRO["senha"]})
         assert r.status_code == 200
+
+
+def test_limite_por_email_vale_mesmo_trocando_de_ip(cliente):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    cliente.post("/api/auth/cadastro", json=CADASTRO)
+    errado = {"email": "a@x.com", "senha": "errada-errada-1"}
+    codigos = []
+    for i in range(21):
+        with TestClient(app, headers={"x-requested-with": "nvs"}, client=(f"10.0.0.{i}", 5000)) as c:
+            codigos.append(c.post("/api/auth/entrar", json=errado).status_code)
+    assert codigos == [401] * 20 + [429]
+
+
+def test_login_certo_limpa_so_a_chave_ip_email(cliente):
+    from app.nucleo import limitador
+    cliente.post("/api/auth/cadastro", json=CADASTRO)
+    cliente.post("/api/auth/entrar", json={"email": "a@x.com", "senha": CADASTRO["senha"]})
+    assert "testclient:a@x.com" not in limitador._tentativas
+    assert len(limitador._tentativas["email:a@x.com"]) == 1

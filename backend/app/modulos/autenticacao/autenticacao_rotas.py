@@ -34,8 +34,10 @@ def cadastro(dados: Cadastro, resp: Response, request: Request) -> dict:
 @router.post("/entrar")
 def entrar(dados: Entrada, resp: Response, request: Request) -> dict:
     ip = request.client.host if request.client else "?"
-    chave = f"{ip}:{dados.email.lower()}"
-    if not limitador.permitido(chave):
+    email = dados.email.lower()
+    chave = f"{ip}:{email}"
+    # o limite só por e-mail barra quem troca de IP para adivinhar a senha de uma conta
+    if not limitador.permitido(chave) or not limitador.permitido(f"email:{email}", 20):
         raise HTTPException(429, "muitas tentativas")
     with transacao() as conn:
         usuario_id = servico.autenticar(conn, dados.email, dados.senha)

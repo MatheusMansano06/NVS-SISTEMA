@@ -38,3 +38,22 @@ def test_limitador_bloqueia_na_sexta_e_libera_ao_limpar():
     assert not limitador.permitido("k")
     limitador.limpar("k")
     assert limitador.permitido("k")
+
+
+def test_limitador_nao_estoura_com_threads_concorrentes():
+    limitador._tentativas.clear()
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(16) as ex:
+        resultados = list(ex.map(lambda _: limitador.permitido("c", 5), range(200)))
+    assert resultados.count(True) == 5
+
+
+def test_limitador_descarta_chaves_vencidas(monkeypatch):
+    limitador._tentativas.clear()
+    monkeypatch.setattr(limitador, "_VARREDURA_ACIMA", 3)
+    for i in range(4):
+        limitador.permitido(f"k{i}", janela=0)
+    import time
+    time.sleep(0.01)
+    limitador.permitido("novo", janela=0)
+    assert set(limitador._tentativas) == {"novo"}

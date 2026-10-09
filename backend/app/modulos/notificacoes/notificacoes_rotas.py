@@ -1,7 +1,7 @@
 import hashlib
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.nucleo.banco import transacao
@@ -11,9 +11,9 @@ router = APIRouter(prefix="/api/ml")
 
 
 class Notificacao(BaseModel):
-    resource: str
+    resource: str = Field(min_length=1, max_length=200)
     user_id: int
-    topic: str
+    topic: str = Field(min_length=1, max_length=64)
     application_id: int | None = None
 
 

@@ -34,3 +34,22 @@ def test_webhook_aceita_chamada_sem_sessao_e_sem_cabecalho_csrf():
     from app.main import app
     with TestClient(app) as c:
         assert c.post("/api/ml/notificacoes", json=CORPO).status_code == 200
+
+
+def test_resource_com_mais_de_200_caracteres_e_recusado(cliente, dono):
+    r = cliente.post("/api/ml/notificacoes", json=CORPO | {"resource": "/" + "a" * 200})
+    assert r.status_code == 422
+    assert _contar(dono) == 0
+
+
+def test_topic_com_mais_de_64_caracteres_e_recusado(cliente, dono):
+    r = cliente.post("/api/ml/notificacoes", json=CORPO | {"topic": "t" * 65})
+    assert r.status_code == 422
+    assert _contar(dono) == 0
+
+
+def test_sem_application_id_e_recusado(cliente, dono):
+    corpo = {k: v for k, v in CORPO.items() if k != "application_id"}
+    r = cliente.post("/api/ml/notificacoes", json=corpo)
+    assert r.status_code == 400
+    assert _contar(dono) == 0

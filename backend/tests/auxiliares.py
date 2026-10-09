@@ -1,3 +1,4 @@
+import inspect
 from uuid import uuid4
 
 import httpx
@@ -18,6 +19,10 @@ def cliente_ml_falso(chamadas: list | None = None) -> httpx.Client:
             return httpx.Response(200, json={"id": 42, "nickname": "LOJA42"})
         return httpx.Response(404)
     return httpx.Client(transport=httpx.MockTransport(tratar))
+
+
+# o FastAPI leria `chamadas` como parametro de query quando isto vira dependency override
+cliente_ml_falso.__signature__ = inspect.Signature()
 
 
 def semear_conta(dono, expira_sql: str) -> tuple[str, str]:

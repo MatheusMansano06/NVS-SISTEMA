@@ -1,0 +1,12 @@
+.venv
+**/.venv
+__pycache__
+*.pyc
+.git
+.superpowers
+.claude
+docs
+node_modules
+.pytest_cache
+.ruff_cache
+.env

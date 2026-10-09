@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.integracoes.mercado_livre.ml_cliente import cliente_http
 from app.main import app
@@ -68,6 +69,30 @@ def test_conta_ml_nao_vai_para_segunda_empresa(cliente):
         r = outro.get(f"/api/contas/ml/callback?code=c&state={_iniciar(outro, empresa_b)}",
                       follow_redirects=False)
     assert r.status_code == 409
+
+
+def test_409_nao_deixa_rastro_na_segunda_empresa(cliente, dono):
+    empresa_a = _logar(cliente)
+    cliente.get(f"/api/contas/ml/callback?code=c&state={_iniciar(cliente, empresa_a)}", follow_redirects=False)
+    with TestClient(app, headers={"x-requested-with": "nvs"}) as outro:
+        empresa_b = _logar(outro, "b@x.com")
+        r = outro.get(f"/api/contas/ml/callback?code=c&state={_iniciar(outro, empresa_b)}",
+                      follow_redirects=False)
+    assert r.status_code == 409
+    with dono.connect() as c:
+        por_empresa = dict(c.execute(text(
+            "select empresa_id::text, count(*) from contas_marketplace group by 1")).all())
+        assert por_empresa == {empresa_a: 1}
+        assert c.execute(text("select count(*) from credenciais_conta")).scalar_one() == 1
+
+
+def test_integrity_error_que_nao_e_duplicidade_nao_vira_409(cliente, monkeypatch):
+    def quebrar(*args, **kwargs):
+        raise IntegrityError("stmt", {}, Exception("fk"))
+    monkeypatch.setattr("app.modulos.contas.contas_servico.salvar_conta_ml", quebrar)
+    state = _iniciar(cliente, _logar(cliente))
+    with pytest.raises(IntegrityError):
+        cliente.get(f"/api/contas/ml/callback?code=c&state={state}", follow_redirects=False)
 
 
 def test_empresa_de_outro_usuario_da_403(cliente):

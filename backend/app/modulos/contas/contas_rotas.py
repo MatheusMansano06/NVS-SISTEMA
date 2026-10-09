@@ -40,6 +40,9 @@ def callback_ml(code: str, state: str, usuario_id: str = Depends(usuario_atual),
         with transacao(empresa_id) as conn:
             conta_id = servico.salvar_conta_ml(conn, empresa_id, tokens, apelido)
             registrar(conn, "conta_conectada", usuario_id, empresa_id, "conta", conta_id)
-    except IntegrityError:
+    except IntegrityError as erro:
+        if (getattr(erro.orig, "sqlstate", None) != "23505"
+                or erro.orig.diag.constraint_name != "contas_marketplace_marketplace_id_externo_key"):
+            raise
         raise HTTPException(409, "conta ja conectada a outra empresa") from None
     return RedirectResponse(f"{configuracao().frontend_url}?conta=ml", status_code=303)

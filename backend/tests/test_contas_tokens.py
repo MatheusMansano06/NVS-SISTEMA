@@ -33,3 +33,26 @@ def test_invalid_grant_marca_conta_para_reautorizar(dono, monkeypatch):
         token_valido(conta_id, empresa_id, cliente_ml_falso())
     with dono.connect() as c:
         assert c.execute(text("select status from contas_marketplace")).scalar_one() == "reautorizar"
+
+
+def test_sem_linha_de_credenciais_pede_reautorizacao(dono):
+    empresa_id, conta_id = semear_conta(dono, "now() + interval '1 hour'")
+    with dono.begin() as c:
+        c.execute(text("delete from credenciais_conta"))
+    with pytest.raises(ContaPrecisaReautorizar):
+        token_valido(conta_id, empresa_id, cliente_ml_falso())
+
+
+def test_5xx_na_renovacao_nao_altera_status_nem_credenciais(dono):
+    import httpx
+    empresa_id, conta_id = semear_conta(dono, "now() - interval '1 minute'")
+    with dono.connect() as c:
+        antes = c.execute(text("select access_token_cifrado, refresh_token_cifrado, expira_em "
+                               "from credenciais_conta")).one()
+    http = httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(503)))
+    with pytest.raises(httpx.HTTPStatusError):
+        token_valido(conta_id, empresa_id, http)
+    with dono.connect() as c:
+        assert c.execute(text("select status from contas_marketplace")).scalar_one() == "ativa"
+        assert c.execute(text("select access_token_cifrado, refresh_token_cifrado, expira_em "
+                              "from credenciais_conta")).one() == antes

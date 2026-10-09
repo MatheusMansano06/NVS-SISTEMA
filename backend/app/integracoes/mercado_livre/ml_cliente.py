@@ -37,9 +37,16 @@ def trocar_codigo(http: httpx.Client, code: str) -> dict:
     return r.json()
 
 
+def _erro(r: httpx.Response) -> str | None:
+    try:
+        return r.json().get("error")
+    except (ValueError, AttributeError):
+        return None
+
+
 def renovar(http: httpx.Client, refresh_token: str) -> dict:
     r = _token(http, {"grant_type": "refresh_token", "refresh_token": refresh_token})
-    if r.status_code == 400 and r.json().get("error") == "invalid_grant":
+    if r.status_code == 400 and _erro(r) == "invalid_grant":
         raise RefreshInvalido
     r.raise_for_status()
     return r.json()

@@ -29,3 +29,9 @@ def test_erro_transitorio_nao_vira_refresh_invalido():
     http = _cliente(httpx.Response(503))
     with pytest.raises(httpx.HTTPStatusError):
         ml.renovar(http, "r")
+
+
+def test_400_sem_json_cai_no_raise_for_status():
+    http = _cliente(httpx.Response(400, content=b"<html>bad</html>"))
+    with pytest.raises(httpx.HTTPStatusError):
+        ml.renovar(http, "r")

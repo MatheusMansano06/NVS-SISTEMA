@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NVS Tech — Dashboard financeiro (protótipo)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fff; --soft:#f6f8fc; --line:#e6ebf3; --navy:#0a1f4d; --ink:#0a1f4d; --ink-2:#51607a; --ink-3:#8b97ab;
+  --blue:#0b5cf6; --blue-soft:#eaf1ff; --yellow:#fcc200; --gain:#12805c; --loss:#c2412d; --warn:#8a6500; --warn-soft:#fff6d6;
+  --ml:#fcc200; --sp:#ee4d2d; --side:244px;
+  --cut:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%);
+}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Plus Jakarta Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink-2);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+.num,.disp{font-family:Sora,"Plus Jakarta Sans",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--navy)}
+.eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:var(--blue)}
+.app{display:grid;grid-template-columns:var(--side) 1fr;min-height:100vh}
+/* menu */
+.side{position:sticky;top:0;height:100vh;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 14px 18px;gap:14px;overflow:auto;background:var(--bg)}
+.logo{display:flex;justify-content:center;height:64px;overflow:hidden}
+.logo img{width:176px;height:176px;margin-top:-54px;flex:none}
+.rule{height:2px;background:linear-gradient(90deg,transparent,var(--navy) 50%,transparent);opacity:.9;margin:-2px 0 2px;border-radius:2px}
+.empresa{position:relative}
+.empresa>button{width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;text-align:left;transition:.15s}
+.empresa>button:hover{border-color:var(--blue)}
+.empresa b{display:block;font-size:13px;color:var(--navy)}.empresa small{color:var(--ink-3);font-size:11.5px}
+.avatar{width:30px;height:30px;background:var(--navy);color:#fff;display:grid;place-items:center;font-family:Sora;font-weight:700;font-size:11px;flex:none;clip-path:var(--cut)}
+.menu-emp{display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px -12px rgba(10,31,77,.25);padding:6px;z-index:5}
+.menu-emp.open{display:block}
+.menu-emp button{display:flex;gap:10px;align-items:center;width:100%;padding:8px;border-radius:7px;text-align:left}
+.menu-emp button:hover{background:var(--soft)}
+nav{display:flex;flex-direction:column;gap:1px}
+.grp{font-size:10px;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:var(--ink-3);padding:16px 10px 6px;display:flex;align-items:center;gap:8px}
+.grp::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+nav a{display:flex;align-items:center;gap:11px;padding:9px 10px 9px 14px;border-radius:8px;color:var(--ink-2);text-decoration:none;font-weight:500;transition:.12s;position:relative}
+nav a:hover{background:var(--soft);color:var(--navy)}
+nav a.on{color:var(--navy);font-weight:700;background:var(--blue-soft)}
+nav a.on::before{content:"";position:absolute;left:0;top:50%;margin-top:-4px;border:5px solid transparent;border-top:8px solid var(--yellow);border-bottom:0;transform:rotate(-90deg)}
+nav svg{width:18px;height:18px;flex:none}
+nav a.on svg{color:var(--blue)}
+.badge{margin-left:auto;font-size:11px;font-weight:700;background:var(--warn-soft);color:var(--warn);padding:2px 7px;border-radius:99px}
+.side-foot{margin-top:auto;font-size:11.5px;color:var(--ink-3);text-align:center}
+/* topo */
+main{padding:24px 32px 56px;min-width:0}
+.top{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.top h1{font-family:Sora;font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--navy);line-height:1.1;margin-top:6px}
+.top p{color:var(--ink-3);font-size:13px;margin-top:4px}
+.sp{flex:1}
+.chips{display:flex;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;background:#fff}
+.chips button{padding:6px 12px;border-radius:7px;font-weight:600;font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:7px;transition:.12s}
+.chips button:hover{color:var(--navy)}
+.chips button.on{background:var(--navy);color:#fff}
+.dot{width:8px;height:8px;border-radius:50%}
+.menu-btn{display:none;width:38px;height:38px;border:1px solid var(--line);border-radius:10px;place-items:center}
+/* cartões */
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;position:relative;transition:border-color .15s,transform .15s}
+.card:hover{border-color:#c9d6ee}
+.kpis{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.kpi small{color:var(--ink-3);font-weight:600;font-size:12px}
+.kpi .v{font-size:26px;font-weight:700;margin:6px 0 10px}
+.kpi.hero{border-color:var(--navy);border-width:1px;border-left-width:4px;border-radius:0 12px 12px 0;clip-path:var(--cut);padding-bottom:20px}
+.kpi.hero .v{font-size:40px;font-weight:800}
+.kpi.hero svg.circ{position:absolute;right:0;top:0;width:150px;height:72px;pointer-events:none}
+.kpi.hero::after{content:"";position:absolute;right:0;top:0;border-style:solid;border-width:0 14px 14px 0;border-color:transparent var(--navy) transparent transparent;clip-path:none}
+.delta{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:12px;padding:3px 8px;border-radius:99px;white-space:nowrap}
+.up{background:#e6f5ee;color:var(--gain)}.down{background:#fbe9e5;color:var(--loss)}
+.delta i{font-style:normal;font-weight:500;opacity:.75}
+.kpi:hover{transform:translateY(-2px)}
+.grid2{display:grid;grid-template-columns:1.7fr 1fr;gap:16px;margin-bottom:16px}
+.head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin-bottom:2px}
+.card h2{font-family:Sora;font-size:16px;font-weight:700;color:var(--navy);letter-spacing:-.02em}
+.card .sub{color:var(--ink-3);font-size:12.5px;margin:2px 0 14px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-left:auto;font-weight:500}
+.legend span{display:flex;align-items:center;gap:6px}
+#chart{width:100%;height:240px;display:block;touch-action:none}
+.tip{position:absolute;pointer-events:none;background:var(--navy);color:#fff;padding:8px 11px;border-radius:8px;font-size:12px;opacity:0;transition:opacity .12s;white-space:nowrap;z-index:3}
+.tip b{display:block;font-size:13px;margin-bottom:2px}
+.cw{position:relative}
+/* faixa de custos com cortes diagonais */
+.flow{display:flex;height:18px;margin:6px 0 16px;padding-left:5px}
+.flow i{display:block;height:100%;margin-left:-5px;clip-path:polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%);transition:flex .4s,opacity .15s;min-width:12px}
+.rows .r{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:8px;transition:.12s}
+.rows .r:hover{background:var(--soft)}
+.rows .r span.n{flex:1;color:var(--ink-2);font-weight:500}
+.rows .r b{font-weight:700}
+.rows .r em{font-style:normal;color:var(--ink-3);font-size:12px;width:44px;text-align:right}
+.rows .tot{border-top:1px solid var(--line);margin-top:6px;padding-top:12px}
+.sq{width:9px;height:9px;transform:skewX(-14deg);flex:none}
+/* tabela */
+.thead{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.alert{display:flex;align-items:center;gap:8px;background:var(--warn-soft);color:var(--warn);padding:7px 12px;border-radius:8px;font-weight:600;font-size:12.5px;margin-left:auto}
+.alert::before{content:"";border:5px solid transparent;border-top:8px solid var(--yellow);border-bottom:0}
+table{width:100%;border-collapse:collapse}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-3);font-weight:700;text-align:right;padding:10px 12px;border-bottom:1px solid var(--navy);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th.s{cursor:pointer;user-select:none}th.s:hover{color:var(--navy)}
+td{padding:13px 12px;text-align:right;border-bottom:1px solid var(--line);color:var(--navy)}
+tr:last-child td{border-bottom:0}
+tbody tr{transition:.12s}tbody tr:hover{background:var(--soft)}
+.prod{display:flex;align-items:center;gap:12px;text-align:left}
+.thumb{width:38px;height:38px;background:var(--soft);display:grid;place-items:center;font-size:17px;flex:none;clip-path:var(--cut)}
+.prod b{display:block;font-weight:600}.prod small{color:var(--ink-3)}
+.pill{display:inline-block;padding:3px 9px;border-radius:99px;font-weight:700;font-size:12px}
+.good{background:#e6f5ee;color:var(--gain)}.mid{background:var(--warn-soft);color:var(--warn)}.bad{background:#fbe9e5;color:var(--loss)}
+.mk{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.empty{padding:28px;text-align:center;color:var(--ink-3)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+@media (max-width:1100px){.kpis{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .side{position:fixed;left:0;top:0;z-index:20;width:var(--side);transform:translateX(-100%);transition:transform .22s}
+  .side.open{transform:none;box-shadow:0 0 40px rgba(10,31,77,.25)}
+  .menu-btn{display:grid}
+  main{padding:16px}
+  .kpis{grid-template-columns:1fr}.kpi.hero .v{font-size:34px}
+  .card{overflow-x:auto}
+  .alert{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <div class="logo"><img src="assets/nvs-tech-logo.jpeg" alt="NVS Tech"></div>
+    <div class="rule"></div>
+    <div class="empresa">
+      <button id="empBtn" aria-haspopup="true"><span class="avatar" id="empAv">LE</span><span><b id="empNome">Loja Exemplo</b><small>3 contas conectadas</small></span><span style="margin-left:auto;color:var(--ink-3)">⌄</span></button>
+      <div class="menu-emp" id="empMenu">
+        <button data-n="Loja Exemplo" data-a="LE"><span class="avatar">LE</span>Loja Exemplo</button>
+        <button data-n="Oficina Demo" data-a="OD"><span class="avatar">OD</span>Oficina Demo</button>
+        <button style="color:var(--blue);font-weight:600">+ Criar nova empresa</button>
+      </div>
+    </div>
+    <nav aria-label="Principal">
+      <a href="#" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Dashboard</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Vendas</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Curva ABC</a>
+      <div class="grp">Financeiro</div>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5C9.5 8.5 11 8 12 8s2.5.6 2.5 1.8-1.2 1.6-2.5 2-2.5.8-2.5 2.1S10.8 16 12 16s2.5-.6 2.5-1.5"/></svg>Resumo<span class="badge">12 sem custo</span></a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l5-5 4 4 8-9"/></svg>Fluxo de caixa</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Despesas</a>
+      <div class="grp">Catálogo</div>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8"/></svg>Anúncios</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>Estoque</a>
+      <div class="grp">Configurações</div>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1"/></svg>Contas e integrações</a>
+    </nav>
+    <div class="side-foot">Protótipo · dados fictícios</div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <button class="menu-btn" id="menuBtn" aria-label="Abrir menu">☰</button>
+      <div><span class="eyebrow">Visão geral</span><h1>Bom dia, Rafael</h1><p id="periodoTxt">Resumo dos últimos 30 dias</p></div>
+      <div class="sp"></div>
+      <div class="chips" id="mk" role="group" aria-label="Marketplace">
+        <button data-k="all" class="on">Todos</button>
+        <button data-k="ml"><i class="dot" style="background:var(--ml)"></i>Mercado Livre</button>
+        <button data-k="sp"><i class="dot" style="background:var(--sp)"></i>Shopee</button>
+      </div>
+      <div class="chips" id="per" role="group" aria-label="Período">
+        <button data-d="7">7d</button><button data-d="30" class="on">30d</button><button data-d="90">90d</button>
+      </div>
+    </header>
+
+    <section class="kpis" id="kpis" aria-label="Indicadores"></section>
+
+    <section class="grid2">
+      <div class="card">
+        <div class="head"><h2>Faturamento e lucro</h2>
+          <div class="legend"><span><i class="dot" style="background:var(--navy)"></i>Faturamento</span><span><i class="dot" style="background:var(--blue)"></i>Lucro</span></div></div>
+        <p class="sub">Passe o mouse no gráfico para ver o dia.</p>
+        <div class="cw"><svg id="chart" role="img" aria-label="Gráfico de faturamento e lucro por dia"></svg><div class="tip" id="tip"></div></div>
+      </div>
+      <div class="card">
+        <h2>Para onde foi o dinheiro</h2>
+        <p class="sub">De cada R$ 100 vendidos, quanto sobra.</p>
+        <div class="flow" id="flow"></div>
+        <div class="rows" id="rows"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="thead"><h2>Produtos por lucro</h2>
+        <div class="alert" role="status">12 produtos sem custo cadastrado — o lucro deles está superestimado</div></div>
+      <table>
+        <thead><tr><th>Produto</th><th class="s" data-s="un">Vendas ↕</th><th class="s" data-s="fat">Faturamento ↕</th><th class="s" data-s="luc">Lucro ↕</th><th class="s" data-s="mar">Margem ↕</th></tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const brl=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const fator={all:1,ml:.68,sp:.32};
+const rnd=(i,s)=>{const x=Math.sin(i*12.9898+s*78.233)*43758.5453;return x-Math.floor(x)};
+const serie=(n,k)=>Array.from({length:n},(_,i)=>{const base=(2600+rnd(i,3)*1500+i*(n>40?4:10))*fator[k];return{f:base,l:base*(.17+rnd(i,9)*.07)}});
+const prods=[
+ {n:'Kit pastilha de freio dianteira',s:'SKU PF-0231',e:'🛞',m:'ml',un:184,fat:23920,luc:5980},
+ {n:'Filtro de óleo Premium',s:'SKU FO-1100',e:'🛢️',m:'ml',un:342,fat:12312,luc:2640},
+ {n:'Bateria 60Ah selada',s:'SKU BT-6000',e:'🔋',m:'sp',un:61,fat:21350,luc:1710},
+ {n:'Vela de ignição iridium',s:'SKU VI-0412',e:'⚡',m:'sp',un:268,fat:10720,luc:3010},
+ {n:'Amortecedor traseiro',s:'SKU AM-2208',e:'🔧',m:'ml',un:47,fat:14100,luc:-420},
+ {n:'Palheta limpador 24"',s:'SKU PL-0024',e:'🌧️',m:'sp',un:410,fat:8200,luc:1990}];
+let st={k:'all',d:30,sort:'luc',dir:-1};
+const circuito=`<svg class="circ" viewBox="0 0 150 72" fill="none" stroke-width="1.6"><path d="M150 14H118l-10 10H86" stroke="#0b5cf6"/><path d="M150 32H124l-8 8H98" stroke="#0a1f4d"/><path d="M150 50H132l-8 8" stroke="#0b5cf6"/><circle cx="82" cy="24" r="3.5" stroke="#0b5cf6" fill="#fff"/><circle cx="94" cy="40" r="3.5" stroke="#0a1f4d" fill="#fff"/><circle cx="120" cy="62" r="3.5" stroke="#0b5cf6" fill="#fff"/></svg>`;
+function kpi(){
+  const S=serie(st.d,st.k),F=S.reduce((a,x)=>a+x.f,0),L=S.reduce((a,x)=>a+x.l,0),P=Math.round(F/118);
+  const items=[
+   {t:'Lucro líquido',v:brl(L),d:'+12,4%',hero:1},{t:'Faturamento',v:brl(F),d:'+8,1%'},{t:'Pedidos',v:P.toLocaleString('pt-BR'),d:'+5,6%'},
+   {t:'Margem média',v:(L/F*100).toFixed(1).replace('.',',')+'%',d:'−1,2 pp',neg:1}];
+  $('#kpis').innerHTML=items.map(i=>`<article class="card kpi ${i.hero?'hero':''}"><small>${i.t}</small><div class="v num">${i.v}</div><span class="delta ${i.neg?'down':'up'}">${i.neg?'▼':'▲'} ${i.d} <i>vs. anterior</i></span>${i.hero?circuito:''}</article>`).join('');
+  $('#periodoTxt').textContent=`Resumo dos últimos ${st.d} dias`;
+  flow(F,L);
+}
+function flow(F,L){
+  const parts=[['Lucro líquido',L,'var(--blue)'],['Custo dos produtos',F*.41,'var(--navy)'],['Tarifas do marketplace',F*.15,'var(--yellow)'],['Frete e envio',F*.09,'#8fa3c4'],['Impostos',F*.09,'#cdd6e6']];
+  const sum=parts.reduce((a,p)=>a+p[1],0),sc=F/sum;
+  $('#flow').innerHTML=parts.map(p=>`<i style="flex:${p[1]*sc};background:${p[2]}" title="${p[0]}"></i>`).join('');
+  $('#rows').innerHTML=parts.map(p=>`<div class="r"><i class="sq" style="background:${p[2]}"></i><span class="n">${p[0]}</span><b class="num">${brl(p[1]*sc)}</b><em class="num">${(p[1]*sc/F*100).toFixed(0)}%</em></div>`).join('')+`<div class="r tot"><span class="n"><b style="color:var(--navy)">Faturamento</b></span><b class="num">${brl(F)}</b><em>100%</em></div>`;
+  $$('#rows .r').forEach((r,i)=>{if(i>4)return;r.onmouseenter=()=>$$('#flow i').forEach((b,j)=>b.style.opacity=j==i?1:.25);r.onmouseleave=()=>$$('#flow i').forEach(b=>b.style.opacity=1)});
+}
+function chart(){
+  const S=serie(st.d,st.k),svg=$('#chart'),W=svg.clientWidth||700,H=240,pl=44,pb=24,pt=10,pr=8;
+  const mx=Math.max(...S.map(x=>x.f))*1.1,X=i=>pl+i/(S.length-1)*(W-pl-pr),Y=v=>H-pb-v/mx*(H-pb-pt);
+  const line=k=>S.map((x,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(x[k]).toFixed(1)).join(' ');
+  const ticks=[0,.25,.5,.75,1].map(t=>t*mx);
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=`<defs><linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a1f4d" stop-opacity=".10"/><stop offset="1" stop-color="#0a1f4d" stop-opacity="0"/></linearGradient></defs>`+
+   ticks.map(t=>`<line x1="${pl}" x2="${W-pr}" y1="${Y(t)}" y2="${Y(t)}" stroke="#e6ebf3"/><text x="${pl-8}" y="${Y(t)+4}" text-anchor="end" font-size="11" fill="#8b97ab">${t>=1000?(t/1000).toFixed(0)+'k':0}</text>`).join('')+
+   `<path d="${line('f')} L${X(S.length-1)} ${Y(0)} L${X(0)} ${Y(0)}Z" fill="url(#a)"/><path d="${line('f')}" fill="none" stroke="#0a1f4d" stroke-width="2" stroke-linejoin="round"/><path d="${line('l')}" fill="none" stroke="#0b5cf6" stroke-width="2.4" stroke-linejoin="round"/>`+
+   `<line id="cur" y1="${pt}" y2="${H-pb}" stroke="#8b97ab" stroke-dasharray="3 3" opacity="0"/><circle id="c1" r="5" fill="#0a1f4d" stroke="#fff" stroke-width="2" opacity="0"/><circle id="c2" r="5" fill="#0b5cf6" stroke="#fff" stroke-width="2" opacity="0"/>`;
+  const tip=$('#tip');
+  const move=e=>{const r=svg.getBoundingClientRect(),px=((e.touches?e.touches[0].clientX:e.clientX)-r.left)*W/r.width;
+    const i=Math.max(0,Math.min(S.length-1,Math.round((px-pl)/(W-pl-pr)*(S.length-1)))),x=X(i);
+    $('#cur').setAttribute('x1',x);$('#cur').setAttribute('x2',x);$('#c1').setAttribute('cx',x);$('#c1').setAttribute('cy',Y(S[i].f));$('#c2').setAttribute('cx',x);$('#c2').setAttribute('cy',Y(S[i].l));
+    ['cur','c1','c2'].forEach(id=>$('#'+id).setAttribute('opacity',1));
+    const dt=new Date(Date.now()-(S.length-1-i)*864e5);
+    tip.innerHTML=`<b>${dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</b>Faturamento ${brl(S[i].f)}<br>Lucro ${brl(S[i].l)}`;
+    tip.style.opacity=1;tip.style.left=Math.min(x*r.width/W+12,r.width-150)+'px';tip.style.top='8px'};
+  svg.onmousemove=move;svg.ontouchmove=move;
+  svg.onmouseleave=()=>{tip.style.opacity=0;['cur','c1','c2'].forEach(id=>$('#'+id).setAttribute('opacity',0))};
+}
+function tabela(){
+  const rows=prods.filter(p=>st.k=='all'||p.m==st.k).map(p=>({...p,mar:p.luc/p.fat*100}));
+  rows.sort((a,b)=>(a[st.sort]-b[st.sort])*st.dir);
+  $('#tb').innerHTML=rows.length?rows.map(p=>`<tr><td><div class="prod"><div class="thumb">${p.e}</div><div><b>${p.n}</b><small><i class="mk" style="background:var(--${p.m=='ml'?'ml':'sp'})"></i>${p.s}</small></div></div></td><td class="num">${p.un}</td><td class="num">${brl(p.fat)}</td><td class="num" style="font-weight:700;${p.luc<0?'color:var(--loss)':''}">${brl(p.luc)}</td><td><span class="pill ${p.mar>=15?'good':p.mar>=5?'mid':'bad'} num">${p.mar.toFixed(1).replace('.',',')}%</span></td></tr>`).join(''):'<tr><td colspan="5" class="empty">Nenhum produto neste marketplace.</td></tr>';
+}
+const all=()=>{kpi();chart();tabela()};
+$('#mk').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.k=b.dataset.k;$$('#mk button').forEach(x=>x.classList.toggle('on',x==b));all()};
+$('#per').onclick=e=>{const b=e.target.closest('button');if(!b)return;st.d=+b.dataset.d;$$('#per button').forEach(x=>x.classList.toggle('on',x==b));all()};
+$$('th.s').forEach(t=>t.onclick=()=>{const k=t.dataset.s;st.dir=st.sort==k?-st.dir:-1;st.sort=k;tabela()});
+$('#empBtn').onclick=()=>$('#empMenu').classList.toggle('open');
+$('#empMenu').onclick=e=>{const b=e.target.closest('button[data-n]');if(!b)return;$('#empNome').textContent=b.dataset.n;$('#empAv').textContent=b.dataset.a;$('#empMenu').classList.remove('open')};
+$('#menuBtn').onclick=()=>$('#side').classList.toggle('open');
+addEventListener('resize',chart);
+all();
+</script>
+</body>
+</html>

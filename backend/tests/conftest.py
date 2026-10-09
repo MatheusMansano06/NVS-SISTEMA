@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("NVS_DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5433/nvs_test")
+os.environ.setdefault(
+    "NVS_DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5433/nvs_test"
+)
 os.environ.setdefault("NVS_APP_SENHA", "senha_teste")
 os.environ.setdefault("NVS_SEGREDO_SESSAO", "segredo-de-teste")
 os.environ.setdefault("NVS_CHAVES_TOKEN", "1:" + base64.b64encode(b"k" * 32).decode())

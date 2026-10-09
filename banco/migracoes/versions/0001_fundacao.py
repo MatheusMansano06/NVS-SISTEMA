@@ -38,22 +38,25 @@ ESTRUTURA = [
         status text not null default 'ativa' check (status in ('ativa','reautorizar','desligada')),
         criado_em timestamptz not null default now(),
         atualizado_em timestamptz not null default now(),
-        unique (marketplace, id_externo))""",
+        unique (marketplace, id_externo),
+        unique (id, empresa_id))""",
     """create table credenciais_conta (
-        conta_id uuid primary key references contas_marketplace on delete cascade,
+        conta_id uuid primary key,
         empresa_id uuid not null,
         access_token_cifrado bytea not null,
         refresh_token_cifrado bytea not null,
         expira_em timestamptz not null,
         escopos text not null default '',
         versao_chave int not null,
-        atualizado_em timestamptz not null default now())""",
+        atualizado_em timestamptz not null default now(),
+        foreign key (conta_id, empresa_id) references contas_marketplace (id, empresa_id) on delete cascade)""",
     """create table escrita_modulos (
-        conta_id uuid not null references contas_marketplace on delete cascade,
+        conta_id uuid not null,
         empresa_id uuid not null,
         modulo text not null,
         habilitada boolean not null default false,
-        primary key (conta_id, modulo))""",
+        primary key (conta_id, modulo),
+        foreign key (conta_id, empresa_id) references contas_marketplace (id, empresa_id) on delete cascade)""",
     """create table oauth_estados (
         state_hash text primary key,
         empresa_id uuid not null,
@@ -84,6 +87,9 @@ ESTRUTURA = [
     "where processado_em is null",
 ]
 
+# Sem RLS de propósito: usuarios, empresas e membros são lidos antes de a empresa ser escolhida;
+# oauth_estados é consumido no callback, quando a empresa ainda não é conhecida; notificacoes_recebidas
+# chega do marketplace sem empresa. O acesso a elas é filtrado por usuário na camada de serviço.
 CONTEXTO = "nullif(current_setting('app.empresa_id', true), '')::uuid"
 COM_RLS = ["contas_marketplace", "credenciais_conta", "escrita_modulos"]
 

@@ -42,3 +42,11 @@ def test_bloqueia_na_sexta_tentativa_errada(cliente):
 
 def test_eu_sem_sessao_da_401(cliente):
     assert cliente.get("/api/auth/eu").status_code == 401
+
+
+def test_email_ignora_caixa(cliente):
+    cliente.post("/api/auth/cadastro", json=CADASTRO | {"email": "A@X.com"})
+    assert cliente.post("/api/auth/cadastro", json=CADASTRO | {"email": "a@x.com"}).status_code == 409
+    for email in ("A@x.com", "a@X.com"):
+        r = cliente.post("/api/auth/entrar", json={"email": email, "senha": CADASTRO["senha"]})
+        assert r.status_code == 200

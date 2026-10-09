@@ -30,10 +30,9 @@ def iniciar_ml(empresa_id: str = Depends(empresa_atual), usuario_id: str = Depen
 def callback_ml(code: str, state: str, usuario_id: str = Depends(usuario_atual),
                 http: httpx.Client = Depends(ml.cliente_http)) -> RedirectResponse:
     with transacao() as conn:
-        estado = servico.consumir_estado(conn, state)
-    if estado is None or estado[1] != usuario_id:
+        empresa_id = servico.consumir_estado(conn, state, usuario_id)
+    if empresa_id is None:
         raise HTTPException(400, "state invalido ou expirado")
-    empresa_id = estado[0]
     tokens = ml.trocar_codigo(http, code)
     apelido = ml.perfil(http, tokens["access_token"]).get("nickname", f"ML {tokens['user_id']}")
     try:

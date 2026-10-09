@@ -20,11 +20,12 @@ def criar_estado(conn: Connection, empresa_id: str, usuario_id: str) -> str:
     return state
 
 
-def consumir_estado(conn: Connection, state: str) -> tuple[str, str] | None:
-    linha = conn.execute(text(
+def consumir_estado(conn: Connection, state: str, usuario_id: str) -> str | None:
+    # filtrar por usuário no próprio UPDATE evita que outro usuário queime o state alheio
+    return conn.execute(text(
         "update oauth_estados set usado_em = now() where state_hash = :h and usado_em is null "
-        "and expira_em > now() returning empresa_id::text, usuario_id::text"), {"h": _hash(state)}).first()
-    return (linha[0], linha[1]) if linha else None
+        "and expira_em > now() and usuario_id = cast(:u as uuid) returning empresa_id::text"),
+        {"h": _hash(state), "u": usuario_id}).scalar()
 
 
 def salvar_conta_ml(conn: Connection, empresa_id: str, tokens: dict, apelido: str) -> str:

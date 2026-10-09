@@ -1,5 +1,4 @@
 import re
-from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -60,10 +59,18 @@ def test_state_de_outro_usuario_e_recusado(cliente):
     assert r.status_code == 400
 
 
+def test_state_de_outro_usuario_nao_queima_o_state_do_dono(cliente):
+    state = _iniciar(cliente, _logar(cliente))
+    with TestClient(app, headers={"x-requested-with": "nvs"}) as outro:
+        _logar(outro, "b@x.com")
+        assert outro.get(f"/api/contas/ml/callback?code=c&state={state}", follow_redirects=False).status_code == 400
+    r = cliente.get(f"/api/contas/ml/callback?code=c&state={state}", follow_redirects=False)
+    assert r.status_code == 303
+
+
 def test_conta_ml_nao_vai_para_segunda_empresa(cliente):
-    state = _iniciar(cliente, (empresa_a := _logar(cliente)))
+    state = _iniciar(cliente, _logar(cliente))
     cliente.get(f"/api/contas/ml/callback?code=c&state={state}", follow_redirects=False)
-    assert empresa_a
     with TestClient(app, headers={"x-requested-with": "nvs"}) as outro:
         empresa_b = _logar(outro, "b@x.com")
         r = outro.get(f"/api/contas/ml/callback?code=c&state={_iniciar(outro, empresa_b)}",
@@ -112,4 +119,3 @@ def test_escrita_nasce_bloqueada_e_libera_por_modulo(dono):
                        "values (:c, :e, 'anuncios', true)"), {"c": conta_id, "e": empresa_id})
     with transacao(empresa_id) as conn:
         exigir_escrita(conn, conta_id, "anuncios")
-    assert uuid4()

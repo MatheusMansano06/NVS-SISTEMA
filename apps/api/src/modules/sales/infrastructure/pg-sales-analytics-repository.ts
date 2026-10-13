@@ -61,8 +61,6 @@ function ordersCte(f: SalesFilter, params: unknown[]): string {
     )`;
 }
 
-const n = (v: string | null) => (v === null ? null : Number(v));
-
 export class PgSalesAnalyticsRepository {
   /** Tudo da visão geral numa consulta só: a base (CTE) é calculada uma vez e reaproveitada. */
   async overview(db: Queryable, f: SalesFilter) {

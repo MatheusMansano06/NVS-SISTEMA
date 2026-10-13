@@ -204,6 +204,29 @@ export class SalesIngestion {
     }
   }
 
+  /**
+   * Recalcula, para os anúncios da conta, a tarifa e o frete médios por unidade (pedidos pagos de 1 item,
+   * já com fretes enriquecidos, últimos 90 dias). Roda ao fim de cada sincronização.
+   */
+  async refreshListingSalesStats(db: Queryable, accountId: string): Promise<void> {
+    await db.query(
+      `UPDATE listings l SET sales_fee_avg = x.fee, sales_freight_avg = x.freight
+         FROM (
+           SELECT l2.id,
+                  sum(o.marketplace_fee) / nullif(sum(o.units), 0) AS fee,
+                  sum(o.shipping_cost) / nullif(sum(o.units), 0) AS freight
+             FROM listings l2
+             LEFT JOIN order_items i ON i.listing_id = l2.external_id
+             LEFT JOIN orders o ON o.id = i.order_id AND o.status = 'paid' AND o.finance_enriched_at IS NOT NULL
+                                AND o.units = i.quantity AND o.ordered_at > now() - interval '90 days'
+            WHERE l2.account_id = $1
+            GROUP BY l2.id
+         ) x
+        WHERE l.id = x.id AND (l.sales_fee_avg IS DISTINCT FROM x.fee OR l.sales_freight_avg IS DISTINCT FROM x.freight)`,
+      [accountId],
+    );
+  }
+
   /** Anúncios vendidos que ainda não têm foto/dados no catálogo. */
   async listingsMissing(db: Queryable, accountId: string, limit = 400): Promise<string[]> {
     const { rows } = await db.query<{ listing_id: string }>(

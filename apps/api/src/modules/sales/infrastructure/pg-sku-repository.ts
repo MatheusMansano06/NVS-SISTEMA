@@ -128,7 +128,14 @@ export class PgSkuRepository {
          GROUP BY i.sku
       ),
       seen AS (SELECT sku, max(title) AS title, max(listing_id) AS listing_id FROM order_items GROUP BY sku),
-      rows AS (
+      -- mapa chave → melhor anúncio (ativo e mais recente), montado UMA vez: chave = SKU, SKU de variação ou MLB
+      lmap AS (
+        SELECT DISTINCT ON (k.key) k.key, l.title, l.picture_url, l.permalink, l.status, l.available_quantity
+          FROM listings l
+          CROSS JOIN LATERAL unnest(array_remove(ARRAY[l.sku, l.external_id] || l.variation_skus, NULL)) AS k(key)
+         ORDER BY k.key, (l.status = 'active') DESC, l.updated_at DESC
+      ),
+      rows AS MATERIALIZED (
         SELECT s.sku, coalesce(l.title, seen.title) AS title, l.picture_url, l.permalink, l.status AS listing_status,
                l.available_quantity AS stock, coalesce(sold.units, 0) AS units30, sold.avg_price,
                c.custo_unit, c.updated_at
@@ -136,29 +143,32 @@ export class PgSkuRepository {
           LEFT JOIN sold ON sold.sku = s.sku
           LEFT JOIN seen ON seen.sku = s.sku
           LEFT JOIN sku_costs c ON c.sku = s.sku
-          LEFT JOIN LATERAL (
-            SELECT l.title, l.picture_url, l.permalink, l.status, l.available_quantity FROM listings l
-             WHERE l.sku = s.sku OR s.sku = ANY(l.variation_skus) OR l.external_id = s.sku OR l.external_id = seen.listing_id
-             ORDER BY (l.status = 'active') DESC, l.updated_at DESC LIMIT 1
-          ) l ON true
+          LEFT JOIN lmap direct ON direct.key = s.sku
+          LEFT JOIN lmap via_sale ON via_sale.key = seen.listing_id
+          CROSS JOIN LATERAL (SELECT coalesce(direct.title, via_sale.title) AS title, coalesce(direct.picture_url, via_sale.picture_url) AS picture_url,
+                                     coalesce(direct.permalink, via_sale.permalink) AS permalink, coalesce(direct.status, via_sale.status) AS status,
+                                     coalesce(direct.available_quantity, via_sale.available_quantity) AS available_quantity) l
          WHERE s.sku IS NOT NULL AND s.sku <> ''
       )`;
     const search = `($1::text IS NULL OR sku ILIKE '%' || $1 || '%' OR title ILIKE '%' || $1 || '%')`;
     const filter =
       q.filter === 'missing' ? 'custo_unit IS NULL' : q.filter === 'done' ? 'custo_unit IS NOT NULL' : 'true';
-    const counts = await db.query(
-      `${base} SELECT count(*) AS all, count(custo_unit) AS done FROM rows WHERE ${search}`,
-      [q.q || null],
-    );
+    // contadores e página na mesma consulta (a base é montada uma vez)
     const { rows } = await db.query(
-      `${base} SELECT * FROM rows WHERE ${search} AND ${filter}
-        ORDER BY (custo_unit IS NULL) DESC, units30 DESC, title NULLS LAST, sku
-        LIMIT $2 OFFSET $3`,
+      `${base}, found AS (SELECT * FROM rows WHERE ${search})
+       SELECT p.*, c.all_n, c.done_n
+         FROM (SELECT count(*) AS all_n, count(custo_unit) AS done_n FROM found) c
+         LEFT JOIN LATERAL (
+           SELECT * FROM found WHERE ${filter}
+            ORDER BY (custo_unit IS NULL) DESC, units30 DESC, title NULLS LAST, sku
+            LIMIT $2 OFFSET $3
+         ) p ON true`,
       [q.q || null, q.limit, q.offset],
     );
-    const all = Number(counts.rows[0]?.all ?? 0);
-    const done = Number(counts.rows[0]?.done ?? 0);
-    const items: SkuRowDto[] = rows.map((r) => ({
+    const all = Number(rows[0]?.all_n ?? 0);
+    const done = Number(rows[0]?.done_n ?? 0);
+    const page = rows.filter((r) => r.sku !== null);
+    const items: SkuRowDto[] = page.map((r) => ({
       sku: r.sku,
       title: r.title,
       pictureUrl: r.picture_url,

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadEnv } from '../src/config/env.js';
 import { buildApp } from '../src/app.js';
 import { Database } from '../src/shared/infrastructure/database.js';
+import { SalesIngestion } from '../src/modules/sales/index.js';
 import type { MlApi } from '../src/modules/mercado-livre/index.js';
 
 try {
@@ -93,6 +94,8 @@ describe.skipIf(!TEST_DB)('Aba Anúncios', () => {
         `INSERT INTO order_items (tenant_id, order_id, sku, title, quantity, unit_price, listing_id) VALUES ($1, $2, $3, 'x', 1, 100, $4)`,
         [tenantId, o.rows[0].id, `${prefix}-A`, `MLB${prefix}1`],
       );
+      // a sincronização recalcula a média de tarifa/frete por anúncio
+      await new SalesIngestion().refreshListingSalesStats(c, accountId);
     });
     return { cookies, tenantId };
   }

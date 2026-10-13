@@ -159,6 +159,18 @@ try {
     );
   }
 
+  // médias de tarifa/frete por anúncio (o que a sincronização faz na conta real)
+  await client.query(
+    `UPDATE listings l SET sales_fee_avg = x.fee, sales_freight_avg = x.freight
+       FROM (SELECT l2.id, sum(o.marketplace_fee) / nullif(sum(o.units), 0) AS fee, sum(o.shipping_cost) / nullif(sum(o.units), 0) AS freight
+               FROM listings l2
+               LEFT JOIN order_items i ON i.listing_id = l2.external_id
+               LEFT JOIN orders o ON o.id = i.order_id AND o.status = 'paid' AND o.units = i.quantity
+              WHERE l2.tenant_id = $1 AND l2.source = 'demo' GROUP BY l2.id) x
+      WHERE l.id = x.id`,
+    [tenantId],
+  );
+
   await client.query('COMMIT');
   console.log(`Demo criado para ${email}: ${orderCount} pedidos em ${DAYS} dias, 2 contas Mercado Livre.`);
 } catch (err) {

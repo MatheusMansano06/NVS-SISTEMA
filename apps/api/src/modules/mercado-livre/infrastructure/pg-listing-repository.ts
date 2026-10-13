@@ -36,24 +36,17 @@ export interface ListingRow {
   promo_name: string | null;
 }
 
-/** Colunas da aba + tarifa/frete médios por unidade (pedidos de 1 item deste anúncio, 90 dias). */
+/** Colunas da aba; tarifa/frete médios por unidade vêm prontos da sincronização (sales_*_avg). */
 const SELECT = `
   SELECT l.external_id, l.account_id, a.nickname AS account_nickname, l.title, l.sku, l.picture_url, l.permalink,
          l.status, l.sub_status, l.price, l.available_quantity, l.sold_quantity, l.listing_type_id,
          l.free_shipping, l.logistic_type, l.catalog_listing, l.category_id, l.pictures_count,
-         l.dimensions, l.listed_at, sc.custo_unit, h.avg_fee, h.avg_freight,
+         l.dimensions, l.listed_at, sc.custo_unit, l.sales_fee_avg AS avg_fee, l.sales_freight_avg AS avg_freight,
          l.fee_amount, l.fee_pct, l.freight_cost, l.pricing_price, l.pricing_at,
          l.original_price, l.fee_bonus, l.promo_name
     FROM listings l
     JOIN marketplace_accounts a ON a.id = l.account_id
-    LEFT JOIN sku_costs sc ON sc.sku = l.sku
-    LEFT JOIN LATERAL (
-      SELECT sum(o.marketplace_fee) / nullif(sum(o.units), 0) AS avg_fee,
-             sum(o.shipping_cost) / nullif(sum(o.units), 0) AS avg_freight
-        FROM order_items i JOIN orders o ON o.id = i.order_id
-       WHERE i.listing_id = l.external_id AND o.status = 'paid' AND o.finance_enriched_at IS NOT NULL
-         AND o.units = i.quantity AND o.ordered_at > now() - interval '90 days'
-    ) h ON true`;
+    LEFT JOIN sku_costs sc ON sc.sku = l.sku`;
 
 /**
  * Linhas de venda do anúncio ($1) com tarifa, frete, cupom, devolução e imposto do pedido rateados
@@ -104,16 +97,21 @@ export class PgListingRepository {
                   OR EXISTS (SELECT 1 FROM unnest(l.variation_skus) v WHERE v ILIKE $2))`;
     }
     const filter = `l.status = $1 AND l.marketplace = 'mercado_livre' ${search}`;
-    const total = await db.query<{ n: string }>(`SELECT count(*) AS n FROM listings l WHERE ${filter}`, params);
     params.push(q.limit, q.offset);
-    const { rows } = await db.query<ListingRow>(
-      `${SELECT}
+    const { rows } = await db.query<ListingRow & { total_count: string }>(
+      `${SELECT.replace('SELECT l.external_id', 'SELECT count(*) OVER () AS total_count, l.external_id')}
         WHERE ${filter}
         ORDER BY l.sold_quantity DESC NULLS LAST, l.title
         LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
-    return { rows, total: Number(total.rows[0]!.n) };
+    // página além do fim: conta à parte (raro)
+    const total = rows.length
+      ? Number(rows[0]!.total_count)
+      : q.offset
+        ? Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM listings l WHERE ${filter}`, params.slice(0, -2))).rows[0]!.n)
+        : 0;
+    return { rows, total };
   }
 
   async counts(db: Queryable): Promise<Record<ListingTab, number>> {

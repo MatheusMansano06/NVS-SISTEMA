@@ -240,6 +240,7 @@ export class MlIntegrationService {
       await this.enrichFinance(tenantId, connectionId, runId, conn, d90, true);
       await this.backfillAddresses(tenantId, connectionId, conn, 2000);
       await this.syncBilling(tenantId, connectionId, conn);
+      await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
 
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
       this.events.publish({ type: 'marketplace.synced', tenantId, payload: { connectionId } });
@@ -495,6 +496,7 @@ export class MlIntegrationService {
       await this.enrichFinance(tenantId, connectionId, null, conn, since, false);
       await this.backfillAddresses(tenantId, connectionId, conn);
       await this.syncBilling(tenantId, connectionId, conn);
+      await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
     } catch (err) {
       const message = err instanceof MlApiError ? `Mercado Livre respondeu: ${err.message}` : 'Erro inesperado na atualização';

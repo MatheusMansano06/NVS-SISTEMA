@@ -1,5 +1,6 @@
 import type { ListingTab } from '@nvs/shared';
 import type { Queryable } from '../../../shared/infrastructure/database.js';
+import { TIMEZONE } from '../../sales/index.js';
 
 export interface ListingRow {
   external_id: string;
@@ -49,6 +50,41 @@ const SELECT = `
        WHERE i.listing_id = l.external_id AND o.status = 'paid' AND o.finance_enriched_at IS NOT NULL
          AND o.units = i.quantity AND o.ordered_at > now() - interval '90 days'
     ) h ON true`;
+
+/**
+ * Linhas de venda do anúncio ($1) com tarifa, frete, cupom, devolução e imposto do pedido rateados
+ * pela participação do item no pedido. Margem = produto − cupom − devolução − custo − imposto − tarifa − frete.
+ */
+const SALE_LINES = `
+  WITH lines AS (
+    SELECT o.external_id AS order_id, o.ordered_at, o.status, i.quantity, i.unit_price,
+           round(i.quantity * i.unit_price, 2) AS gross,
+           round(o.marketplace_fee * s.share, 2) AS fee,
+           round(o.shipping_cost * s.share, 2) AS freight,
+           round(o.tax_amount * s.share, 2) AS tax,
+           round(i.unit_cost * i.quantity, 2) AS cost,
+           round(i.quantity * i.unit_price
+                 - (coalesce(o.coupon_seller, 0) + coalesce(o.refund_partial, 0) + o.tax_amount + o.marketplace_fee + o.shipping_cost) * s.share
+                 - i.unit_cost * i.quantity, 2) AS margin
+      FROM order_items i
+      JOIN orders o ON o.id = i.order_id
+      CROSS JOIN LATERAL (SELECT coalesce(i.quantity * i.unit_price / nullif(o.gross_amount, 0), 1) AS share) s
+     WHERE i.listing_id = $1
+  )`;
+
+export interface SaleRow {
+  order_id: string;
+  ordered_at: Date;
+  status: 'paid' | 'cancelled' | 'returned';
+  quantity: number;
+  unit_price: string;
+  gross: string;
+  fee: string;
+  freight: string;
+  tax: string;
+  cost: string | null;
+  margin: string | null;
+}
 
 const num = (v: string | null) => (v === null ? null : Number(v));
 export { num as toNumber };
@@ -106,12 +142,9 @@ export class PgListingRepository {
   }
 
   async sales(db: Queryable, externalId: string, offset: number, limit: number) {
-    const { rows } = await db.query<{
-      order_id: string; ordered_at: Date; status: 'paid' | 'cancelled' | 'returned'; quantity: number; unit_price: string;
-    }>(
-      `SELECT o.external_id AS order_id, o.ordered_at, o.status, i.quantity, i.unit_price
-         FROM order_items i JOIN orders o ON o.id = i.order_id
-        WHERE i.listing_id = $1 ORDER BY o.ordered_at DESC LIMIT $2 OFFSET $3`,
+    const { rows } = await db.query<SaleRow>(
+      `${SALE_LINES}
+       SELECT * FROM lines ORDER BY ordered_at DESC LIMIT $2 OFFSET $3`,
       [externalId, limit, offset],
     );
     const t = await db.query<{ orders: string; units: string; gross: string; total: string }>(
@@ -123,6 +156,25 @@ export class PgListingRepository {
       [externalId],
     );
     return { rows, totals: t.rows[0]! };
+  }
+
+  /** Vendas pagas agrupadas por mês (São Paulo), com tarifa, frete, imposto, custo e margem. */
+  async monthly(db: Queryable, externalId: string) {
+    const { rows } = await db.query<{
+      month: string; orders: string; units: string; gross: string; fee: string; freight: string; tax: string;
+      cost: string | null; margin: string | null;
+    }>(
+      `${SALE_LINES}
+       SELECT to_char((ordered_at AT TIME ZONE '${TIMEZONE}'), 'YYYY-MM') AS month,
+              count(DISTINCT order_id) AS orders, sum(quantity) AS units, sum(gross) AS gross,
+              sum(fee) AS fee, sum(freight) AS freight, sum(tax) AS tax,
+              CASE WHEN bool_and(cost IS NOT NULL) THEN sum(cost) END AS cost,
+              CASE WHEN bool_and(margin IS NOT NULL) THEN sum(margin) END AS margin
+         FROM lines WHERE status = 'paid'
+        GROUP BY 1 ORDER BY 1 DESC LIMIT 24`,
+      [externalId],
+    );
+    return rows;
   }
 
   async savePricing(

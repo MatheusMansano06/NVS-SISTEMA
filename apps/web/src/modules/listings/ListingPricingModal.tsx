@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import type { ListingDto, ListingPricingDto } from '@nvs/shared';
+import { marginTone, unitMargin, type ListingDto, type ListingPricingDto } from '@nvs/shared';
 import { money, pct } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { Button } from '../../shared/ui/Button';
@@ -123,6 +123,10 @@ export function ListingPricingModal({ item, canManage, onSaved }: Props) {
         </li>
       </ul>
 
+      {priceNum && priceNum > 0 && (
+        <TypeCompare item={item} price={priceNum} cost={costNum} canManage={canManage} onChanged={onSaved} />
+      )}
+
       {est && <p className="lprice-note">Tarifa e frete estimados pela média das vendas dos últimos 90 dias.</p>}
       {item.catalog && <p className="banner banner-error">Anúncio de catálogo: o preço não pode ser alterado por aqui.</p>}
       {error && <p className="banner banner-error" role="alert">{error}</p>}
@@ -131,5 +135,81 @@ export function ListingPricingModal({ item, canManage, onSaved }: Props) {
         <Button type="submit" loading={saving} disabled={item.catalog}>Salvar alterações</Button>
       )}
     </form>
+  );
+}
+
+/** Clássico × Premium no mesmo preço: tarifa e margem de cada tipo, com troca em um clique. */
+function TypeCompare({ item, price, cost, canManage, onChanged }: { item: ListingDto; price: number; cost: number | null; canManage: boolean; onChanged: () => void }) {
+  const [data, setData] = useState<ListingPricingDto | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [currentType, setCurrentType] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      const r = await listingsApi.pricing(item.id, price === item.price ? undefined : price, undefined, true);
+      setData(r);
+      setCurrentType(r.type);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível comparar agora.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function switchTo(type: 'gold_special' | 'gold_pro') {
+    setSwitching(type);
+    setError('');
+    try {
+      await listingsApi.setType(item.id, type);
+      setCurrentType(type);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível trocar o tipo.');
+    } finally {
+      setSwitching(null);
+    }
+  }
+
+  if (!data) {
+    return (
+      <div className="ltype">
+        <div>
+          <strong>Clássico ou Premium?</strong>
+          <p>Premium paga tarifa maior e parcela sem juros (mais exposição). Compare a margem nos dois.</p>
+        </div>
+        <button type="button" className="act" disabled={loading} onClick={() => void load()}>
+          {loading ? 'Consultando…' : 'Comparar'}
+        </button>
+        {error && <p className="banner banner-error" role="alert">{error}</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="ltype-grid">
+      {data.options.map((o) => {
+        // recalcula com o custo digitado e o preço atual do campo
+        const fee = o.feePct !== null ? Math.round(price * o.feePct) / 100 : o.fee;
+        const m = unitMargin({ price, fee, freight: o.margin.freight, cost, taxPct: o.margin.taxPct, source: 'live' });
+        const active = currentType === o.type;
+        return (
+          <div key={o.type} className="ltype-card" data-active={active || undefined} data-tone={marginTone(m.pct)}>
+            <span className="ltype-name">{o.label} {active && <span className="tag tag-active">atual</span>}</span>
+            <small>Tarifa {o.feePct !== null ? `${o.feePct.toLocaleString('pt-BR')}%` : ''} · {money(fee)}</small>
+            <b>{m.amount === null ? '—' : `${money(m.amount)} · ${pct(m.pct ?? 0, 1)}`}</b>
+            {canManage && !active && !item.catalog && (
+              <button type="button" className="act" disabled={switching !== null} onClick={() => void switchTo(o.type)}>
+                {switching === o.type ? 'Trocando…' : `Mudar para ${o.label}`}
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {!data.options.length && <p className="lprice-note">O ML não informou as tarifas por tipo para esta categoria.</p>}
+      {error && <p className="banner banner-error" role="alert">{error}</p>}
+    </div>
   );
 }

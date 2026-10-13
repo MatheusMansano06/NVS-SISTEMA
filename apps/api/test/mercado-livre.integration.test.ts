@@ -30,7 +30,7 @@ function randomCnpj(): string {
 
 /** API falsa do Mercado Livre: 120 pedidos nos últimos 90 dias (1 a cada 18h). */
 function fakeMl(sellerId: number) {
-  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '' };
+  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null };
   const now = Date.now();
   const orders: MlOrder[] = Array.from({ length: 120 }, (_, i) => ({
     id: 9_000_000 + i,
@@ -60,8 +60,10 @@ function fakeMl(sellerId: number) {
   catalog.set('MLB9002', { id: 'MLB9002', title: 'Pausado sem estoque 2', status: 'paused', sub_status: [], available_quantity: 0, price: 60 });
   catalog.set('MLB9003', { id: 'MLB9003', title: 'Pausado com estoque', status: 'paused', sub_status: [], available_quantity: 7, price: 70 });
   const api: MlApi = {
-    async updateItem() {
-      throw new Error('não usado');
+    async updateItem(_t, id, body) {
+      const it = catalog.get(id)!;
+      if (body.status) it.status = String(body.status);
+      return it;
     },
     async listingFees() {
       return [];
@@ -110,6 +112,15 @@ function fakeMl(sellerId: number) {
       for (const p of prices as { amount?: number; conditions?: { min_purchase_unit: number } }[]) {
         if (p.conditions) b2b.set(p.conditions.min_purchase_unit, p.amount!);
       }
+    },
+    async changeListingType() {},
+    async createItem(_t, body) {
+      calls.created = body;
+      catalog.set('MLBDUP', { id: 'MLBDUP', title: String(body.title), status: 'active', available_quantity: 1 });
+      return { id: 'MLBDUP', permalink: 'https://ml/MLBDUP' };
+    },
+    async searchCategories() {
+      return [{ category_id: 'MLB999', category_name: 'Viseiras', domain_name: 'Capacetes' }];
     },
     async enrollPromotion(_t, itemId, body) {
       expect(body).toEqual({ promotion_id: 'P-DEAL', promotion_type: 'DEAL', deal_price: 88 });
@@ -346,6 +357,21 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect(w.json()).toEqual({ ok: true, tiers: 2 });
     const ws = (await app.inject({ method: 'GET', url: '/api/v1/listings/MLB1/wholesale', cookies })).json();
     expect(ws).toMatchObject({ standardPrice: 100, active: true, sample: [{ quantity: 1, price: 100 }, { quantity: 5, price: 92 }, { quantity: 10, price: 85 }, { quantity: 25, price: 85 }] });
+
+    // ---- Duplicar: novo anúncio nasce pausado, sem SKU/EAN copiados, com a descrição
+    const dup = await app.inject({ method: 'POST', url: '/api/v1/listings/MLB1/duplicate', cookies, payload: { categoryId: 'MLB999' } });
+    expect(dup.json()).toMatchObject({ id: 'MLBDUP', status: 'paused' });
+    expect(fake.calls.created).toMatchObject({ category_id: 'MLB999', title: 'Peça 1' });
+    expect((fake.calls.created!.attributes as { id: string }[]).some((a) => a.id === 'SELLER_SKU')).toBe(false);
+    expect(fake.catalog.get('MLBDUP')!.status).toBe('paused');
+    const cats = (await app.inject({ method: 'GET', url: '/api/v1/listings/MLB1/categories?q=viseira', cookies })).json();
+    expect(cats).toEqual([{ id: 'MLB999', name: 'Viseiras', domain: 'Capacetes' }]);
+    // vendas por mês e margem por venda vêm do banco
+    const months = (await app.inject({ method: 'GET', url: '/api/v1/listings/MLB1/sales/monthly', cookies })).json();
+    expect(months.length).toBeGreaterThan(0);
+    expect(months[0]).toMatchObject({ month: expect.stringMatching(/^\d{4}-\d{2}$/) });
+    const sale = (await app.inject({ method: 'GET', url: '/api/v1/listings/MLB1/sales?limit=1', cookies })).json().items[0];
+    expect(sale).toMatchObject({ fee: 12 });
 
     // outra empresa não usa a conexão desta
     const other = await account();

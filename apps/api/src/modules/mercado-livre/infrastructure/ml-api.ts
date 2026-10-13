@@ -53,6 +53,12 @@ export interface MlApi {
   businessPrice(token: string, itemId: string, quantity: number): Promise<number | null>;
   /** Grava as faixas de preço por quantidade (B2B). Lista só com o standard remove as faixas. */
   setQuantityPrices(token: string, itemId: string, prices: unknown[]): Promise<void>;
+  /** Troca o tipo do anúncio (Clássico/Premium). */
+  changeListingType(token: string, itemId: string, type: string): Promise<void>;
+  /** Cria um anúncio (duplicação). */
+  createItem(token: string, body: Record<string, unknown>): Promise<{ id: string; permalink?: string | null }>;
+  /** Categorias sugeridas para um termo (domain_discovery). */
+  searchCategories(token: string, q: string): Promise<{ category_id: string; category_name: string; domain_name?: string | null }[]>;
   /** Campanhas da Central de Promoções do vendedor. */
   promotions(token: string, sellerId: string): Promise<MlPromotion[]>;
   /** Anúncios elegíveis e ainda fora da campanha (status=candidate), paginados por `searchAfter`. */
@@ -72,9 +78,27 @@ export interface MlItemFull {
   status: string;
   price?: number | null;
   category_id?: string | null;
+  currency_id?: string | null;
+  buying_mode?: string | null;
+  listing_type_id?: string | null;
+  condition?: string | null;
+  available_quantity?: number | null;
+  sale_terms?: { id: string; value_name?: string | null }[] | null;
+  variations?: {
+    attribute_combinations?: unknown[] | null;
+    available_quantity?: number | null;
+    price?: number | null;
+    attributes?: { id: string; value_id?: string | null; value_name?: string | null }[] | null;
+  }[] | null;
   attributes?: { id: string; name?: string | null; value_id?: string | null; value_name?: string | null; value_type?: string | null }[] | null;
   pictures?: { id: string; secure_url?: string | null; url?: string | null }[] | null;
-  shipping?: { logistic_type?: string | null; tags?: string[] | null; free_shipping?: boolean | null } | null;
+  shipping?: {
+    logistic_type?: string | null;
+    tags?: string[] | null;
+    free_shipping?: boolean | null;
+    mode?: string | null;
+    local_pick_up?: boolean | null;
+  } | null;
   catalog_listing?: boolean | null;
 }
 
@@ -284,6 +308,22 @@ export class HttpMlApi implements MlApi {
 
   async setQuantityPrices(token: string, itemId: string, prices: unknown[]) {
     await this.send('POST', `/items/${encodeURIComponent(itemId)}/prices/standard/quantity`, token, { prices });
+  }
+
+  async changeListingType(token: string, itemId: string, type: string) {
+    await this.send('POST', `/items/${encodeURIComponent(itemId)}/listing_type`, token, { id: type });
+  }
+
+  async createItem(token: string, body: Record<string, unknown>) {
+    return (await this.send('POST', '/items', token, body)) as { id: string; permalink?: string | null };
+  }
+
+  async searchCategories(token: string, q: string) {
+    const qs = new URLSearchParams({ q, limit: '8' });
+    return this.get<{ category_id: string; category_name: string; domain_name?: string | null }[]>(
+      `/sites/MLB/domain_discovery/search?${qs}`,
+      token,
+    );
   }
 
   private send(method: string, path: string, token: string, body: unknown) {

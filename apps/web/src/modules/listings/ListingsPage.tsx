@@ -9,6 +9,7 @@ import { ListingCard } from './ListingCard';
 import { ListingPricingModal } from './ListingPricingModal';
 import { ListingSalesModal } from './ListingSalesModal';
 import { ListingEditorModal, type EditorTab } from './ListingEditorModal';
+import { DuplicateModal } from './DuplicateModal';
 import { HowTo, ListingsNav } from './ListingsNav';
 import { listingsApi } from './listings-api';
 import '../skus/skus.css';
@@ -41,6 +42,7 @@ export function ListingsPage() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [pricing, setPricing] = useState<ListingDto | null>(null);
   const [sales, setSales] = useState<ListingDto | null>(null);
+  const [duplicating, setDuplicating] = useState<ListingDto | null>(null);
   const [editing, setEditing] = useState<{ item: ListingDto; tab: EditorTab } | null>(null);
   const ctrl = useRef<AbortController | null>(null);
 
@@ -148,6 +150,7 @@ export function ListingsPage() {
                 onPricing={() => setPricing(item)}
                 onSales={() => setSales(item)}
                 onEdit={(tab) => setEditing({ item, tab })}
+                onDuplicate={() => setDuplicating(item)}
                 onMsg={notify}
               />
             ))}
@@ -191,6 +194,18 @@ export function ListingsPage() {
             initialTab={editing.tab}
             canManage={canManage}
             onSaved={(text) => {
+              notify('ok', text);
+              void load();
+            }}
+          />
+        )}
+      </Modal>
+      <Modal open={duplicating !== null} onClose={() => setDuplicating(null)} label="Duplicar anúncio" wide>
+        {duplicating && (
+          <DuplicateModal
+            item={duplicating}
+            onDone={(text) => {
+              setDuplicating(null);
               notify('ok', text);
               void load();
             }}

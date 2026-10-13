@@ -73,6 +73,24 @@ export interface ListingSaleDto {
   quantity: number;
   unitPrice: number;
   gross: number;
+  /** Rateados pela participação do item no pedido (pacotes com vários itens). */
+  fee: number;
+  freight: number;
+  /** null = SKU sem custo cadastrado na data da venda. */
+  margin: number | null;
+}
+
+export interface ListingMonthDto {
+  /** AAAA-MM (fuso de São Paulo). */
+  month: string;
+  orders: number;
+  units: number;
+  gross: number;
+  fee: number;
+  freight: number;
+  tax: number;
+  cost: number | null;
+  margin: number | null;
 }
 
 export interface ListingSalesDto {
@@ -88,6 +106,21 @@ export interface ListingPricingDto {
   feePct: number | null;
   freight: number | null;
   margin: ListingMarginDto;
+  /** Tipo atual e a mesma conta nos dois tipos (Clássico × Premium). */
+  type: string | null;
+  options: { type: 'gold_special' | 'gold_pro'; label: string; fee: number; feePct: number | null; margin: ListingMarginDto }[];
+}
+
+export const listingTypeSchema = z.object({ type: z.enum(['gold_special', 'gold_pro']) });
+export const duplicateListingSchema = z.object({
+  categoryId: z.string().regex(/^MLB\d+$/).optional(),
+  title: z.string().trim().min(3).max(120).optional(),
+});
+
+export interface CategoryOptionDto {
+  id: string;
+  name: string;
+  domain: string | null;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

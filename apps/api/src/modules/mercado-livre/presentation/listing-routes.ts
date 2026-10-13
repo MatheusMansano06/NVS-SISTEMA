@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  duplicateListingSchema,
   enrollPromotionSchema,
+  listingTypeSchema,
   listingAttributesSchema,
   listingDescriptionSchema,
   listingDimensionsSchema,
@@ -107,6 +109,25 @@ export function listingRoutes(
       const { offset, limit } = parse(pagingSchema, req.query);
       return need().sales(req.user.tenantId, id, offset, limit);
     });
+
+    app.get('/listings/:id/sales/monthly', read, async (req) =>
+      need().monthly(req.user.tenantId, parse(idParam, req.params).id),
+    );
+
+    app.put('/listings/:id/type', write, async (req) =>
+      need().setListingType(req.user.tenantId, parse(idParam, req.params).id, parse(listingTypeSchema, req.body).type),
+    );
+
+    app.get('/listings/:id/categories', read, async (req) => {
+      const { q } = parse(z.object({ q: z.string().trim().min(2).max(80) }), req.query);
+      return need().categories(req.user.tenantId, parse(idParam, req.params).id, q);
+    });
+
+    app.post('/listings/:id/duplicate', write, async (req) =>
+      need().duplicate(req.user.tenantId, parse(idParam, req.params).id, parse(duplicateListingSchema, req.body ?? {})),
+    );
+
+    app.delete('/listings/:id', write, async (req) => need().remove(req.user.tenantId, parse(idParam, req.params).id));
 
     app.get('/listings/:id/pricing', read, async (req) => {
       const { id } = parse(idParam, req.params);

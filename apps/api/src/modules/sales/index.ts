@@ -7,3 +7,4 @@ export { PgSkuRepository } from './infrastructure/pg-sku-repository.js';
 export { skuRoutes } from './presentation/sku-routes.js';
 export { FinanceService } from './application/finance-service.js';
 export { financeRoutes } from './presentation/finance-routes.js';
+export { TIMEZONE } from './domain/period.js';

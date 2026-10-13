@@ -1,5 +1,7 @@
 import type {
+  CategoryOptionDto,
   ListingEditorDto,
+  ListingMonthDto,
   ListingListDto,
   ListingPricingDto,
   ListingSalesDto,
@@ -20,8 +22,12 @@ export const listingsApi = {
   },
   sales: (id: string, offset: number, limit = 20) =>
     http<ListingSalesDto>(`/api/v1/listings/${enc(id)}/sales?offset=${offset}&limit=${limit}`),
-  pricing: (id: string, price?: number, signal?: AbortSignal) =>
-    http<ListingPricingDto>(`/api/v1/listings/${enc(id)}/pricing${price ? `?price=${price}` : ''}`, { signal }),
+  pricing: (id: string, price?: number, signal?: AbortSignal, refresh = false) => {
+    const qs = new URLSearchParams();
+    if (price) qs.set('price', String(price));
+    if (refresh) qs.set('refresh', '1');
+    return http<ListingPricingDto>(`/api/v1/listings/${enc(id)}/pricing${qs.size ? `?${qs}` : ''}`, { signal });
+  },
   setPrice: (id: string, price: number) =>
     http<{ id: string; price: number }>(`/api/v1/listings/${enc(id)}/price`, { method: 'PUT', body: { price } }),
   setStock: (id: string, quantity: number) =>
@@ -48,6 +54,13 @@ export const listingsApi = {
   wholesale: (id: string) => http<WholesaleDto>(`/api/v1/listings/${enc(id)}/wholesale`),
   setWholesale: (id: string, tiers: { minUnits: number; price: number }[]) =>
     http<{ ok: true; tiers: number }>(`/api/v1/listings/${enc(id)}/wholesale`, { method: 'PUT', body: { tiers } }),
+  monthly: (id: string) => http<ListingMonthDto[]>(`/api/v1/listings/${enc(id)}/sales/monthly`),
+  setType: (id: string, type: 'gold_special' | 'gold_pro') =>
+    http<{ id: string; type: string }>(`/api/v1/listings/${enc(id)}/type`, { method: 'PUT', body: { type } }),
+  categories: (id: string, q: string) => http<CategoryOptionDto[]>(`/api/v1/listings/${enc(id)}/categories?q=${enc(q)}`),
+  duplicate: (id: string, body: { categoryId?: string; title?: string }) =>
+    http<{ id: string; permalink: string | null; status: 'paused' }>(`/api/v1/listings/${enc(id)}/duplicate`, { body }),
+  remove: (id: string) => http<{ id: string; deleted: true }>(`/api/v1/listings/${enc(id)}`, { method: 'DELETE' }),
   setStatus: (id: string, status: 'active' | 'paused' | 'closed') =>
     http<{ id: string; status: string }>(`/api/v1/listings/${enc(id)}/status`, { method: 'PUT', body: { status } }),
 };

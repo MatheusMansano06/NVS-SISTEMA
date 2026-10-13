@@ -231,3 +231,55 @@
   .ledit-dims { grid-template-columns: 1fr 1fr; }
   .ledit-save .btn { justify-self: stretch; }
 }
+
+/* ============ Menu "Mais", tipos e meses ============ */
+.lmenu { position: relative; }
+.lmenu summary { list-style: none; cursor: pointer; }
+.lmenu summary::-webkit-details-marker { display: none; }
+.lmenu-pop {
+  position: absolute; z-index: 5; bottom: calc(100% + 6px); right: 0; min-width: 250px; display: grid; gap: 2px; padding: 6px;
+  border-radius: 18px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100), 0 20px 40px -18px rgba(11,28,77,.45);
+}
+.lmenu-pop a, .lmenu-pop button {
+  display: grid; gap: 1px; text-align: left; border: 0; background: none; cursor: pointer; padding: 9px 12px; border-radius: 12px;
+  font: inherit; font-size: .84rem; font-weight: 600; color: var(--navy); text-decoration: none;
+}
+.lmenu-pop small { font-weight: 500; color: var(--gray-500); font-size: .72rem; }
+.lmenu-pop a:hover, .lmenu-pop button:hover:not(:disabled) { background: var(--gray-50); }
+.lmenu-pop .danger { color: var(--danger); }
+.lmenu-pop button:disabled { opacity: .5; cursor: default; }
+.ltype { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 18px; background: var(--gray-50); }
+.ltype > div { flex: 1; min-width: 200px; }
+.ltype strong { color: var(--navy); font-size: .9rem; }
+.ltype p { margin: 2px 0 0; font-size: .8rem; color: var(--gray-500); }
+.ltype-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.ltype-card { display: grid; gap: 4px; padding: 12px 14px; border-radius: 18px; background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-100); }
+.ltype-card[data-active] { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-soft); }
+.ltype-name { font-weight: 700; color: var(--navy); display: flex; align-items: center; gap: 6px; }
+.ltype-card small { color: var(--gray-500); font-size: .76rem; }
+.ltype-card b { font-variant-numeric: tabular-nums; }
+.ltype-card[data-tone='ok'] b { color: #0b6a49; }
+.ltype-card[data-tone='warn'] b { color: #7a5600; }
+.ltype-card[data-tone='bad'] b { color: #a3182b; }
+.ltype-card .act { justify-self: start; margin-top: 4px; }
+.lsales-table td[data-tone='ok'] { color: #0b6a49; font-weight: 650; }
+.lsales-table td[data-tone='warn'] { color: #7a5600; font-weight: 650; }
+.lsales-table td[data-tone='bad'] { color: #a3182b; font-weight: 650; }
+.lmonths { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: 60vh; overflow: auto; }
+.lmonths li { display: grid; gap: 8px; padding: 12px 14px; border-radius: 18px; background: var(--gray-50); }
+.lmonths-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.lmonths-head strong { color: var(--navy); }
+.lmonths-head span { color: var(--gray-500); font-size: .8rem; }
+.lmonths-bar { height: 6px; border-radius: 99px; background: var(--gray-100); overflow: hidden; }
+.lmonths-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), #5b8cff); }
+.lmonths dl { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 12px; }
+.lmonths dt { font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-500); font-weight: 700; }
+.lmonths dd { margin: 0; font-size: .86rem; color: var(--navy); font-variant-numeric: tabular-nums; font-weight: 600; }
+.lmonths [data-tone='ok'] dd { color: #0b6a49; }
+.lmonths [data-tone='warn'] dd { color: #7a5600; }
+.lmonths [data-tone='bad'] dd { color: #a3182b; }
+.lcats { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 240px; overflow: auto; }
+.lcats button { width: 100%; text-align: left; display: grid; gap: 2px; border: 0; cursor: pointer; padding: 10px 12px; border-radius: 14px; background: var(--gray-50); font: inherit; }
+.lcats button[aria-pressed='true'] { background: var(--blue-soft); box-shadow: inset 0 0 0 2px var(--blue); }
+.lcats strong { color: var(--navy); font-size: .88rem; }
+.lcats small { color: var(--gray-500); font-size: .74rem; }

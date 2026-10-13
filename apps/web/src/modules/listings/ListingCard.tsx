@@ -46,13 +46,14 @@ interface Props {
   onPricing: () => void;
   onSales: () => void;
   onEdit: (tab: EditorTab) => void;
+  onDuplicate: () => void;
   onMsg: (kind: 'ok' | 'error', text: string) => void;
 }
 
 /** Cartão de anúncio: foto, preço/margem, métricas e ações no mesmo lugar. */
-export function ListingCard({ item, canManage, onChanged, onPricing, onSales, onEdit, onMsg }: Props) {
+export function ListingCard({ item, canManage, onChanged, onPricing, onSales, onEdit, onDuplicate, onMsg }: Props) {
   const [stock, setStock] = useState(item.stock === null ? '' : String(item.stock));
-  const [busy, setBusy] = useState<'stock' | 'status' | null>(null);
+  const [busy, setBusy] = useState<'stock' | 'status' | 'delete' | null>(null);
   useEffect(() => setStock(item.stock === null ? '' : String(item.stock)), [item.stock]);
 
   const full = item.logistic === 'full';
@@ -89,6 +90,20 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
       onMsg('ok', status === 'active' ? 'Anúncio reativado.' : status === 'paused' ? 'Anúncio pausado.' : 'Anúncio finalizado.');
     } catch (err) {
       onMsg('error', err instanceof ApiError ? err.message : 'Não foi possível alterar o status.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm('Excluir este anúncio? Ele é finalizado e some da sua lista (o ML guarda o histórico). Não dá para desfazer.')) return;
+    setBusy('delete');
+    try {
+      await listingsApi.remove(item.id);
+      onChanged({ status: 'closed' });
+      onMsg('ok', 'Anúncio excluído.');
+    } catch (err) {
+      onMsg('error', err instanceof ApiError ? err.message : 'Não foi possível excluir.');
     } finally {
       setBusy(null);
     }
@@ -226,12 +241,29 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
           {canManage && !closed && item.status !== 'active' && (
             <button type="button" className="act" disabled={busy === 'status'} onClick={() => void changeStatus('active')}>Reativar</button>
           )}
-          {canManage && !closed && (
-            <button type="button" className="act act-danger" disabled={busy === 'status'} onClick={() => void changeStatus('closed')}>Finalizar</button>
-          )}
-          {item.permalink && (
-            <a className="act" href={item.permalink} target="_blank" rel="noreferrer">Ver no ML</a>
-          )}
+          <details className="lmenu">
+            <summary className="act" aria-label="Mais ações">Mais ⋯</summary>
+            <div className="lmenu-pop" role="menu">
+              {item.permalink && (
+                <a role="menuitem" href={item.permalink} target="_blank" rel="noreferrer">Ver no Mercado Livre</a>
+              )}
+              {canManage && (
+                <button type="button" role="menuitem" onClick={onDuplicate}>
+                  Duplicar anúncio <small>cria uma cópia pausada, na mesma ou em outra categoria</small>
+                </button>
+              )}
+              {canManage && !closed && (
+                <button type="button" role="menuitem" className="danger" disabled={busy !== null} onClick={() => void changeStatus('closed')}>
+                  Finalizar <small>encerra as vendas; não dá para reativar</small>
+                </button>
+              )}
+              {canManage && (
+                <button type="button" role="menuitem" className="danger" disabled={busy !== null} onClick={() => void remove()}>
+                  Excluir <small>finaliza e tira da lista</small>
+                </button>
+              )}
+            </div>
+          </details>
         </footer>
       </div>
     </article>

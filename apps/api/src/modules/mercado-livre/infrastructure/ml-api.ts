@@ -59,6 +59,18 @@ export interface MlApi {
   createItem(token: string, body: Record<string, unknown>): Promise<{ id: string; permalink?: string | null }>;
   /** Categorias sugeridas para um termo (domain_discovery). */
   searchCategories(token: string, q: string): Promise<{ category_id: string; category_name: string; domain_name?: string | null }[]>;
+  /** Categorias raiz do site (MLB). */
+  siteCategories(token: string): Promise<{ id: string; name: string }[]>;
+  /** Categoria com o caminho desde a raiz e as filhas. */
+  category(token: string, id: string): Promise<MlCategory>;
+  /** Tamanho médio do pacote na categoria (cm/g); null se o ML não informar. */
+  categoryDimensions(token: string, id: string): Promise<{ height: number; width: number; length: number; weight: number } | null>;
+  /** Frete do vendedor para um pacote com essas medidas (com o desconto da reputação da conta). */
+  freightByDimensions(
+    token: string,
+    sellerId: string,
+    q: { dimensions: string; price: number; type: string; freeShipping: boolean; categoryId?: string | null },
+  ): Promise<number | null>;
   /** Promoções em que o anúncio está (para o bônus de tarifa). */
   itemPromotions(token: string, itemId: string): Promise<MlItemPromotion[]>;
   /** Campanhas da Central de Promoções do vendedor. */
@@ -72,6 +84,13 @@ export interface MlApi {
   ): Promise<{ results: MlPromotionItem[]; searchAfter: string | null }>;
   /** Inscreve o anúncio na campanha (escreve no ML). */
   enrollPromotion(token: string, itemId: string, body: { promotion_id: string; promotion_type: string; deal_price?: number }): Promise<void>;
+}
+
+export interface MlCategory {
+  id: string;
+  name: string;
+  path_from_root?: { id: string; name: string }[] | null;
+  children_categories?: { id: string; name: string }[] | null;
 }
 
 export interface MlItemFull {
@@ -310,6 +329,52 @@ export class HttpMlApi implements MlApi {
 
   async setQuantityPrices(token: string, itemId: string, prices: unknown[]) {
     await this.send('POST', `/items/${encodeURIComponent(itemId)}/prices/standard/quantity`, token, { prices });
+  }
+
+  async siteCategories(token: string) {
+    return this.get<{ id: string; name: string }[]>('/sites/MLB/categories', token);
+  }
+
+  category(token: string, id: string) {
+    return this.get<MlCategory>(`/categories/${encodeURIComponent(id)}`, token);
+  }
+
+  async categoryDimensions(token: string, id: string) {
+    const r = await this.optional(() =>
+      this.get<{ dimensions?: { height?: number; width?: number; length?: number; weight?: number } | null }>(
+        `/categories/${encodeURIComponent(id)}/shipping_preferences`,
+        token,
+      ),
+    );
+    const d = r?.dimensions;
+    return d?.height && d.width && d.length && d.weight
+      ? { height: d.height, width: d.width, length: d.length, weight: d.weight }
+      : null;
+  }
+
+  async freightByDimensions(
+    token: string,
+    sellerId: string,
+    q: { dimensions: string; price: number; type: string; freeShipping: boolean; categoryId?: string | null },
+  ) {
+    const qs = new URLSearchParams({
+      dimensions: q.dimensions,
+      verbose: 'true',
+      item_price: String(q.price),
+      listing_type_id: q.type,
+      mode: 'me2',
+      condition: 'new',
+      logistic_type: 'drop_off',
+      free_shipping: q.freeShipping ? 'True' : 'False',
+    });
+    if (q.categoryId) qs.set('category_id', q.categoryId);
+    const r = await this.optional(() =>
+      this.get<{ coverage?: { all_country?: { list_cost?: number } } }>(
+        `/users/${encodeURIComponent(sellerId)}/shipping_options/free?${qs}`,
+        token,
+      ),
+    );
+    return r?.coverage?.all_country?.list_cost ?? null;
   }
 
   async itemPromotions(token: string, itemId: string) {

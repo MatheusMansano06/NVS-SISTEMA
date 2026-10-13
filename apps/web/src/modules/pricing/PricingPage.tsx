@@ -3,7 +3,7 @@ import {
   marginTone,
   priceForMargin,
   unitMargin,
-  type CategoryOptionDto,
+  type CategoryInfoDto,
   type ListingDto,
   type PricingSimulationDto,
 } from '@nvs/shared';
@@ -17,6 +17,7 @@ import { HowTo } from '../listings/ListingsNav';
 import { listingsApi } from '../listings/listings-api';
 import { skusApi } from '../skus/skus-api';
 import { pricingApi } from './pricing-api';
+import { CategoryBrowser, feeChips } from './CategoryBrowser';
 import '../skus/skus.css';
 import '../listings/listings.css';
 import '../sales/sales.css';
@@ -79,8 +80,12 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
   const canManage = session?.user.role !== 'viewer';
   const [mode, setMode] = useState<'listing' | 'free'>('listing');
   const [listing, setListing] = useState<ListingDto | null>(null);
-  const [category, setCategory] = useState<CategoryOptionDto | null>(null);
+  const [category, setCategory] = useState<CategoryInfoDto | null>(null);
   const [freeTitle, setFreeTitle] = useState('');
+  const [freeType, setFreeType] = useState<TypeId>('gold_special');
+  const [dims, setDims] = useState({ height: '', width: '', length: '', weight: '' });
+  const [freightManual, setFreightManual] = useState(false);
+  const [freightNote, setFreightNote] = useState('');
   const [price, setPrice] = useState('');
   const [cost, setCost] = useState('');
   const [freight, setFreight] = useState('');
@@ -159,7 +164,7 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
         }
         setCurrentType(r.type);
       } else {
-        const r = await pricingApi.quote(priceNum, category?.id, c.signal);
+        const r = await pricingApi.quote(priceNum, category?.id || undefined, c.signal);
         setOptions(r.fees);
         setFreightLocked(false);
       }
@@ -178,6 +183,63 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
     return () => window.clearTimeout(t);
   }, [fetchQuote]);
 
+  // simulação livre: frete calculado pelo ML a partir das medidas (a menos que a pessoa digite o frete)
+  const dimsNum = {
+    height: parse(dims.height),
+    width: parse(dims.width),
+    length: parse(dims.length),
+    weight: parse(dims.weight),
+  };
+  const dimsOk = Object.values(dimsNum).every((v) => v !== null && v > 0);
+  const freightCtrl = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (mode !== 'free' || freightManual || !priceNum || !dimsOk) return;
+    const t = window.setTimeout(async () => {
+      freightCtrl.current?.abort();
+      const c = new AbortController();
+      freightCtrl.current = c;
+      try {
+        const r = await pricingApi.freight(
+          {
+            price: priceNum,
+            type: freeType,
+            height: dimsNum.height!,
+            width: dimsNum.width!,
+            length: dimsNum.length!,
+            weight: Math.round(dimsNum.weight!),
+            categoryId: category?.id || undefined,
+          },
+          c.signal,
+        );
+        setFreight(toInput(r.freight));
+        setFreightLocked(true);
+        setFreightNote(r.source === 'none' ? 'abaixo de R$ 79 o comprador paga o frete' : 'calculado pelo ML para essas medidas, com a reputação da sua conta');
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        setFreightLocked(false);
+        setFreightNote(`${err instanceof ApiError ? err.message : 'Não deu para calcular o frete.'} Informe o frete manualmente.`);
+      }
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [mode, freightManual, priceNum, dims, freeType, category, dimsOk]);
+
+  async function pickCategory(id: string) {
+    try {
+      const info = await pricingApi.category(id);
+      setCategory(info);
+      if (info.dims) {
+        setDims({
+          height: String(info.dims.height),
+          width: String(info.dims.width),
+          length: String(info.dims.length),
+          weight: String(info.dims.weight),
+        });
+      }
+    } catch (err) {
+      notify('error', err instanceof ApiError ? err.message : 'Não foi possível abrir a categoria.');
+    }
+  }
+
   const notify = (kind: 'ok' | 'error', text: string) => {
     setMsg({ kind, text });
     window.setTimeout(() => setMsg((m) => (m?.text === text ? null : m)), 5000);
@@ -193,7 +255,7 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
 
   function applyTarget() {
     const t = parse(target);
-    const base = options.find((o) => o.type === currentType) ?? options[0];
+    const base = options.find((o) => o.type === (mode === 'free' ? freeType : currentType)) ?? options[0];
     if (t === null || !base || base.feePct === null || costNum === null) {
       notify('error', 'Preencha o custo e aguarde as tarifas para calcular.');
       return;
@@ -260,7 +322,7 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
     <div className="pcalc">
       <div className="seg ledit-seg" role="radiogroup" aria-label="O que precificar">
         <button type="button" role="radio" aria-checked={mode === 'listing'} onClick={() => setMode('listing')}>De um anúncio</button>
-        <button type="button" role="radio" aria-checked={mode === 'free'} onClick={() => { setMode('free'); setListing(null); setFreightLocked(false); }}>Simulação livre</button>
+        <button type="button" role="radio" aria-checked={mode === 'free'} onClick={() => { setMode('free'); setListing(null); setFreightLocked(false); setCurrentType(null); setOptions([]); }}>Simulação livre</button>
       </div>
 
       {mode === 'listing' ? (
@@ -278,13 +340,59 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
           <ListingSearch onPick={pick} />
         )
       ) : (
-        <div className="pfree">
-          <label className="sku-input">
-            <small>Nome do produto (opcional)</small>
-            <span className="sku-field"><input value={freeTitle} onChange={(e) => setFreeTitle(e.target.value)} placeholder="Ex.: Viseira fumê" /></span>
-          </label>
-          <CategorySearch value={category} onChange={setCategory} />
-        </div>
+        !category ? (
+          <CategoryBrowser
+            onPick={(id) => void pickCategory(id)}
+            onSkip={() => setCategory({ id: '', name: 'Sem categoria (tarifa média)', leaf: true, feeClassic: 12, feePremium: 17, path: [], dims: null })}
+          />
+        ) : (
+          <>
+            <div className="pcat-chosen">
+              <span>
+                <small>Categoria</small>
+                <strong>{category.path.map((p) => p.name).join(' › ') || category.name}</strong>
+                {feeChips(category)}
+              </span>
+              <button type="button" className="act" onClick={() => { setCategory(null); setOptions([]); }}>Trocar categoria</button>
+            </div>
+            <div className="pfree">
+              <label className="sku-input">
+                <small>Nome do produto (opcional, para salvar)</small>
+                <span className="sku-field"><input value={freeTitle} onChange={(e) => setFreeTitle(e.target.value)} placeholder="Ex.: Viseira fumê" /></span>
+              </label>
+              <div>
+                <small className="pfree-label">2. Tipo de anúncio</small>
+                <div className="seg" role="radiogroup" aria-label="Tipo de anúncio">
+                  {(['gold_special', 'gold_pro'] as const).map((t) => (
+                    <button key={t} type="button" role="radio" aria-checked={freeType === t} onClick={() => setFreeType(t)}>
+                      {t === 'gold_pro' ? 'Premium' : 'Clássico'}{' '}
+                      <span>{(t === 'gold_pro' ? category.feePremium : category.feeClassic)?.toLocaleString('pt-BR') ?? '—'}%</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <section className="scard pdims">
+              <header className="scard-head">
+                <div>
+                  <h2>3. Medidas do pacote (para o frete)</h2>
+                  <p>{category.dims ? 'Preenchido com o tamanho médio da categoria — ajuste para o seu produto embalado.' : 'Informe as medidas do produto embalado.'}</p>
+                </div>
+              </header>
+              <div className="ledit-dims">
+                {([['height', 'Altura', 'cm'], ['width', 'Largura', 'cm'], ['length', 'Comprimento', 'cm'], ['weight', 'Peso', 'g']] as const).map(([k, label, unit]) => (
+                  <label key={k} className="sku-input">
+                    <small>{label}</small>
+                    <span className="sku-field">
+                      <input inputMode="decimal" value={dims[k]} onChange={(e) => setDims({ ...dims, [k]: e.target.value })} />
+                      <i>{unit}</i>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </section>
+          </>
+        )
       )}
 
       {msg && <p className={`banner banner-${msg.kind}`} role="status">{msg.text}</p>}
@@ -295,7 +403,22 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
           <span className="sku-field"><i>R$</i><input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" /></span>
         </label>
         <label className="sku-input">
-          <small>Frete {freightLocked ? '· vem do ML' : '(pago por você)'}</small>
+          <small>
+            Frete {freightLocked ? '· vem do ML' : '(pago por você)'}
+            {mode === 'free' && (
+              <button
+                type="button"
+                className="link pfreight-toggle"
+                onClick={() => {
+                  setFreightManual((v) => !v);
+                  setFreightLocked(false);
+                  setFreightNote('');
+                }}
+              >
+                {freightManual ? 'calcular pelas medidas' : 'digitar'}
+              </button>
+            )}
+          </small>
           <span className="sku-field" data-locked={freightLocked || undefined}>
             <i>R$</i>
             <input inputMode="decimal" value={freight} readOnly={freightLocked} onChange={(e) => setFreight(e.target.value)} placeholder="0,00" />
@@ -319,11 +442,13 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
       </section>
 
       {error && <p className={`banner ${estimated ? 'banner-warn' : 'banner-error'}`} role="alert">{error}</p>}
-      {mode === 'free' && !category && <p className="lprice-note">Sem categoria a tarifa é a média do ML; escolha a categoria para o valor exato.</p>}
+      {mode === 'free' && freightNote && <p className="lprice-note">Frete: {freightNote.replace(/\.+$/, '')}.</p>}
 
       <div className="pcols" aria-busy={loading}>
-        {options.map((o) => {
+        {(mode === 'free' ? options.filter((o) => o.type === freeType) : options).map((o) => {
           const { fee, m } = calc(o);
+          const other = mode === 'free' ? options.find((x) => x.type !== o.type) : undefined;
+          const otherM = other ? calc(other).m : null;
           const active = currentType === o.type;
           const tone = marginTone(m.pct);
           return (
@@ -348,6 +473,12 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
                 <b>{m.amount === null ? '—' : money(m.amount)}</b>
                 <span>{m.pct === null ? (costNum === null ? 'informe o custo' : '') : pct(m.pct, 2)}</span>
               </div>
+              {other && otherM?.amount != null && (
+                <p className="lprice-note">
+                  No {other.label} seria {money(otherM.amount)} ({pct(otherM.pct ?? 0, 1)}).{' '}
+                  <button type="button" className="link" onClick={() => setFreeType(other.type)}>Ver {other.label}</button>
+                </p>
+              )}
               <footer className="lcard-actions">
                 {canManage && listing && !active && (
                   <button type="button" className="act" disabled={busy !== null} onClick={() => void switchType(o.type)}>
@@ -409,43 +540,6 @@ function ListingSearch({ onPick }: { onPick: (l: ListingDto) => void }) {
               <button type="button" role="option" aria-selected={false} onClick={() => onPick(r)}>
                 <ProductThumb src={r.pictureUrl} alt={r.title} />
                 <span><strong>{r.sku ?? r.id} · {r.price === null ? '—' : money(r.price)}</strong><small>{r.title}</small></span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function CategorySearch({ value, onChange }: { value: CategoryOptionDto | null; onChange: (c: CategoryOptionDto | null) => void }) {
-  const [q, setQ] = useState('');
-  const [cats, setCats] = useState<CategoryOptionDto[]>([]);
-  useEffect(() => {
-    if (q.trim().length < 2) return setCats([]);
-    const t = window.setTimeout(() => pricingApi.categories(q.trim()).then(setCats).catch(() => setCats([])), 400);
-    return () => window.clearTimeout(t);
-  }, [q]);
-  if (value) {
-    return (
-      <div className="pcat-chosen">
-        <span><small>Categoria</small><strong>{value.name}</strong><em>{value.domain ?? ''} · {value.id}</em></span>
-        <button type="button" className="act" onClick={() => onChange(null)}>Trocar</button>
-      </div>
-    );
-  }
-  return (
-    <div className="sfilter">
-      <label className="search">
-        <span className="sr-only">Categoria</span>
-        <input placeholder="Categoria: digite o que é o produto (ex.: viseira capacete)" value={q} onChange={(e) => setQ(e.target.value)} />
-      </label>
-      {cats.length > 0 && (
-        <ul className="sfilter-results">
-          {cats.map((c) => (
-            <li key={c.id}>
-              <button type="button" className="pcat-opt" onClick={() => { onChange(c); setQ(''); }}>
-                <span><strong>{c.name}</strong><small>{c.domain ?? ''} · {c.id}</small></span>
               </button>
             </li>
           ))}

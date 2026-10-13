@@ -44,3 +44,25 @@
 @media (max-width: 1100px) { .pinputs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ptarget { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .pfree { grid-template-columns: 1fr; } .pinputs { grid-template-columns: 1fr; } }
 .banner-warn { background: var(--yellow-soft); color: #5c4300; }
+
+/* ============ Simulação livre: categorias e medidas ============ */
+.pcat-crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .84rem; color: var(--gray-500); }
+.pcat-crumbs b { color: var(--navy); }
+.pcat-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px; max-height: 420px; overflow: auto; }
+.pcat-list[aria-busy='true'] { opacity: .6; }
+.pcat-list button { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto 54px; gap: 10px; align-items: center; text-align: left; border: 0; cursor: pointer; padding: 10px 12px; border-radius: 14px; background: var(--gray-50); font: inherit; transition: background .2s, box-shadow .2s; }
+.pcat-list button:hover { background: var(--blue-soft); box-shadow: inset 0 0 0 1px var(--blue); }
+.pcat-list strong { color: var(--navy); font-size: .86rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcat-list i { font-style: normal; color: var(--blue); font-weight: 700; font-size: .78rem; text-align: right; }
+.pcat-fees { display: inline-flex; gap: 6px; font-size: .72rem; color: var(--gray-500); white-space: nowrap; }
+.pcat-fees span { padding: 2px 8px; border-radius: 99px; background: #fff; box-shadow: inset 0 0 0 1px var(--gray-100); }
+.pcat-fees b { color: var(--navy); }
+.pcat-usethis { justify-self: start; }
+.pcat-chosen .pcat-fees { margin-top: 4px; }
+.pfree { grid-template-columns: minmax(0, 1fr) auto; }
+.pfree-label { display: block; font-size: .68rem; color: var(--gray-500); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+.pfree .seg button span { margin-left: 4px; }
+.pdims .ledit-dims { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pfreight-toggle { font-size: .7rem; margin-left: 6px; padding: 0; text-transform: none; letter-spacing: 0; }
+@media (max-width: 640px) { .pcat-list button { grid-template-columns: minmax(0, 1fr) 54px; } .pcat-list .pcat-fees { grid-column: 1 / -1; grid-row: 2; } .pdims .ledit-dims { grid-template-columns: 1fr 1fr; } }
+.pcat-skip { justify-self: start; font-size: .82rem; }

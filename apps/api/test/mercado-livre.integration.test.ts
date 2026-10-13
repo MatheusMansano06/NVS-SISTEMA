@@ -30,7 +30,7 @@ function randomCnpj(): string {
 
 /** API falsa do Mercado Livre: 120 pedidos nos últimos 90 dias (1 a cada 18h). */
 function fakeMl(sellerId: number) {
-  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null };
+  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null, catCalls: 0, lastFreight: '' };
   const now = Date.now();
   const orders: MlOrder[] = Array.from({ length: 120 }, (_, i) => ({
     id: 9_000_000 + i,
@@ -117,6 +117,32 @@ function fakeMl(sellerId: number) {
       }
     },
     async changeListingType() {},
+    async siteCategories() {
+      calls.catCalls++;
+      return [{ id: 'MLB1747', name: 'Acessórios para Veículos' }, { id: 'MLB1000', name: 'Eletrônicos' }];
+    },
+    async category(_t, id) {
+      calls.catCalls++;
+      const tree: Record<string, { name: string; children: string[] }> = {
+        MLB1747: { name: 'Acessórios para Veículos', children: ['MLB8000'] },
+        MLB1000: { name: 'Eletrônicos', children: [] },
+        MLB8000: { name: 'Viseiras', children: [] },
+      };
+      const t = tree[id]!;
+      return {
+        id,
+        name: t.name,
+        path_from_root: id === 'MLB8000' ? [{ id: 'MLB1747', name: 'Acessórios para Veículos' }, { id, name: t.name }] : [{ id, name: t.name }],
+        children_categories: t.children.map((c) => ({ id: c, name: tree[c]!.name })),
+      };
+    },
+    async categoryDimensions() {
+      return { height: 12, width: 25, length: 30, weight: 600 };
+    },
+    async freightByDimensions(_t, _s, q) {
+      calls.lastFreight = q.dimensions;
+      return 23.45;
+    },
     async itemPromotions(_t, id) {
       return id === 'MLB9003'
         ? [
@@ -408,6 +434,26 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect(sims[0]).toMatchObject({ listingId: 'MLB1', price: 100, margin: 29 });
     const otherSims = (await app.inject({ method: 'GET', url: '/api/v1/pricing/simulations', cookies: await account() })).json();
     expect(otherSims).toEqual([]); // simulações são da empresa
+
+    // ---- Categorias com % de tarifa (cache global) e frete pelas medidas
+    const root = (await app.inject({ method: 'GET', url: '/api/v1/pricing/category-tree', cookies })).json();
+    expect(root.items).toEqual([
+      { id: 'MLB1747', name: 'Acessórios para Veículos', leaf: false, feeClassic: 12, feePremium: 17 },
+      { id: 'MLB1000', name: 'Eletrônicos', leaf: true, feeClassic: 12, feePremium: 17 },
+    ]);
+    const child = (await app.inject({ method: 'GET', url: '/api/v1/pricing/category-tree?parent=MLB1747', cookies })).json();
+    expect(child.items[0]).toMatchObject({ id: 'MLB8000', leaf: true, feeClassic: 12 });
+    const catBefore = fake.calls.catCalls;
+    await app.inject({ method: 'GET', url: '/api/v1/pricing/category-tree?parent=MLB1747', cookies });
+    expect(fake.calls.catCalls - catBefore).toBe(1); // só a categoria-mãe; as filhas vêm do cache
+    const info = (await app.inject({ method: 'GET', url: '/api/v1/pricing/categories/MLB8000', cookies })).json();
+    expect(info).toMatchObject({ id: 'MLB8000', dims: { height: 12, width: 25, length: 30, weight: 600 } });
+    expect(info.path.map((p: { name: string }) => p.name)).toEqual(['Acessórios para Veículos', 'Viseiras']);
+    const fr = (await app.inject({ method: 'GET', url: '/api/v1/pricing/freight?price=120&type=gold_special&height=12&width=25&length=30&weight=600', cookies })).json();
+    expect(fr).toEqual({ freight: 23.45, freeShipping: true, source: 'ml' });
+    expect(fake.calls.lastFreight).toBe('12x25x30,600');
+    const cheap = (await app.inject({ method: 'GET', url: '/api/v1/pricing/freight?price=50&type=gold_special&height=12&width=25&length=30&weight=600', cookies })).json();
+    expect(cheap).toEqual({ freight: 0, freeShipping: false, source: 'none' });
 
     // outra empresa não usa a conexão desta
     const other = await account();

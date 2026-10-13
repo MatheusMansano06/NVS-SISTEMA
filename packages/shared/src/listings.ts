@@ -349,3 +349,47 @@ export interface PricingSimulationDto {
   /** Preço atual do anúncio (para ver se a simulação já foi aplicada). */
   currentPrice: number | null;
 }
+
+// ================= Categorias (simulação livre)
+
+export interface CategoryNodeDto {
+  id: string;
+  name: string;
+  /** null = ainda não sabemos (abre para descobrir). */
+  leaf: boolean | null;
+  /** % de tarifa no Clássico e no Premium (preço de referência R$ 100). */
+  feeClassic: number | null;
+  feePremium: number | null;
+}
+
+export interface CategoryLevelDto {
+  path: { id: string; name: string }[];
+  items: CategoryNodeDto[];
+}
+
+export interface CategoryInfoDto extends CategoryNodeDto {
+  path: { id: string; name: string }[];
+  /** Tamanho médio do pacote nesta categoria (cm / g), para pré-preencher. */
+  dims: { height: number; width: number; length: number; weight: number } | null;
+}
+
+/** Abaixo deste preço o frete grátis não é obrigatório no Brasil (Mercado Envios). */
+export const FREE_SHIPPING_MIN_PRICE = 79;
+
+export const freightQuoteSchema = z.object({
+  price: z.coerce.number().finite().positive(),
+  type: z.enum(['gold_special', 'gold_pro']),
+  height: z.coerce.number().positive().max(300),
+  width: z.coerce.number().positive().max(300),
+  length: z.coerce.number().positive().max(300),
+  weight: z.coerce.number().int().positive().max(100_000),
+  categoryId: z.string().regex(/^MLB\d+$/).optional(),
+});
+
+export interface FreightQuoteDto {
+  /** Frete pago pelo vendedor; 0 quando o comprador paga. */
+  freight: number;
+  freeShipping: boolean;
+  /** 'ml' = calculado pelo Mercado Livre com a reputação da conta; 'none' = comprador paga. */
+  source: 'ml' | 'none';
+}

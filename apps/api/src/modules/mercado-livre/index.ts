@@ -10,3 +10,4 @@ export { PromotionService } from './application/promotion-service.js';
 export { ListingEditorService } from './application/listing-editor-service.js';
 export { PricingService } from './application/pricing-service.js';
 export { pricingRoutes } from './presentation/pricing-routes.js';
+export { PgCategoryCache } from './infrastructure/pg-category-cache.js';

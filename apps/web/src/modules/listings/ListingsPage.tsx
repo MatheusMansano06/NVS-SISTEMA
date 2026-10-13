@@ -6,7 +6,6 @@ import { Modal } from '../../shared/ui/Modal';
 import { Pagination } from '../../shared/ui/Pagination';
 import { useAuth } from '../auth/AuthContext';
 import { ListingCard } from './ListingCard';
-import { ListingPricingModal } from './ListingPricingModal';
 import { ListingEditorModal, type EditorTab } from './ListingEditorModal';
 import { DuplicateModal } from './DuplicateModal';
 import { HowTo, ListingsNav } from './ListingsNav';
@@ -22,8 +21,8 @@ const TABS: { id: ListingTab; label: string }[] = [
 
 const STEPS = [
   { title: 'Encontre o anúncio', text: 'Use as abas (Ativos, Pausados, Finalizados) e a busca por título, SKU ou código MLB.' },
-  { title: 'Confira a margem', text: 'O selo MC mostra quanto sobra por venda: verde ≥15%, amarelo 8–15%, vermelho abaixo. Sem custo, cadastre no chip “custo”.' },
-  { title: 'Ajuste na hora', text: 'Estoque no próprio card; preço em “Preço e margem”; descrição, fotos, ficha, dimensões e atacado nos botões de edição. Tudo vai direto para o Mercado Livre.' },
+  { title: 'Confira a margem', text: 'O selo MC mostra quanto sobra por venda: verde ≥15%, amarelo 8–15%, vermelho abaixo. Simule outro preço no Precificador.' },
+  { title: 'Ajuste na hora', text: 'Estoque no próprio card; preço no “Precificador”; descrição, fotos, ficha, dimensões e atacado nos botões de edição. Tudo vai direto para o Mercado Livre.' },
 ];
 
 /** Anúncios do Mercado Livre em cartões: lê do banco local (rápido) e só fala com o ML ao alterar. */
@@ -39,7 +38,6 @@ export function ListingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-  const [pricing, setPricing] = useState<ListingDto | null>(null);
   const [duplicating, setDuplicating] = useState<ListingDto | null>(null);
   const [editing, setEditing] = useState<{ item: ListingDto; tab: EditorTab } | null>(null);
   const ctrl = useRef<AbortController | null>(null);
@@ -145,7 +143,7 @@ export function ListingsPage() {
                 item={item}
                 canManage={canManage}
                 onChanged={(change) => patch(item.id, change)}
-                onPricing={() => setPricing(item)}
+                onPricing={() => navigate(`/precificador?anuncio=${encodeURIComponent(item.id)}`)}
                 onSales={() => navigate(`/vendas?anuncio=${encodeURIComponent(item.id)}`)}
                 onEdit={(tab) => setEditing({ item, tab })}
                 onDuplicate={() => setDuplicating(item)}
@@ -172,18 +170,6 @@ export function ListingsPage() {
         )}
       </div>
 
-      <Modal open={pricing !== null} onClose={() => setPricing(null)} label="Preço e margem" wide>
-        {pricing && (
-          <ListingPricingModal
-            item={pricing}
-            canManage={canManage}
-            onSaved={() => {
-              void load();
-              notify('ok', 'Anúncio atualizado.');
-            }}
-          />
-        )}
-      </Modal>
       <Modal open={editing !== null} onClose={() => setEditing(null)} label="Editar anúncio" wide>
         {editing && (
           <ListingEditorModal

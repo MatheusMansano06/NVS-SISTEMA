@@ -65,8 +65,11 @@ function fakeMl(sellerId: number) {
       if (body.status) it.status = String(body.status);
       return it;
     },
-    async listingFees() {
-      return [];
+    async listingFees(_t, price) {
+      return [
+        { listing_type_id: 'gold_special', sale_fee_amount: Math.round(price * 12) / 100, sale_fee_details: { percentage_fee: 12, fixed_fee: 0 } },
+        { listing_type_id: 'gold_pro', sale_fee_amount: Math.round(price * 17) / 100, sale_fee_details: { percentage_fee: 17, fixed_fee: 0 } },
+      ];
     },
     async freeShippingCost() {
       return null;
@@ -387,6 +390,24 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect(months[0]).toMatchObject({ month: expect.stringMatching(/^\d{4}-\d{2}$/) });
     const sale = (await app.inject({ method: 'GET', url: '/api/v1/listings/MLB1/sales?limit=1', cookies })).json().items[0];
     expect(sale).toMatchObject({ fee: 12 });
+
+    // ---- Precificador: tarifas por tipo e simulação salva (margem recalculada no servidor)
+    const quote = (await app.inject({ method: 'GET', url: '/api/v1/pricing/quote?price=100', cookies })).json();
+    expect(quote.fees).toEqual([
+      { type: 'gold_special', label: 'Clássico', fee: 12, feePct: 12, fixedFee: 0 },
+      { type: 'gold_pro', label: 'Premium', fee: 17, feePct: 17, fixedFee: 0 },
+    ]);
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/v1/pricing/simulations',
+      cookies,
+      payload: { listingId: 'MLB1', title: 'Peça 1', listingType: 'gold_special', price: 100, cost: 40, freight: 10, taxPct: 9, fee: 12 },
+    });
+    expect(saved.json()).toMatchObject({ margin: 29, marginPct: 0.29 });
+    const sims = (await app.inject({ method: 'GET', url: '/api/v1/pricing/simulations', cookies })).json();
+    expect(sims[0]).toMatchObject({ listingId: 'MLB1', price: 100, margin: 29 });
+    const otherSims = (await app.inject({ method: 'GET', url: '/api/v1/pricing/simulations', cookies: await account() })).json();
+    expect(otherSims).toEqual([]); // simulações são da empresa
 
     // outra empresa não usa a conexão desta
     const other = await account();

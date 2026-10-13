@@ -287,3 +287,65 @@ export const listingWholesaleSchema = z.object({
     .array(z.object({ minUnits: z.coerce.number().int().min(2).max(10_000), price: z.coerce.number().finite().positive() }))
     .max(5),
 });
+
+// ================= Precificador
+
+/** Tarifa de um tipo de anúncio num preço: % + parte fixa (o ML cobra fixo abaixo de ~R$ 79). */
+export interface FeeQuoteDto {
+  type: 'gold_special' | 'gold_pro';
+  label: string;
+  fee: number;
+  feePct: number | null;
+  fixedFee: number;
+}
+
+export interface PricingQuoteDto {
+  price: number;
+  categoryId: string | null;
+  fees: FeeQuoteDto[];
+}
+
+export const pricingQuoteSchema = z.object({
+  price: z.coerce.number().finite().positive().max(10_000_000),
+  categoryId: z.string().regex(/^MLB\d+$/).optional(),
+});
+
+/**
+ * Preço que entrega a margem alvo: preço = (custo + frete + fixo) / (1 − %tarifa − %imposto − %alvo).
+ * Aproximação (o frete e o fixo podem mudar de faixa no novo preço) — confirme com a tarifa real.
+ */
+export function priceForMargin(p: { targetPct: number; feePct: number; fixedFee: number; freight: number; cost: number; taxPct: number }): number | null {
+  const denom = 1 - p.feePct / 100 - p.taxPct / 100 - p.targetPct / 100;
+  if (denom <= 0.01) return null;
+  return Math.ceil(((p.cost + p.freight + p.fixedFee) / denom) * 100) / 100;
+}
+
+export const savePricingSimulationSchema = z.object({
+  listingId: z.string().regex(/^[A-Z]{3}\d+$/).optional(),
+  title: z.string().trim().min(1).max(200),
+  sku: z.string().trim().max(120).optional(),
+  listingType: z.enum(['gold_special', 'gold_pro']),
+  price: z.coerce.number().finite().positive(),
+  cost: z.coerce.number().finite().min(0).nullable(),
+  freight: z.coerce.number().finite().min(0),
+  taxPct: z.coerce.number().min(0).max(100),
+  fee: z.coerce.number().finite().min(0),
+});
+
+export interface PricingSimulationDto {
+  id: string;
+  listingId: string | null;
+  title: string;
+  sku: string | null;
+  listingType: 'gold_special' | 'gold_pro';
+  price: number;
+  cost: number | null;
+  freight: number;
+  taxPct: number;
+  fee: number;
+  margin: number | null;
+  marginPct: number | null;
+  createdAt: string;
+  /** Preço atual do anúncio (para ver se a simulação já foi aplicada). */
+  currentPrice: number | null;
+}

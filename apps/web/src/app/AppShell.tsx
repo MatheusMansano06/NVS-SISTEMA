@@ -13,6 +13,7 @@ const NAV: { label: string; icon: IconName; path?: string }[] = [
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
   { label: 'Vendas', icon: 'cart', path: '/vendas' },
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
+  { label: 'Precificador', icon: 'tag', path: '/precificador' },
   { label: 'Integrações', icon: 'plug' },
 ];
 

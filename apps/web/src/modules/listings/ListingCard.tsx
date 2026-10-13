@@ -183,7 +183,7 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
             </span>
           )}
           {m.source === 'sales' && m.amount !== null && <span className="lcard-est">margem estimada pelas vendas</span>}
-          {m.amount === null && item.cost !== null && <span className="lcard-est">abra “Preço e margem” para calcular</span>}
+          {m.amount === null && item.cost !== null && <span className="lcard-est">abra o Precificador para calcular</span>}
         </p>
 
         <dl className="lcard-stats">
@@ -248,7 +248,7 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
         )}
 
         <footer className="lcard-actions">
-          <button type="button" className="act act-strong" onClick={onPricing}>Preço e margem</button>
+          <button type="button" className="act act-strong" onClick={onPricing}>Precificador</button>
           {canManage && !closed && item.status === 'active' && (
             <button type="button" className="act" disabled={busy === 'status'} onClick={() => void changeStatus('paused')}>Pausar</button>
           )}

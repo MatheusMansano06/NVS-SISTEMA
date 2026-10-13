@@ -35,6 +35,8 @@ import {
   ListingService,
   PromotionService,
   ListingEditorService,
+  PricingService,
+  pricingRoutes,
   listingRoutes,
   mercadoLivreRoutes,
   type MlApi,
@@ -170,6 +172,7 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     ),
     { prefix: '/api/v1' },
   );
+  await app.register(pricingRoutes(ml && mlClient ? new PricingService(database, ml, mlClient) : null), { prefix: '/api/v1' });
   const onboarding = new OnboardingService(database, new PgOnboardingRepository(), events);
   await app.register(onboardingRoutes(onboarding), { prefix: '/api/v1' });
   await app.register(identityRoutes(identity, {

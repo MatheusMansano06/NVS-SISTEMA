@@ -187,7 +187,13 @@ export const wmsProductUpdateSchema = z.object({
 });
 export const wmsProductCodeSchema = z.object({ barcode });
 /** CSV: SKU;Descrição;EAN1;EAN2;… (soma ao cadastro; não apaga nada). */
-export const wmsProductImportSchema = z.object({ csv: z.string().min(1).max(5_000_000) });
+export const wmsProductImportSchema = z.object({
+  csv: z.string().min(1).max(5_000_000),
+  /** Só SKUs que existem nos anúncios do Mercado Livre da conta (descrição vazia ganha o título do anúncio). */
+  onlyListings: z.boolean().default(false),
+});
+/** Apagar todo o Master Data: exige a senha da conta da empresa. */
+export const wmsProductClearSchema = z.object({ password: z.string().min(1, 'Digite a senha da conta').max(128) });
 
 export interface WmsProductDto {
   sku: string;

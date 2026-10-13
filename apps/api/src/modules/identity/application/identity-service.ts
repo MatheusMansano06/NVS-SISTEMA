@@ -149,6 +149,14 @@ export class IdentityService {
     this.events.publish({ type: 'account.deleted', tenantId, payload: { userId } });
   }
 
+  /** Confere a senha da conta (para ações destrutivas em outros módulos, ex.: apagar o Master Data). */
+  async checkPassword(tenantId: string, userId: string, password: string): Promise<boolean> {
+    const user = await this.db.withTenant(tenantId, (db) => this.users.findById(db, userId));
+    if (!user || !user.isActive) return false;
+    const attempt = user.mustChangePassword ? onlyDigits(password) : password;
+    return verifyPassword(attempt, user.passwordHash);
+  }
+
   /** Solicitação de recuperação: resposta sempre neutra. O envio de e-mail será plugado via evento. */
   async requestPasswordReset(email: string): Promise<void> {
     const identity = await this.db.query<{ tenant_id: string }>(

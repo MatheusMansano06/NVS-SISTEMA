@@ -81,7 +81,9 @@ export const fullApi = {
   deleteProduct: (sku: string) => http<void>(`/api/v1/wms/products/${enc(sku)}`, { method: 'DELETE' }),
   addCode: (sku: string, barcode: string) => http<{ product: WmsProductDto; alsoOn: string[] }>(`/api/v1/wms/products/${enc(sku)}/codes`, { body: { barcode } }),
   removeCode: (sku: string, barcode: string) => http<WmsProductDto>(`/api/v1/wms/products/${enc(sku)}/codes/${enc(barcode)}`, { method: 'DELETE' }),
-  importProducts: (csv: string) => http<{ products: number; codes: number }>('/api/v1/wms/products/import', { body: { csv } }),
+  importProducts: (csv: string, onlyListings: boolean) =>
+    http<{ products: number; codes: number; skipped: number }>('/api/v1/wms/products/import', { body: { csv, onlyListings } }),
+  clearProducts: (password: string) => http<{ products: number; codes: number }>('/api/v1/wms/products/clear', { body: { password } }),
 };
 
 /** Arquivo → base64 (sem o prefixo data:). */

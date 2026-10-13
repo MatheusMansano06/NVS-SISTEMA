@@ -131,7 +131,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
         </>
       )}
 
-      <Modal open={choices !== null} onClose={() => setChoices(null)} label={choices?.title ?? 'Resultados'}>
+      <Modal open={choices !== null} onClose={() => setChoices(null)} label={choices?.title ?? 'Resultados'} wide>
         {choices && (
           <div className="full-modal">
             <h2>{choices.title}</h2>

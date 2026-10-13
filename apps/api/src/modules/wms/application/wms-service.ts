@@ -42,6 +42,12 @@ class Blocked extends AppError {
 
 const ddmmyyyy = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
 const TERMINAL = new Set(['complete', 'partial', 'out_of_stock']);
+/** Leitura dupla do leitor de código ("KRKY38598KRKY38598") vira o código uma vez só. */
+const undoubled = (code: string | undefined) => {
+  const c = (code ?? '').trim();
+  const h = c.length / 2;
+  return c.length >= 8 && c.length % 2 === 0 && c.slice(0, h) === c.slice(h) ? c.slice(0, h) : c;
+};
 
 /**
  * Supervisão Full (portado do NVS-WMS): envio do Full (PDF do ML) → lote → listas de até 1.000 unidades →
@@ -760,8 +766,9 @@ export class WmsService {
   }
 
   /** Planilha (CSV) SKU;Descrição;EAN1;EAN2;… (quantos códigos tiver) — soma ao cadastro, não apaga nada. */
-  async importProducts(a: Actor, csv: string): Promise<{ products: number; codes: number }> {
+  async importProducts(a: Actor, csv: string, onlyListings = false): Promise<{ products: number; codes: number; skipped: number }> {
     this.masterData(a);
+    let skipped = 0;
     const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
     const sep = (lines[0] ?? '').includes(';') ? ';' : ',';
     // com cabeçalho "Descrição", a 2ª coluna é sempre descrição; sem cabeçalho e só 2 colunas, é SKU;EAN
@@ -769,18 +776,45 @@ export class WmsService {
     let products = 0;
     let codes = 0;
     await this.db.withTenant(a.tenantId, async (db) => {
+      // anúncios do ML da conta: SKU do anúncio e das variações → título
+      const listings = new Map<string, string>();
+      if (onlyListings) {
+        const { rows } = await db.query<{ sku: string; title: string }>(
+          `SELECT upper(s) AS sku, min(title) AS title FROM (
+             SELECT sku AS s, title FROM listings WHERE sku IS NOT NULL AND marketplace = 'mercado_livre'
+             UNION ALL SELECT unnest(variation_skus), title FROM listings WHERE marketplace = 'mercado_livre') x
+            WHERE s <> '' GROUP BY 1`,
+        );
+        for (const r of rows) listings.set(r.sku.trim(), r.title);
+      }
       for (const [i, line] of lines.entries()) {
         const cols = line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ''));
         const sku = (cols[0] ?? '').toUpperCase();
         if (!sku || (i === 0 && /^sku$/i.test(sku))) continue;
         const [desc, ...eans] = !withDesc && cols.length <= 2 ? [null, cols[1]] : [cols[1], ...cols.slice(2, 52)];
-        await this.repo.upsertProduct(db, a.tenantId, sku, desc && !/^(n\/a|none)$/i.test(desc) ? desc : null);
+        if (onlyListings && !listings.has(sku)) {
+          skipped++;
+          continue;
+        }
+        const clean = desc && !/^(n\/a|none)$/i.test(desc) ? desc : null;
+        await this.repo.upsertProduct(db, a.tenantId, sku, clean ?? listings.get(sku) ?? null);
         products++;
-        for (const e of eans) {
+        for (const raw of eans) {
+          const e = undoubled(raw);
           if (e && !/^(n\/a|none)$/i.test(e) && e.toUpperCase() !== sku && (await this.repo.addCode(db, a.tenantId, e, sku, a.operatorId, true))) codes++;
         }
       }
     });
-    return { products, codes };
+    return { products, codes, skipped };
+  }
+
+  /** Apaga todos os produtos e códigos do Master Data (a senha da conta é conferida na rota). */
+  async clearProducts(a: Actor): Promise<{ products: number; codes: number }> {
+    this.masterData(a);
+    return this.db.withTenant(a.tenantId, async (db) => {
+      const codes = (await db.query('DELETE FROM wms_barcodes')).rowCount ?? 0;
+      const products = (await db.query('DELETE FROM wms_products')).rowCount ?? 0;
+      return { products, codes };
+    });
   }
 }

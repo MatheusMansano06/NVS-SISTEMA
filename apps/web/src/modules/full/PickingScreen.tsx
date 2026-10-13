@@ -205,7 +205,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
         </section>
       )}
 
-      <Modal open={dialog !== null} onClose={() => setDialog(null)} label="Separação">
+      <Modal open={dialog !== null} onClose={() => setDialog(null)} label="Separação" wide>
         {dialog && item && (
           <DialogBody
             dialog={dialog}

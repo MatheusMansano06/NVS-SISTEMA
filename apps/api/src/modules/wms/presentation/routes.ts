@@ -9,6 +9,7 @@ import {
   wmsPrintSchema,
   wmsProductCodeSchema,
   wmsProductCreateSchema,
+  wmsProductClearSchema,
   wmsProductImportSchema,
   wmsProductUpdateSchema,
   wmsScanSchema,
@@ -36,7 +37,12 @@ const mpQuery = z.object({ marketplace: z.enum(WMS_MARKETPLACES).default('ml') }
  */
 export function wmsRoutes(
   service: WmsService,
-  opts: { isMaster: (tenantId: string, operatorId: string) => Promise<boolean>; inboundPerMinute?: number },
+  opts: {
+    isMaster: (tenantId: string, operatorId: string) => Promise<boolean>;
+    /** Senha da conta da empresa (ações destrutivas). */
+    checkPassword: (tenantId: string, userId: string, password: string) => Promise<boolean>;
+    inboundPerMinute?: number;
+  },
 ) {
   return async (app: FastifyInstance) => {
     const auth = { preHandler: app.authenticate };
@@ -144,9 +150,18 @@ export function wmsRoutes(
       const p = parse(z.object({ sku: z.string().min(1).max(100), barcode: z.string().min(1).max(200) }), req.params);
       return service.removeProductCode(await actor(req), p.sku, p.barcode);
     });
-    app.post('/wms/products/import', { preHandler: app.authenticate, bodyLimit: 6_000_000 }, async (req) =>
-      service.importProducts(await actor(req), parse(wmsProductImportSchema, req.body).csv),
-    );
+    app.post('/wms/products/import', { preHandler: app.authenticate, bodyLimit: 6_000_000 }, async (req) => {
+      const b = parse(wmsProductImportSchema, req.body);
+      return service.importProducts(await actor(req), b.csv, b.onlyListings);
+    });
+    app.post('/wms/products/clear', { preHandler: app.authenticate, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req) => {
+      const a = await actor(req);
+      const { password } = parse(wmsProductClearSchema, req.body);
+      if (!(await opts.checkPassword(req.user.tenantId, req.user.sub, password))) {
+        throw new ValidationError('Senha incorreta', { fieldErrors: { password: ['Senha da conta incorreta'] } });
+      }
+      return service.clearProducts(a);
+    });
 
     // ---- Processamento (PDF do envio, até ~10 MB)
     app.post('/wms/inbound', { preHandler: app.authenticate, bodyLimit: 15_000_000, config: { rateLimit: { max: opts.inboundPerMinute ?? 20, timeWindow: '1 minute' } } }, async (req) =>

@@ -210,6 +210,7 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
       isMaster: async (tenantId, operatorId) => (await operators.me(tenantId, operatorId)).is_master,
       // ler PDF pesa: 20 envios/min por IP (nos testes, sem limite prático)
       inboundPerMinute: env.NODE_ENV === 'test' ? 1000 : 20,
+      checkPassword: (tenantId, userId, password) => identity.checkPassword(tenantId, userId, password),
     }),
     { prefix: '/api/v1' },
   );

@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadEnv } from '../src/config/env.js';
 import { buildApp } from '../src/app.js';
+import { Database } from '../src/shared/infrastructure/database.js';
 import { inboundPdf } from './helpers/inbound-pdf.js';
 
 try {
@@ -53,7 +54,7 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
       const r = await app.inject({ method: 'POST', url: '/api/v1/team/login', cookies: base, payload: { operatorId: m.id, pin: '1234', mode } });
       return { ...base, nvs_person: cookieOf(r, 'nvs_person') };
     };
-    return { base, ana: await enter('Ana', 'analise'), joao: await enter('João', 'operacao') };
+    return { base, cnpj, tenantId: res.json().tenant.id as string, ana: await enter('Ana', 'analise'), joao: await enter('João', 'operacao') };
   }
   const call = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, cookies: Cookies, payload?: object) =>
     app.inject({ method, url: `/api/v1${url}`, cookies, ...(payload ? { payload: payload as Record<string, unknown> } : {}) });
@@ -172,10 +173,10 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
       })
     ).json();
     // linha só com descrição não vira código; mais de 3 códigos entram todos
-    expect(imp).toEqual({ products: 4, codes: 7 });
+    expect(imp).toEqual({ products: 4, codes: 7, skipped: 0 });
     expect((await call('GET', '/wms/products?q=SODESC', ana)).json().items[0]).toMatchObject({ description: 'Só descrição', codes: [] });
     // sem cabeçalho e 2 colunas: SKU;EAN (formato antigo)
-    expect((await call('POST', '/wms/products/import', ana, { csv: 'DOIS;999' })).json()).toEqual({ products: 1, codes: 1 });
+    expect((await call('POST', '/wms/products/import', ana, { csv: 'DOIS;999' })).json()).toEqual({ products: 1, codes: 1, skipped: 0 });
     expect((await call('GET', '/wms/products', joao)).json().total).toBe(6);
     expect((await call('DELETE', '/wms/products/NOVO', ana)).statusCode).toBe(204);
   });
@@ -206,6 +207,40 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     const pdf = readFileSync(new URL('../src/modules/wms/domain/__fixtures__/FBSINBR2026072103635.pdf', import.meta.url));
     const r = await call('POST', '/wms/inbound', ana, { fullDate: '2026-07-22', pdfBase64: pdf.toString('base64') });
     expect(r.json()).toMatchObject({ status: 'ok', units: 4073 });
+  });
+
+  it('Master Data: importar só o que é anúncio do ML e apagar tudo com a senha da conta', async () => {
+    const { ana, joao, tenantId, cnpj } = await company();
+    const db = new Database(TEST_DB!);
+    await db.withTenant(tenantId, async (c) => {
+      const acc = await c.query(
+        `INSERT INTO marketplace_accounts (tenant_id, marketplace, nickname, external_id) VALUES ($1, 'mercado_livre', 'Loja', $2) RETURNING id`,
+        [tenantId, `acc-${cnpj}`],
+      );
+      const add = (id: string, sku: string | null, title: string, variations: string[] = []) =>
+        c.query(
+          `INSERT INTO listings (tenant_id, account_id, marketplace, external_id, title, status, sku, variation_skus)
+           VALUES ($1, $2, 'mercado_livre', $3, $4, 'active', $5, $6)`,
+          [tenantId, acc.rows[0].id, id, title, sku, variations],
+        );
+      await add('MLB1', 'VEOX', 'Viseira Ebf New Spark');
+      await add('MLB2', null, 'Kit com variações', ['farol-a']);
+    });
+    await db.close();
+
+    const csv = 'SKU;Descrição;EAN1;EAN2\nVEOX;;KRKY38598KRKY38598;789\nFAROL-A;Farol A;111\nLIXO;;222\n-;;';
+    const r = (await call('POST', '/wms/products/import', ana, { csv, onlyListings: true })).json();
+    expect(r).toEqual({ products: 2, codes: 3, skipped: 2 });
+    const veox = (await call('GET', '/wms/products?q=VEOX', ana)).json().items[0];
+    // sem descrição → título do anúncio; código colado pela leitura dupla vira o código uma vez
+    expect(veox).toMatchObject({ description: 'Viseira Ebf New Spark', codes: expect.arrayContaining(['KRKY38598', '789']) });
+    expect((await call('GET', '/wms/products?q=LIXO', ana)).json().total).toBe(0);
+
+    // apagar tudo: operador não; senha errada não; senha da conta sim
+    expect((await call('POST', '/wms/products/clear', joao, { password: cnpj })).statusCode).toBe(403);
+    expect((await call('POST', '/wms/products/clear', ana, { password: 'errada' })).statusCode).toBe(400);
+    expect((await call('POST', '/wms/products/clear', ana, { password: cnpj })).json()).toEqual({ products: 2, codes: 3 });
+    expect((await call('GET', '/wms/products', ana)).json().total).toBe(0);
   });
 
   it('lotes: limite de ativos pede para arquivar; outra empresa não vê nada', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type { WmsProductDto, WmsProductPageDto } from '@nvs/shared';
 import { int } from '../../shared/format';
 import { ApiError } from '../../shared/http';
@@ -23,7 +23,8 @@ export function ProductsView() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const canEdit = useSupervisor();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const load = (query = q, p = page) =>
     fullApi
@@ -44,16 +45,6 @@ export function ProductsView() {
   };
   const replace = (p: WmsProductDto) => setData((d) => (d ? { ...d, items: d.items.map((x) => (x.sku === p.sku ? p : x)) } : d));
 
-  async function importCsv(f: File) {
-    setError('');
-    try {
-      const r = await fullApi.importProducts(await f.text());
-      say(`${int(r.products)} produto(s) lidos, ${int(r.codes)} código(s) novos.`);
-      void load(q, 1);
-    } catch (e) {
-      setError(errMsg(e));
-    }
-  }
 
   return (
     <div className="full-products">
@@ -64,8 +55,8 @@ export function ProductsView() {
         </label>
         {canEdit && (
           <span className="full-prod-acts">
-            <button type="button" className="act" onClick={() => fileRef.current?.click()} title="CSV: SKU;Descrição;EAN1;EAN2;… (um código por coluna)">Importar planilha</button>
-            <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={(e) => e.target.files?.[0] && void importCsv(e.target.files[0])} />
+            <button type="button" className="act act-danger" onClick={() => setClearing(true)}>Apagar tudo</button>
+            <button type="button" className="act" onClick={() => setImporting(true)}>Importar planilha</button>
             <Button type="button" onClick={() => setCreating(true)}>+ Novo produto</Button>
           </span>
         )}
@@ -97,7 +88,30 @@ export function ProductsView() {
         </section>
       )}
 
-      <Modal open={creating} onClose={() => setCreating(false)} label="Novo produto">
+      <Modal open={importing} onClose={() => setImporting(false)} label="Importar planilha" wide>
+        {importing && (
+          <ImportProducts
+            onDone={(text) => {
+              setImporting(false);
+              say(text);
+              void load(q, 1);
+            }}
+          />
+        )}
+      </Modal>
+      <Modal open={clearing} onClose={() => setClearing(false)} label="Apagar todo o Master Data">
+        {clearing && (
+          <ClearProducts
+            total={data?.total ?? 0}
+            onDone={(text) => {
+              setClearing(false);
+              say(text);
+              void load(q, 1);
+            }}
+          />
+        )}
+      </Modal>
+      <Modal open={creating} onClose={() => setCreating(false)} label="Novo produto" wide>
         {creating && (
           <NewProduct
             onDone={(p) => {
@@ -108,7 +122,7 @@ export function ProductsView() {
           />
         )}
       </Modal>
-      <Modal open={editing !== null} onClose={() => setEditing(null)} label="Editar produto">
+      <Modal open={editing !== null} onClose={() => setEditing(null)} label="Editar produto" wide>
         {editing && (
           <EditProduct
             product={editing}
@@ -234,5 +248,87 @@ function EditProduct({ product, onChange, onDeleted }: { product: WmsProductDto;
         Apagar produto
       </button>
     </div>
+  );
+}
+
+/** Importar planilha (CSV SKU;Descrição;EAN1;EAN2;…): soma ao cadastro. */
+function ImportProducts({ onDone }: { onDone: (msg: string) => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [only, setOnly] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+    setBusy(true);
+    setError('');
+    try {
+      const r = await fullApi.importProducts(await file.text(), only);
+      onDone(
+        `${int(r.products)} produto(s) importados, ${int(r.codes)} código(s) novos` +
+          (r.skipped ? ` · ${int(r.skipped)} ignorado(s) por não estarem nos seus anúncios do Mercado Livre.` : '.'),
+      );
+    } catch (err) {
+      setError(errMsg(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="full-modal" onSubmit={submit}>
+      <h2>Importar planilha</h2>
+      <p>CSV com SKU;Descrição;EAN1;EAN2;… (um código por coluna, quantos tiver). Soma ao cadastro: não apaga nada.</p>
+      <label className="full-file" data-has={file ? true : undefined}>
+        <small>Arquivo</small>
+        <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <span>{file ? `📄 ${file.name}` : 'Escolher a planilha…'}</span>
+      </label>
+      <label className="full-check">
+        <input type="checkbox" checked={only} onChange={(e) => setOnly(e.target.checked)} />
+        Só SKUs que estão nos meus anúncios do Mercado Livre (recomendado)
+      </label>
+      <p className="full-empty">
+        Com essa opção, o que não é anúncio seu fica de fora, e quem vier sem descrição ganha o título do anúncio. Códigos lidos em dobro pelo
+        leitor (ex.: ABCD12345ABCD12345) são corrigidos.
+      </p>
+      {error && <p className="banner banner-error">{error}</p>}
+      <Button type="submit" loading={busy} disabled={!file}>Importar</Button>
+    </form>
+  );
+}
+
+/** Apagar todo o Master Data: confirma com a senha da conta da empresa. */
+function ClearProducts({ total, onDone }: { total: number; onDone: (msg: string) => void }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const r = await fullApi.clearProducts(password);
+      onDone(`Master Data apagado: ${int(r.products)} produto(s) e ${int(r.codes)} código(s).`);
+    } catch (err) {
+      setError(errMsg(err));
+      setPassword('');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="full-modal" onSubmit={submit}>
+      <h2>Apagar todo o Master Data?</h2>
+      <p>
+        Remove os <b>{int(total)}</b> produtos e todos os códigos de barras cadastrados. As listas de separação e o que já foi bipado não mudam.
+        Não dá para desfazer.
+      </p>
+      <label>
+        <small>Senha da conta da empresa</small>
+        <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} data-autofocus />
+      </label>
+      {error && <p className="banner banner-error">{error}</p>}
+      <button type="submit" className="full-dark-btn full-danger-btn" disabled={!password || busy}>{busy ? 'Apagando…' : 'Apagar tudo'}</button>
+    </form>
   );
 }

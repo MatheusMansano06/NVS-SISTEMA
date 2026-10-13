@@ -1,0 +1,83 @@
+/* ============ Escolha de modo ============ */
+.mode { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 32px 16px; text-align: center;
+  background: radial-gradient(1000px 600px at 80% 0%, var(--blue-soft), transparent 60%), #fff; }
+.mode-logo { width: 120px; }
+.mode h1 { margin: 6px 0 0; color: var(--navy); font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.03em; }
+.mode > p { margin: 0; color: var(--gray-500); }
+.mode-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: 16px; margin-top: 10px; }
+.mode-card {
+  display: grid; gap: 8px; justify-items: start; text-align: left; padding: 26px 24px; border: 0; cursor: pointer; font: inherit;
+  border-radius: 32px 32px 32px 12px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100), 0 24px 50px -30px rgba(11,28,77,.45);
+  transition: transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s; animation: rise .5s both;
+}
+.mode-card:hover:not(:disabled) { transform: translateY(-4px); box-shadow: 0 0 0 2px var(--blue), 0 28px 50px -26px rgba(31,95,255,.45); }
+.mode-card:disabled { opacity: .6; cursor: default; }
+.mode-op:hover:not(:disabled) { box-shadow: 0 0 0 2px var(--yellow), 0 28px 50px -26px rgba(245,184,0,.5); }
+.mode-card .mode-icon { font-size: 2.4rem; line-height: 1; }
+.mode-card strong { font-size: 1.3rem; color: var(--navy); }
+.mode-card span { color: var(--gray-500); font-size: .9rem; line-height: 1.45; }
+.mode-card em { font-style: normal; font-weight: 700; color: var(--blue); margin-top: 6px; }
+.mode-op em { color: #7a5600; }
+
+/* ============ Computador da operação ============ */
+.station { min-height: 100dvh; display: grid; grid-template-rows: auto 1fr; background: linear-gradient(180deg, #fff, var(--gray-50)); }
+.station-top { display: flex; align-items: center; gap: 14px; padding: 16px clamp(16px, 4vw, 40px); flex-wrap: wrap; }
+.station-tag { padding: 6px 14px; border-radius: 999px; background: var(--yellow-soft); color: #7a5600; font-weight: 700; font-size: .84rem; }
+.station-user, .station-exit { margin-left: auto; }
+.station-user { display: flex; align-items: center; gap: 8px; }
+.station-user b { color: var(--navy); margin-right: 4px; }
+.station-main { display: grid; place-items: start center; padding: clamp(16px, 4vw, 48px) 16px 48px; }
+.station-main h1 { margin: 0; color: var(--navy); font-size: clamp(1.6rem, 3.5vw, 2.4rem); letter-spacing: -0.03em; text-align: center; }
+.station-main section > p { margin: 6px 0 0; color: var(--gray-500); text-align: center; }
+.station-pick ul { list-style: none; margin: 28px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, 180px); justify-content: center; gap: 14px; width: min(920px, 92vw); }
+.station-pick li button {
+  width: 100%; display: grid; justify-items: center; gap: 10px; padding: 22px 12px; border: 0; cursor: pointer; font: inherit; font-size: 1.1rem;
+  font-weight: 650; color: var(--navy); border-radius: 26px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100), 0 14px 28px -22px rgba(11,28,77,.45);
+  transition: transform .2s, box-shadow .2s;
+}
+.station-pick li button:hover, .station-pick li button:focus-visible { transform: translateY(-3px); box-shadow: 0 0 0 2px var(--blue), 0 18px 30px -20px rgba(31,95,255,.45); }
+.station-avatar { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--blue); color: #fff; font-size: 1.4rem; font-weight: 750; }
+.station-pin { display: grid; justify-items: center; gap: 10px; width: min(380px, 92vw); }
+.station-pin > .link { justify-self: start; }
+.station-step { margin: 8px 0 0 !important; font-weight: 650; color: var(--navy) !important; }
+.station-home { display: grid; gap: 8px; justify-items: center; width: min(960px, 92vw); }
+.station-cards { margin-top: 20px; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.station-cards article { display: grid; gap: 6px; padding: 20px; border-radius: 26px 26px 26px 10px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); opacity: .8; }
+.station-cards article > span { font-size: 1.8rem; }
+.station-cards strong { color: var(--navy); font-size: 1.05rem; }
+.station-cards p { margin: 0; color: var(--gray-500); font-size: .86rem; }
+.station-cards small { justify-self: start; padding: 2px 10px; border-radius: 99px; background: var(--gray-100); color: var(--gray-500); font-weight: 700; font-size: .7rem; }
+
+/* ============ Teclado numérico ============ */
+.pin { display: grid; gap: 20px; justify-items: center; margin-top: 14px; }
+.pin-dots { display: flex; gap: 16px; }
+.pin-dots span { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--gray-300); transition: background .15s, transform .15s; }
+.pin-dots span[data-on] { background: var(--navy); box-shadow: none; transform: scale(1.1); }
+.pin[data-error] .pin-dots { animation: shake .35s; }
+@keyframes shake { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+.pin-keys { display: grid; grid-template-columns: repeat(3, 78px); gap: 12px; }
+.pin-keys button {
+  height: 78px; border-radius: 50%; border: 0; cursor: pointer; font: inherit; font-size: 1.7rem; font-weight: 650; color: var(--navy);
+  background: #fff; box-shadow: 0 0 0 1px var(--gray-100), 0 8px 18px -12px rgba(11,28,77,.4); transition: background .12s, transform .12s;
+}
+.pin-keys button:active:not(:disabled) { transform: scale(.94); background: var(--blue-soft); }
+.pin-keys button:disabled { opacity: .45; cursor: default; }
+.pin-back { font-size: 1.3rem !important; }
+
+/* ============ Cadastro de operadores ============ */
+.op-add { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.op-add .sku-input { flex: 1; min-width: 220px; max-width: 420px; }
+.op-add .btn { width: auto; padding: 0 24px; height: 42px; }
+.op-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.op-list li { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 22px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); flex-wrap: wrap; }
+.op-list li[data-off] { opacity: .6; }
+.op-list .station-avatar { width: 42px; height: 42px; font-size: 1.05rem; }
+.op-list li > div { display: grid; flex: 1; min-width: 180px; }
+.op-list strong { color: var(--navy); }
+.op-list small { color: var(--gray-500); font-size: .78rem; }
+.op-actions { display: flex; gap: 6px; }
+@media (max-width: 640px) {
+  .mode-cards { grid-template-columns: 1fr; }
+  .pin-keys { grid-template-columns: repeat(3, 70px); }
+  .pin-keys button { height: 70px; }
+}

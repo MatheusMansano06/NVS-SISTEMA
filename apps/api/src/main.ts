@@ -6,6 +6,7 @@ const app = await buildApp({ env });
 const stopScheduler = app.ml?.startScheduler();
 const stopRetention = app.retention.startScheduler();
 const stopRadar = app.radar?.startScheduler();
+const stopReturns = app.returnsSync?.startScheduler();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
@@ -13,6 +14,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopScheduler?.();
     stopRetention();
     stopRadar?.();
+    stopReturns?.();
     app.close().then(() => process.exit(0));
   });
 }

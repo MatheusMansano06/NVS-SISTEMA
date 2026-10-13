@@ -155,4 +155,15 @@ export const TOURS = {
     { title: 'Processamento', text: 'Baixe no ML o PDF “Lista de produtos e instruções de preparação” do envio e envie em Processamento: o sistema monta as listas de até 1.000 unidades e cadastra o Código ML e o EAN de cada produto.' },
     { title: 'Na Operação 🎉', text: 'Quem entra na Operação pega uma lista (ou bipa um produto no atalho) e separa. Ao terminar cada item, as etiquetas com o Código ML vão para a impressora.' },
   ],
+  devolucoes: [
+    {
+      title: 'Central de Devoluções',
+      text:
+        'Aqui chegam as devoluções do Mercado Livre: o que está a caminho, o que precisa ser conferido e o que vale contestar.\n' +
+        'O sistema busca no ML sozinho, de hora em hora, e mostra quanto cada devolução custou.',
+    },
+    { target: '.full-tabs', title: 'As abas', text: 'Resumo (o que precisa de mão agora), Fila da operação, B.I (custos, motivos e produtos que mais voltam), Histórico e a Bancada, onde se bipa o pacote.' },
+    { target: '.rt-attn', title: 'O que fazer primeiro', text: 'Cada cartão leva para a fila já filtrada: conferir o que chegou, contestar no ML, ajustar estoque, chamados manuais e prazos que vencem em 24 h.' },
+    { title: 'Na bancada 🎉', text: 'Na Operação, o operador bipa a etiqueta, o QR ou a nota do pacote, responde o checklist e o sistema decide: volta para a venda, avaria ou divergente — e se vale contestar no ML, com foto.' },
+  ],
 } satisfies Record<string, TourStep[]>;

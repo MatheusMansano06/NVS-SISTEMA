@@ -31,6 +31,7 @@ import {
 } from './modules/sales/index.js';
 import {
   HttpMlApi,
+  type MlRawApi,
   MlIntegrationService,
   PgMlRepository,
   PgListingRepository,
@@ -50,6 +51,7 @@ import {
 import { TokenCipher } from './shared/infrastructure/token-cipher.js';
 import { serveWeb } from './shared/infrastructure/web-static.js';
 import { healthRoutes } from './modules/health/presentation/routes.js';
+import { PgReturnsRepository, ReturnsService, ReturnsSync, returnsRoutes } from './modules/returns/index.js';
 import { PgWmsRepository, PrintHub, WmsService, wmsAgentSocket, wmsRoutes } from './modules/wms/index.js';
 import { OperatorService, PERSON_COOKIE, PgOperatorRepository, operationRoutes } from './modules/operation/index.js';
 
@@ -68,6 +70,7 @@ declare module 'fastify' {
     retention: SalesRetention;
     /** Radar de Frete (null sem ML configurado). */
     radar: FreightRadarService | null;
+    returnsSync: ReturnsSync | null;
     requirePermission: (
       p: Permission,
     ) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -215,6 +218,12 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     { prefix: '/api/v1' },
   );
   await app.register(wmsAgentSocket(printHub));
+  // Central de Devoluções (pós-venda do ML): bipe e conferência na Operação, painel e B.I na Análise
+  const raw = mlClient && 'rawGet' in mlClient ? (mlClient as unknown as MlRawApi) : null;
+  const returnsRepo = new PgReturnsRepository();
+  const returnsSync = ml && raw ? new ReturnsSync(database, returnsRepo, ml, raw, app.log) : null;
+  app.decorate('returnsSync', returnsSync);
+  if (ml) await app.register(returnsRoutes(new ReturnsService(database, returnsRepo, ml, raw, returnsSync)), { prefix: '/api/v1' });
   const onboarding = new OnboardingService(database, new PgOnboardingRepository(), events);
   await app.register(onboardingRoutes(onboarding), { prefix: '/api/v1' });
   await app.register(identityRoutes(identity, {

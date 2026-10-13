@@ -277,7 +277,48 @@ function fakeMl(sellerId: number) {
         .map((i) => ({ ...i, shipping: { ...(i.shipping ?? {}), tags: flexOn.has(i.id) ? ['self_service_in'] : [] } }));
     },
   };
-  return { api, calls, orders, catalog };
+  // pós-venda (Central de Devoluções): 1 reclamação com devolução entregue, motivo defeito, frete reverso cobrado
+  const post = { shipmentLookups: 0, posts: [] as { path: string; body: unknown }[], uploads: 0 };
+  const due = new Date(now + 2 * 86_400_000).toISOString();
+  const claim = {
+    id: 5001, resource: 'order', resource_id: 9_000_001, reason_id: 'PDD1', type: 'mediations', stage: 'claim', status: 'opened',
+    date_created: new Date(now - 3 * 86_400_000).toISOString(), last_updated: new Date(now - 3_600_000).toISOString(),
+    players: [{ type: 'seller', available_actions: [{ action: 'return_review_fail', due_date: due }, { action: 'return_review_ok', due_date: due }] }],
+  };
+  const raw: Record<string, unknown> = {
+    '/post-purchase/v2/claims/5001/returns': {
+      id: 'R1', status: 'delivered', last_updated: new Date(now - 7_200_000).toISOString(),
+      shipments: [{ shipment_id: 43215678901, tracking_number: 'BR123456789BR', destination: { name: 'seller_address' } }],
+      orders: [{ item_id: 'MLB1', return_quantity: 1 }],
+    },
+    '/post-purchase/v1/claims/5001/charges/return-cost': { amount: 25 },
+    '/post-purchase/v1/claims/5001/affects-reputation': { affects_reputation: 'not_affected' },
+    '/post-purchase/v1/claims/reasons/PDD1': { settings: { rules_engine_triage: ['defective'] } },
+    '/orders/9000001': { id: 9_000_001, pack_id: 2_000_009, shipping: { id: 7_001 }, order_items: [{ item: { id: 'MLB1', title: 'Peça 1', seller_sku: 'SKU-1' } }] },
+    '/post-purchase/v1/returns/R1/reviews': null,
+    '/post-purchase/v1/claims/5001': claim,
+    '/post-purchase/v1/returns/reasons?flow=seller_return_failed&claim_id=5001': [{ id: 'SRF2', detail: 'O produto chegou com defeito' }],
+  };
+  Object.assign(api, {
+    async rawGet(_t: string, path: string) {
+      if (path.startsWith('/post-purchase/v1/claims/search')) return { paging: { total: path.includes('status=opened') ? 1 : 0 }, data: path.includes('status=opened') ? [claim] : [] };
+      if (path.startsWith('/orders/search')) return { results: [] };
+      if (path === '/shipments/123456789012') {
+        post.shipmentLookups++;
+        return { order_id: 9_000_001 };
+      }
+      return raw[path] ?? null;
+    },
+    async rawPost(_t: string, path: string, body: unknown) {
+      post.posts.push({ path, body });
+      return {};
+    },
+    async rawUpload() {
+      post.uploads++;
+      return { file_name: `anexo-${post.uploads}.jpg`, filename: `anexo-${post.uploads}.jpg` };
+    },
+  });
+  return { api, calls, orders, catalog, post };
 }
 
 describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
@@ -609,5 +650,111 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     });
     expect(res.statusCode).toBe(200);
     expect((await app.inject('/api/v1/integrations/mercado-livre/connect')).statusCode).toBe(401);
+  });
+});
+
+describe.skipIf(!TEST_DB)('Central de Devoluções (pós-venda do ML)', () => {
+  let app: FastifyInstance;
+  // conta ML própria: a mesma conta não pode estar em duas empresas
+  const fake = fakeMl(randomInt(1_000_000, 9_999_999));
+  const account = async () => {
+    const cnpj = randomCnpj();
+    const email = `dev2-${cnpj}@teste.dev`;
+    await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload: { email, phone: '11912345678', cnpj } });
+    const res = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: cnpj } });
+    return { nvs_session: res.cookies.find((c) => c.name === 'nvs_session')!.value };
+  };
+  const stateOf = async (cookies: Record<string, string>) =>
+    new URL((await app.inject({ method: 'GET', url: '/api/v1/integrations/mercado-livre/connect', cookies })).json().url).searchParams.get('state')!;
+  beforeAll(async () => {
+    app = await buildApp({
+      env: loadEnv({
+        ...process.env,
+        DATABASE_URL: TEST_DB,
+        AUTH_RATE_LIMIT_MAX: '1000',
+        ML_CLIENT_ID: 'app-teste',
+        ML_CLIENT_SECRET: 'segredo-teste',
+        ML_REDIRECT_URI: 'https://exemplo.test/api/v1/integrations/mercado-livre/callback',
+        TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+      }),
+      mlApi: fake.api,
+    });
+  });
+  afterAll(() => app.close());
+
+  it('Central de Devoluções: sincroniza do ML, bipa, confere, contesta com foto e mostra no B.I', async () => {
+    // empresa nova com equipe (Ana na Análise) e a conta do ML conectada
+    const cnpj = randomCnpj();
+    const email = `dev-${cnpj}@teste.dev`;
+    await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload: { email, phone: '11912345678', cnpj, team: [{ name: 'Ana', area: 'ambos', master: true }] } });
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: cnpj } });
+    const base = { nvs_session: login.cookies.find((c) => c.name === 'nvs_session')!.value };
+    const tenantId = login.json().tenant.id as string;
+    const team = (await app.inject({ method: 'GET', url: '/api/v1/team', cookies: base })).json();
+    const pin = await app.inject({ method: 'POST', url: '/api/v1/team/login', cookies: base, payload: { operatorId: team.members[0].id, pin: '1234', mode: 'operacao' } });
+    const cookies = { ...base, nvs_person: pin.cookies.find((c) => c.name === 'nvs_person')!.value };
+    const state = await stateOf(base);
+    await app.inject({ method: 'GET', url: `/api/v1/integrations/mercado-livre/callback?code=codigo-bom&state=${state}` });
+    await app.ml!.whenIdle();
+    const call = (method: 'GET' | 'POST', url: string, payload?: object) =>
+      app.inject({ method, url: `/api/v1${url}`, cookies, ...(payload ? { payload: payload as Record<string, unknown> } : {}) });
+
+    // sem a pessoa (PIN) não entra
+    expect((await app.inject({ method: 'GET', url: '/api/v1/returns/summary', cookies: base })).statusCode).toBe(401);
+
+    expect(await app.returnsSync!.syncTenant(tenantId, { days: 30, allOpen: true })).toEqual({ claims: 1, saved: 1, failures: 0 });
+    const summary = (await call('GET', '/returns/summary')).json();
+    expect(summary).toMatchObject({ connected: true, counts: { aguardando_conferencia: 1 }, attention: { awaitingCheck: 1, deadline24h: 0 } });
+    expect(summary.lastSync).toBeTruthy();
+
+    // bipe pelo QR da etiqueta (JSON com o nº do envio)
+    const byQr = (await call('POST', '/returns/find', { code: '{"id":"43215678901","t":"lm"}' })).json();
+    expect(byQr.matches).toHaveLength(1);
+    const ret = byQr.matches[0].row;
+    expect(ret).toMatchObject({
+      externalId: '5001', orderId: '9000001', packId: '2000009', reason: 'defeito', responsible: 'vendedor', platformCost: 25,
+      status: 'aguardando_conferencia', canDispute: true, awaitingReview: true, items: [{ sku: 'SKU-1', name: 'Peça 1', qty: 1 }],
+    });
+    // código desconhecido: pergunta ao ML de que pedido é o envio e aprende (o 2º bipe não consulta de novo)
+    expect((await call('POST', '/returns/find', { code: '123456789012' })).json().matches).toHaveLength(1);
+    expect((await call('POST', '/returns/find', { code: '123456789012' })).json().matches).toHaveLength(1);
+    expect(fake.post.shipmentLookups).toBe(1);
+    expect((await call('POST', '/returns/find', { code: 'NADA-A-VER-999' })).json().matches).toEqual([]);
+
+    // conferência: produto nosso, mas sem condição de venda → B (avaria), vale contestar
+    const checked = (await call('POST', `/returns/${ret.id}/check`, { productCorrect: true, complete: true, unused: false, resellable: false, note: 'Lateral quebrada' })).json();
+    expect(checked.row.check).toMatchObject({ class: 'B', dispute: true, manualTicket: false, reverseFreight: 25, checkedBy: 'Ana', stockMoves: [{ sku: 'vendido', deposit: 'avaria', type: 'E' }] });
+    expect(checked.row).toMatchObject({ status: 'precisa_acao', pending: ['lancar_estoque', 'contestar'] });
+
+    // contestar exige foto; motivo tem que ser o oficial do ML
+    expect((await call('POST', `/returns/${ret.id}/dispute`, { reason: 'SRF2', message: 'Produto voltou com a lateral quebrada.' })).statusCode).toBe(400);
+    const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(32)]);
+    expect((await call('POST', `/returns/${ret.id}/evidence`, { mime: 'image/png', dataBase64: Buffer.from('MZ-exe').toString('base64') })).statusCode).toBe(400);
+    const ev = (await call('POST', `/returns/${ret.id}/evidence`, { mime: 'image/png', dataBase64: png.toString('base64') })).json();
+    expect(ev).toHaveLength(1);
+    expect((await call('GET', `/returns/evidence/${ev[0].id}`)).rawPayload.equals(png)).toBe(true);
+    expect((await call('POST', `/returns/${ret.id}/dispute`, { reason: 'XX', message: 'Produto voltou com a lateral quebrada.' })).statusCode).toBe(400);
+    const disputed = (await call('POST', `/returns/${ret.id}/dispute`, { reason: 'SRF2', message: 'Produto voltou com a lateral quebrada.' })).json();
+    expect(disputed.disputes[0]).toMatchObject({ ok: true, path: 'revisao_com_falha', sentBy: 'Ana' });
+    expect(fake.post.posts.at(-1)).toEqual({ path: '/post-purchase/v1/returns/R1/return-review', body: [{ reason: 'SRF2', message: 'Produto voltou com a lateral quebrada.', attachments: ['anexo-1.jpg'] }] });
+    expect(disputed.evidence).toEqual([]); // o ML já recebeu as fotos
+    expect(disputed.row.pending).toEqual(['lancar_estoque']);
+    // depois de contestada a conferência não muda mais; estoque ajustado → em mediação
+    expect((await call('POST', `/returns/${ret.id}/check`, { productCorrect: true, complete: true, unused: true, resellable: true })).statusCode).toBe(409);
+    expect((await call('POST', `/returns/${ret.id}/stock-done`)).json().row).toMatchObject({ status: 'em_mediacao', pending: [] });
+    expect((await call('POST', `/returns/${ret.id}/accept`)).statusCode).toBe(409);
+
+    // lista e B.I
+    const list = (await call('GET', '/returns?status=em_mediacao')).json();
+    expect(list).toMatchObject({ total: 1, counts: { em_mediacao: 1 } });
+    expect(list.items[0].items[0].pictureUrl).toBe('https://http2.mlstatic.com/foto-1.jpg');
+    const bi = (await call('GET', '/returns/bi?days=30')).json();
+    expect(bi).toMatchObject({ total: 1, classes: { B: 1 }, reasons: [{ reason: 'defeito', qty: 1, pct: 100 }] });
+    expect(bi.money).toMatchObject({ reverseFreight: 25, productLoss: 0, withoutCost: 1, totalCost: 25 }); // SKU-1 sem custo cadastrado
+    expect(bi.products[0]).toMatchObject({ sku: 'SKU-1', qty: 1 });
+
+    // outra empresa não vê nada
+    const other = await account();
+    expect((await app.inject({ method: 'GET', url: `/api/v1/returns/${ret.id}`, cookies: other })).statusCode).toBe(401); // sem PIN
   });
 });

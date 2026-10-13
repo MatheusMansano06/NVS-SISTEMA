@@ -531,6 +531,21 @@ export class MlIntegrationService {
     }
   }
 
+  /** Contas ativas de todas as empresas (para agendadores de outros módulos, ex.: devoluções). */
+  async activeConnections(): Promise<{ tenantId: string; connectionId: string }[]> {
+    const out: { tenantId: string; connectionId: string }[] = [];
+    for (const tenantId of await this.repo.connectedTenants()) {
+      const conns = await this.db.withTenant(tenantId, (db) => this.repo.connections(db));
+      for (const c of conns.filter((x) => x.status === 'active')) out.push({ tenantId, connectionId: c.id });
+    }
+    return out;
+  }
+
+  /** Reserva um ciclo de agendador (só uma instância processa cada horário). */
+  claimSlot(name: string, slot: Date): Promise<boolean> {
+    return this.repo.claimSlot(name, slot);
+  }
+
   /** Um ciclo do agendador. Retorna false se outra instância já processou esta hora. */
   async hourlyTick(now = new Date()): Promise<boolean> {
     const slot = new Date(now);

@@ -19,6 +19,7 @@ const NAV: { label: string; icon: IconName; path?: string; master?: boolean }[] 
   { label: 'Precificador', icon: 'tag', path: '/precificador' },
   { label: 'Radar de Frete', icon: 'radar', path: '/radar-frete' },
   { label: 'Supervisão Full', icon: 'truck', path: '/full' },
+  { label: 'Devoluções', icon: 'undo', path: '/devolucoes' },
   { label: 'Equipe', icon: 'users', path: '/equipe', master: true },
   { label: 'Integrações', icon: 'plug' },
 ];

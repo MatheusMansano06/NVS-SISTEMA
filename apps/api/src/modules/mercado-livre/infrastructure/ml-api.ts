@@ -14,6 +14,14 @@ export interface MlOrderPage {
 }
 
 /** Porta para a API do Mercado Livre (permite um falso nos testes). */
+/** Acesso genérico à API do ML (pós-venda). Implementado pelo HttpMlApi; os fakes de teste implementam o que usam. */
+export interface MlRawApi {
+  /** GET; 404/403 viram null (recurso indisponível para este vendedor/pedido). */
+  rawGet<T>(token: string, path: string): Promise<T | null>;
+  rawPost<T>(token: string, path: string, body: unknown): Promise<T>;
+  rawUpload<T>(token: string, path: string, file: { name: string; type: string; bytes: Buffer }): Promise<T>;
+}
+
 export interface MlApi {
   authorizationUrl(state: string, codeChallenge: string | null): string;
   exchangeCode(code: string, codeVerifier: string | null): Promise<MlTokens>;
@@ -224,7 +232,7 @@ interface Config {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export class HttpMlApi implements MlApi {
+export class HttpMlApi implements MlApi, MlRawApi {
   constructor(private readonly cfg: Config) {}
 
   authorizationUrl(state: string, codeChallenge: string | null): string {
@@ -557,6 +565,21 @@ export class HttpMlApi implements MlApi {
       },
       false,
     );
+  }
+
+  // ---- chamadas genéricas (pós-venda: reclamações, devoluções, revisões, mediação) — ver MlRawApi
+  rawGet<T>(token: string, path: string): Promise<T | null> {
+    return this.optional(() => this.get<T>(path, token));
+  }
+
+  rawPost<T>(token: string, path: string, body: unknown): Promise<T> {
+    return this.send('POST', path, token, body) as Promise<T>;
+  }
+
+  async rawUpload<T>(token: string, path: string, file: { name: string; type: string; bytes: Buffer }): Promise<T> {
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(file.bytes)], { type: file.type }), file.name);
+    return this.request<T>(path, { method: 'POST', headers: { authorization: `Bearer ${token}`, accept: 'application/json' }, body: form }, false);
   }
 
   /** 404/403 = recurso indisponível para este pedido (não é erro da sincronização). */

@@ -37,7 +37,7 @@ const readHidden = (key: string) => {
 };
 
 /** Passo a passo curto no topo das telas: o que fazer e em que ordem. Pode ser ocultado. */
-export function HowTo({ steps, storageKey }: { steps: { title: string; text: string }[]; storageKey: string }) {
+export function HowTo({ steps, storageKey, onTour }: { steps: { title: string; text: string }[]; storageKey: string; onTour?: () => void }) {
   const [hidden, setHidden] = useState(() => readHidden(storageKey));
   const toggle = (next: boolean) => {
     setHidden(next);
@@ -50,9 +50,10 @@ export function HowTo({ steps, storageKey }: { steps: { title: string; text: str
   };
   if (hidden) {
     return (
-      <button type="button" className="link howto-show" onClick={() => toggle(false)}>
-        Como funciona?
-      </button>
+      <div className="howto-links">
+        <button type="button" className="link howto-show" onClick={() => toggle(false)}>Como funciona?</button>
+        {onTour && <button type="button" className="link howto-show" onClick={onTour}>Rever com a Gertrudez</button>}
+      </div>
     );
   }
   return (
@@ -68,9 +69,10 @@ export function HowTo({ steps, storageKey }: { steps: { title: string; text: str
           </li>
         ))}
       </ol>
-      <button type="button" className="link howto-hide" onClick={() => toggle(true)}>
-        Entendi, ocultar
-      </button>
+      <div className="howto-hide">
+        {onTour && <button type="button" className="link" onClick={onTour}>Rever com a Gertrudez</button>}
+        <button type="button" className="link" onClick={() => toggle(true)}>Entendi, ocultar</button>
+      </div>
     </section>
   );
 }

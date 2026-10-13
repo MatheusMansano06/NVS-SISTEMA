@@ -1,0 +1,43 @@
+/* ============ Tour guiado (Gertrudez ensina) ============ */
+.tour { position: fixed; inset: 0; z-index: 2000; }
+.tour-dim { position: absolute; inset: 0; background: rgba(11, 28, 77, .58); animation: tour-fade .25s both; }
+/* o "buraco" de luz: um bloco transparente com sombra gigante escurecendo o resto da tela */
+.tour-spot {
+  position: absolute; border-radius: 22px; pointer-events: none;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.9), 0 0 0 9999px rgba(11, 28, 77, .58);
+  transition: top .35s cubic-bezier(.2,.8,.2,1), left .35s cubic-bezier(.2,.8,.2,1), width .35s cubic-bezier(.2,.8,.2,1), height .35s cubic-bezier(.2,.8,.2,1);
+  animation: tour-pulse 2s ease-in-out infinite;
+}
+@keyframes tour-pulse { 50% { box-shadow: 0 0 0 7px rgba(245,184,0,.75), 0 0 0 9999px rgba(11, 28, 77, .58); } }
+@keyframes tour-fade { from { opacity: 0; } }
+.tour-bubble {
+  position: absolute; display: grid; gap: 8px; padding: 18px 20px 16px 20px; border-radius: 28px 28px 28px 10px;
+  background: #fff; box-shadow: 0 30px 70px -20px rgba(11,28,77,.55); animation: tour-in .35s cubic-bezier(.2,1.2,.4,1) both;
+  transition: top .35s, left .35s, bottom .35s;
+}
+@keyframes tour-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+.tour-gz { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(31,95,255,.3); }
+.tour-head { display: flex; align-items: center; gap: 10px; }
+.tour-head .tour-name { flex: 1; }
+.tour-name { font-size: .72rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; color: var(--blue); }
+.tour-count { font-size: .74rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
+.tour-bubble h2 { margin: 0; font-size: 1.15rem; color: var(--navy); letter-spacing: -0.02em; }
+.tour-bubble p { margin: 0; color: var(--ink); font-size: .92rem; line-height: 1.5; }
+.tour-dots { display: flex; gap: 4px; }
+.tour-dots span { width: 18px; height: 4px; border-radius: 99px; background: var(--gray-100); transition: background .25s; }
+.tour-dots span[data-done] { background: #b7c8ff; }
+.tour-dots span[data-on] { background: var(--blue); width: 28px; }
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.tour-spacer { flex: 1; }
+.tour-next { width: auto; height: 40px; padding: 0 18px; }
+.tour-actions .link { font-size: .84rem; color: var(--gray-500); }
+@media (max-width: 640px) { .tour-bubble { padding: 16px; } }
+@media (prefers-reduced-motion: reduce) { .tour-spot { animation: none; } }
+
+/* ============ Abertura/encerramento em tela cheia (mesma cena da trilha) ============ */
+.tour-full { background: radial-gradient(1200px 700px at 70% 10%, #eaf0ff, transparent 60%), rgba(247, 248, 251, .97); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); animation: tour-fade .3s both; overflow: auto; }
+.tour-onb { min-height: 100dvh; }
+.tour-full-count { padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.75); box-shadow: 0 0 0 1px rgba(207,212,224,.6); font-size: .82rem; font-weight: 600; color: var(--navy); }
+.tour-full-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tour-full-actions .btn { width: auto; padding: 0 28px; height: 52px; font-size: 1rem; }
+.tour-full-actions .link { color: var(--gray-500); }

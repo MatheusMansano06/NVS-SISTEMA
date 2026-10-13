@@ -143,4 +143,17 @@ describe.skipIf(!TEST_DB)('Aba Anúncios', () => {
     expect(r.statusCode).toBe(409);
     expect(r.json().error.code).toBe('LISTING_BLOCKED');
   });
+
+  it('tour da Gertrudez: cada usuário marca o que já viu; outra empresa não enxerga', async () => {
+    const a = await company('41');
+    const b = await company('42');
+    expect((await app.inject({ method: 'GET', url: '/api/v1/tours', cookies: a.cookies })).json()).toEqual({ seen: [] });
+    const put = await app.inject({ method: 'PUT', url: '/api/v1/tours/anuncios', cookies: a.cookies, payload: { status: 'skipped' } });
+    expect(put.statusCode).toBe(204);
+    await app.inject({ method: 'PUT', url: '/api/v1/tours/anuncios', cookies: a.cookies, payload: { status: 'done' } });
+    expect((await app.inject({ method: 'GET', url: '/api/v1/tours', cookies: a.cookies })).json()).toEqual({ seen: ['anuncios'] });
+    expect((await app.inject({ method: 'GET', url: '/api/v1/tours', cookies: b.cookies })).json()).toEqual({ seen: [] });
+    const bad = await app.inject({ method: 'PUT', url: '/api/v1/tours/Nao Vale', cookies: a.cookies, payload: { status: 'done' } });
+    expect(bad.statusCode).toBe(400);
+  });
 });

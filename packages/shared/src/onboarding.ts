@@ -23,3 +23,11 @@ export interface OnboardingDto {
   marketplace: Marketplace | null;
   completed: boolean;
 }
+
+// ================= Tours guiados (Gertrudez ensina)
+export const tourIdSchema = z.string().regex(/^[a-z0-9-]{2,40}$/);
+export const saveTourSchema = z.object({ status: z.enum(['done', 'skipped']) });
+/** Tours já vistos pelo usuário (concluídos ou pulados). */
+export interface ToursDto {
+  seen: string[];
+}

@@ -28,4 +28,17 @@ export class PgOnboardingRepository {
       [userId, tenantId, p.step, p.marketplace, p.completedAt],
     );
   }
+
+  async seenTours(db: Queryable, userId: string): Promise<string[]> {
+    const { rows } = await db.query<{ tour_id: string }>('SELECT tour_id FROM user_tours WHERE user_id = $1', [userId]);
+    return rows.map((r) => r.tour_id);
+  }
+
+  async saveTour(db: Queryable, tenantId: string, userId: string, tourId: string, status: 'done' | 'skipped'): Promise<void> {
+    await db.query(
+      `INSERT INTO user_tours (user_id, tenant_id, tour_id, status) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, tour_id) DO UPDATE SET status = EXCLUDED.status, updated_at = now()`,
+      [userId, tenantId, tourId, status],
+    );
+  }
 }

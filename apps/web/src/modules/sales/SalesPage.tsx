@@ -14,6 +14,8 @@ import { AppShell } from '../../app/AppShell';
 import { int, money, pct } from '../../shared/format';
 import { useAuth } from '../auth/AuthContext';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { HowTo } from '../listings/ListingsNav';
 import { listingsApi } from '../listings/listings-api';
 import { DifalCard } from './DifalCard';
@@ -81,6 +83,7 @@ export function SalesPage() {
   }, [period, listingId]);
   useEffect(() => void load(), [load]);
 
+  const tour = useGuidedTour('vendas', TOURS['vendas'], Boolean(data));
   const k = data?.kpis;
   const topStates = data ? data.states.slice(0, 8) : [];
   const otherStates = data ? data.states.slice(8).reduce((s, x) => s + x.orders, 0) : 0;
@@ -100,7 +103,7 @@ export function SalesPage() {
             ))}
           </div>
         </header>
-        <HowTo steps={STEPS} storageKey="nvs:howto:vendas" />
+        <HowTo steps={STEPS} storageKey="nvs:howto:vendas" onTour={tour.start} />
 
         <ListingFilter value={listingId} listing={data?.listing ?? null} onChange={setListingId} />
         {error && <p className="banner banner-error" role="alert">{error}</p>}
@@ -178,6 +181,7 @@ export function SalesPage() {
 
         <OrdersList period={period} listingId={listingId} />
       </div>
+      {tour.element}
     </AppShell>
   );
 }

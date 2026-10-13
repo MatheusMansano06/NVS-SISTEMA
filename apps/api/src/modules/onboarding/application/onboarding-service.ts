@@ -12,6 +12,15 @@ export class OnboardingService {
     private readonly events: EventBus,
   ) {}
 
+  /** Tours guiados que o usuário já viu (concluiu ou pulou). */
+  seenTours(tenantId: string, userId: string): Promise<string[]> {
+    return this.db.withTenant(tenantId, (db) => this.repo.seenTours(db, userId));
+  }
+
+  saveTour(tenantId: string, userId: string, tourId: string, status: 'done' | 'skipped'): Promise<void> {
+    return this.db.withTenant(tenantId, (db) => this.repo.saveTour(db, tenantId, userId, tourId, status));
+  }
+
   get(tenantId: string, userId: string): Promise<OnboardingProgress> {
     return this.db.withTenant(tenantId, async (db) => (await this.repo.find(db, userId)) ?? INITIAL_PROGRESS);
   }

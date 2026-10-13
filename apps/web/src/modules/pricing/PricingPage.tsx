@@ -13,6 +13,8 @@ import { money, pct } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { useAuth } from '../auth/AuthContext';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { HowTo } from '../listings/ListingsNav';
 import { listingsApi } from '../listings/listings-api';
 import { skusApi } from '../skus/skus-api';
@@ -48,6 +50,7 @@ const readParam = () => new URLSearchParams(window.location.search).get('anuncio
 
 /** Precificador: Clássico × Premium lado a lado, preço para margem alvo e simulações salvas. */
 export function PricingPage() {
+  const tour = useGuidedTour('precificador', TOURS.precificador, true);
   const [tab, setTab] = useState<'calc' | 'saved'>('calc');
   const [savedCount, setSavedCount] = useState<number | null>(null);
   useEffect(() => {
@@ -68,7 +71,8 @@ export function PricingPage() {
             </button>
           </div>
         </header>
-        <HowTo steps={STEPS} storageKey="nvs:howto:precificador" />
+        <HowTo steps={STEPS} storageKey="nvs:howto:precificador" onTour={tour.start} />
+        {tour.element}
         {tab === 'calc' ? <Calculator onSaved={() => setSavedCount((n) => (n ?? 0) + 1)} /> : <Saved onCount={setSavedCount} />}
       </div>
     </AppShell>

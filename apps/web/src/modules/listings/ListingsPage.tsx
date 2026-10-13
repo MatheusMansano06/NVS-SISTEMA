@@ -8,6 +8,8 @@ import { useAuth } from '../auth/AuthContext';
 import { ListingCard } from './ListingCard';
 import { ListingEditorModal, type EditorTab } from './ListingEditorModal';
 import { DuplicateModal } from './DuplicateModal';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { HowTo, ListingsNav } from './ListingsNav';
 import { listingsApi } from './listings-api';
 import '../skus/skus.css';
@@ -88,6 +90,7 @@ export function ListingsPage() {
     });
   }, [tab]);
 
+  const tour = useGuidedTour('anuncios', TOURS['anuncios'], Boolean(data?.items.length));
   const counts = data?.counts;
   return (
     <AppShell>
@@ -99,7 +102,7 @@ export function ListingsPage() {
           </div>
         </header>
         <ListingsNav />
-        <HowTo steps={STEPS} storageKey="nvs:howto:anuncios" />
+        <HowTo steps={STEPS} storageKey="nvs:howto:anuncios" onTour={tour.start} />
 
         {data && !data.connected && (
           <p className="banner banner-error">
@@ -196,6 +199,7 @@ export function ListingsPage() {
           />
         )}
       </Modal>
+      {tour.element}
     </AppShell>
   );
 }

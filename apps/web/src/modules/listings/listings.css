@@ -126,7 +126,9 @@
 .howto-n { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--blue); color: #fff; font-weight: 750; font-size: .86rem; }
 .howto strong { color: var(--navy); font-size: .92rem; }
 .howto p { margin: 2px 0 0; color: var(--gray-500); font-size: .82rem; line-height: 1.45; }
-.howto-hide { position: absolute; right: 16px; top: 10px; font-size: .78rem; }
+.howto-hide { position: absolute; right: 16px; top: 10px; display: flex; gap: 12px; }
+.howto-hide .link { font-size: .78rem; }
+.howto-links { display: flex; gap: 16px; justify-self: start; }
 .howto-show { justify-self: start; font-size: .84rem; }
 .act { display: inline-flex; align-items: center; gap: 6px; }
 .act-go { background: var(--ok); color: #fff; box-shadow: none; }

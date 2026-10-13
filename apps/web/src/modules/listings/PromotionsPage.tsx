@@ -13,6 +13,8 @@ import { ApiError } from '../../shared/http';
 import { Icon } from '../../shared/ui/Icon';
 import { useAuth } from '../auth/AuthContext';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { HowTo, ListingsNav } from './ListingsNav';
 import { listingsApi } from './listings-api';
 import '../skus/skus.css';
@@ -107,6 +109,7 @@ export function PromotionsPage() {
     return list;
   }, [cands, selected, q, sort]);
 
+  const tour = useGuidedTour('promocoes', TOURS['promocoes'], Boolean(promos) && !loadingCands);
   return (
     <AppShell>
       <div className="skus listings">
@@ -120,7 +123,7 @@ export function PromotionsPage() {
           </button>
         </header>
         <ListingsNav />
-        <HowTo steps={STEPS} storageKey="nvs:howto:promocoes" />
+        <HowTo steps={STEPS} storageKey="nvs:howto:promocoes" onTour={tour.start} />
 
         {msg && <p className={`banner banner-${msg.kind}`} role="status">{msg.text}</p>}
         {promosError && <p className="banner banner-error" role="alert">{promosError}</p>}
@@ -215,6 +218,7 @@ export function PromotionsPage() {
           </section>
         </div>
       </div>
+      {tour.element}
     </AppShell>
   );
 }

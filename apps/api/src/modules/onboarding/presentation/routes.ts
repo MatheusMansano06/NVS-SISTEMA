@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { saveOnboardingSchema, type OnboardingDto } from '@nvs/shared';
+import { saveOnboardingSchema, saveTourSchema, tourIdSchema, type OnboardingDto, type ToursDto } from '@nvs/shared';
 import { ValidationError } from '../../../shared/kernel/errors.js';
 import type { OnboardingProgress } from '../domain/onboarding.js';
 import type { OnboardingService } from '../application/onboarding-service.js';
@@ -15,6 +15,19 @@ export function onboardingRoutes(service: OnboardingService) {
     app.get('/onboarding', { preHandler: app.authenticate }, async (req) =>
       toDto(await service.get(req.user.tenantId, req.user.sub)),
     );
+
+    // tours guiados: cada usuário vê uma vez por tela (pode rever quando quiser)
+    app.get('/tours', { preHandler: app.authenticate }, async (req): Promise<ToursDto> => ({
+      seen: await service.seenTours(req.user.tenantId, req.user.sub),
+    }));
+
+    app.put('/tours/:id', { preHandler: app.authenticate }, async (req, reply) => {
+      const id = tourIdSchema.safeParse((req.params as { id?: string }).id);
+      const body = saveTourSchema.safeParse(req.body);
+      if (!id.success || !body.success) throw new ValidationError('Dados inválidos');
+      await service.saveTour(req.user.tenantId, req.user.sub, id.data, body.data.status);
+      return reply.code(204).send();
+    });
 
     app.put('/onboarding', { preHandler: app.authenticate }, async (req) => {
       const parsed = saveOnboardingSchema.safeParse(req.body);

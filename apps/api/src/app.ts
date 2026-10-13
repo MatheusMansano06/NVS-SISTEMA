@@ -24,6 +24,7 @@ import {
   PgSalesAnalyticsRepository,
   SalesAnalyticsService,
   salesAnalyticsRoutes,
+  SalesRetention,
   salesRoutes,
   skuRoutes,
 } from './modules/sales/index.js';
@@ -58,6 +59,8 @@ declare module 'fastify' {
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
     /** Integração Mercado Livre (null quando não configurada no ambiente). */
     ml: MlIntegrationService | null;
+    /** Retenção das vendas (13 meses de detalhe; depois, totais mensais). */
+    retention: SalesRetention;
     requirePermission: (
       p: Permission,
     ) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -164,6 +167,7 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
       )
     : null;
   app.decorate('ml', ml);
+  app.decorate('retention', new SalesRetention(database, app.log));
   await app.register(mercadoLivreRoutes(ml), { prefix: '/api/v1' });
   const mlLookups = mlClient ? new CachedMlLookups(mlClient, sharedCache) : null;
   const listingService = ml && mlClient && mlLookups ? new ListingService(database, new PgListingRepository(), ml, mlClient, mlLookups) : null;

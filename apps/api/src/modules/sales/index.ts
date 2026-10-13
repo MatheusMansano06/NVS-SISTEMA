@@ -11,3 +11,4 @@ export { TIMEZONE } from './domain/period.js';
 export { SalesAnalyticsService } from './application/sales-analytics-service.js';
 export { PgSalesAnalyticsRepository } from './infrastructure/pg-sales-analytics-repository.js';
 export { salesAnalyticsRoutes } from './presentation/sales-analytics-routes.js';
+export { SalesRetention, retentionCutoff, DETAIL_MONTHS } from './application/sales-retention.js';

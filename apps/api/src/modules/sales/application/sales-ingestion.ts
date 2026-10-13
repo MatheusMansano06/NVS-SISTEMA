@@ -1,6 +1,7 @@
 import type { Marketplace } from '@nvs/shared';
 import type { Queryable } from '../../../shared/infrastructure/database.js';
 import { PgSkuRepository } from '../infrastructure/pg-sku-repository.js';
+import { retentionCutoff } from './sales-retention.js';
 
 /** Pedido já normalizado por um módulo de integração (independente do marketplace). */
 export interface IncomingOrder {
@@ -64,7 +65,10 @@ export class SalesIngestion {
     orders: IncomingOrder[],
   ): Promise<number> {
     const orderIds: string[] = [];
+    // meses já arquivados em totais não recebem pedidos de volta (seriam contados duas vezes)
+    const cutoff = new Date(`${retentionCutoff()}T03:00:00Z`).getTime(); // meia-noite de São Paulo
     for (const o of orders) {
+      if (new Date(o.orderedAt).getTime() < cutoff) continue;
       const { rows } = await db.query<{ id: string }>(
         `INSERT INTO orders (tenant_id, account_id, marketplace, external_id, status, ordered_at,
                              gross_amount, marketplace_fee, units, shipping_ref, buyer_shipping, refund_partial, listing_type,

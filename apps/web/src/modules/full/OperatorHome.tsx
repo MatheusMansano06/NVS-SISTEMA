@@ -170,7 +170,7 @@ function Cards({ title, lists, action, onClick, empty }: { title: string; lists:
             const pct = l.itemsTotal ? Math.round((l.itemsPicked / l.itemsTotal) * 100) : 0;
             return (
               <button key={l.id} type="button" className="full-op-card" onClick={() => onClick(l)}>
-                <span className="full-ml" aria-hidden="true">ML</span>
+                <span className="full-ml" data-mp={l.marketplace} aria-hidden="true">{l.marketplace === 'shopee' ? 'S' : 'ML'}</span>
                 <span className="full-op-card-main">
                   <b>{l.code}</b>
                   <em>{action} →</em>

@@ -20,6 +20,7 @@ import {
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../../shared/kernel/errors.js';
 import { parseInboundText, splitIntoLists, type InboundItem } from '../domain/ml-inbound-pdf.js';
+import { parseShopeeInboundText } from '../domain/shopee-inbound-pdf.js';
 import { buildLabelsZpl } from '../domain/zpl.js';
 import { extractPdfText } from '../infrastructure/pdf-text.js';
 import { sortLists, toItem, toJob, type ItemRow, type ListRow, type PgWmsRepository, type PrintRow } from '../infrastructure/pg-wms-repository.js';
@@ -60,26 +61,40 @@ export class WmsService {
     input: { marketplace: WmsMarketplace; fullDate: string; pdfBase64: string; archiveOldestId?: string },
   ): Promise<WmsInboundResultDto> {
     if (a.mode !== 'analise') throw new ForbiddenError('O Processamento é feito pela Análise.');
-    if (input.marketplace !== 'ml') throw new ValidationError('Por enquanto só o PDF do Mercado Livre é lido aqui.');
     const pdf = Buffer.from(input.pdfBase64, 'base64');
     if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-') throw new ValidationError('O arquivo não é um PDF.');
-    let parsed;
+    let texts;
     try {
-      parsed = parseInboundText(await extractPdfText(new Uint8Array(pdf)));
+      texts = await extractPdfText(new Uint8Array(pdf));
     } catch {
-      throw new ValidationError('Não foi possível ler o PDF. Use o PDF de preparação do envio Full baixado do Mercado Livre.');
+      throw new ValidationError('Não foi possível ler o PDF. Use o PDF do envio Full baixado do Mercado Livre ou da Shopee.');
     }
+    // o próprio PDF diz de onde é: "Shopee Picking List" / ASN INBRFSP… é Shopee; o resto, Mercado Livre
+    const isShopee = texts.some((t) => /Shopee Picking List|INBRFSP\d+/.test(t.str));
+    const marketplace: WmsMarketplace = isShopee ? 'shopee' : 'ml';
+    const parsed = isShopee ? parseShopeeInboundText(texts) : parseInboundText(texts);
     if (!parsed.items.length) {
-      throw new ValidationError('Nenhum produto encontrado no PDF. É o PDF "Lista de produtos e instruções de preparação" do envio Full?');
+      throw new ValidationError(
+        isShopee
+          ? 'Nenhum produto encontrado no PDF da Shopee. É o "Shopee Picking List" do envio Full?'
+          : 'Nenhum produto encontrado no PDF. É o PDF "Lista de produtos e instruções de preparação" do envio Full?',
+      );
     }
     const units = parsed.items.reduce((s, i) => s + i.qty, 0);
+    // Shopee: a conta tem que fechar com o rodapé (o PDF dela tem bugs de impressão; melhor recusar que errar)
+    if (isShopee && parsed.declaredUnits !== null && parsed.declaredUnits !== units) {
+      const diff = parsed.declaredUnits - units;
+      throw new ValidationError(
+        `A conta não fecha: somei ${units} peças e a Shopee declara ${parsed.declaredUnits} no rodapé (${diff > 0 ? `faltam ${diff}` : `sobram ${-diff}`}). Confira o PDF ou envie para o suporte.`,
+      );
+    }
 
     return this.db.withTenant(a.tenantId, async (db) => {
       // vários lotes ao mesmo tempo, com limite: o mais antigo é arquivado (pedindo confirmação se tiver pendência)
       const active = (
         await db.query<{ id: string; name: string }>(
           `SELECT id, name FROM wms_batches WHERE status = 'active' AND marketplace = $1 ORDER BY full_date, seq FOR UPDATE`,
-          [input.marketplace],
+          [marketplace],
         )
       ).rows;
       if (active.length >= WMS_MAX_ACTIVE_BATCHES) {
@@ -99,7 +114,7 @@ export class WmsService {
 
       const seq =
         (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM wms_batches WHERE marketplace = $1 AND full_date = $2', [
-          input.marketplace,
+          marketplace,
           input.fullDate,
         ])).rows[0]!.n + 1;
       const dateBr = ddmmyyyy(input.fullDate).replace(/-/g, '/');
@@ -108,18 +123,18 @@ export class WmsService {
         await db.query<{ id: string }>(
           `INSERT INTO wms_batches (tenant_id, marketplace, full_date, seq, name, inbound_ref, created_by)
            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-          [a.tenantId, input.marketplace, input.fullDate, seq, name, parsed.ref, a.operatorId],
+          [a.tenantId, marketplace, input.fullDate, seq, name, parsed.ref, a.operatorId],
         )
       ).rows[0]!;
 
-      const prefix = `${input.marketplace === 'shopee' ? 'SH' : 'ML'}-${ddmmyyyy(input.fullDate)}${seq > 1 ? `-${String.fromCharCode(64 + seq)}` : ''}`;
+      const prefix = `${marketplace === 'shopee' ? 'SH' : 'ML'}-${ddmmyyyy(input.fullDate)}${seq > 1 ? `-${String.fromCharCode(64 + seq)}` : ''}`;
       const groups = splitIntoLists(parsed.items, WMS_LIST_MAX_UNITS);
       for (const [i, group] of groups.entries()) {
         const code = groups.length > 1 ? `${prefix}-L${String(i + 1).padStart(2, '0')}` : prefix;
         const list = (
           await db.query<{ id: string }>(
             `INSERT INTO wms_lists (tenant_id, batch_id, code, marketplace) VALUES ($1, $2, $3, $4) RETURNING id`,
-            [a.tenantId, batch.id, code, input.marketplace],
+            [a.tenantId, batch.id, code, marketplace],
           )
         ).rows[0]!;
         for (const it of group) await this.insertItem(db, a.tenantId, list.id, it);
@@ -130,7 +145,7 @@ export class WmsService {
         if (it.mlCode) await this.repo.addCode(db, a.tenantId, it.mlCode, it.sku, a.operatorId);
         if (it.ean) await this.repo.addCode(db, a.tenantId, it.ean, it.sku, a.operatorId, true);
       }
-      const [dto] = await this.repo.batches(db, input.marketplace, batch.id);
+      const [dto] = await this.repo.batches(db, marketplace, batch.id);
       return { status: 'ok', batch: dto!, units, declaredUnits: parsed.declaredUnits };
     });
   }
@@ -744,11 +759,13 @@ export class WmsService {
     return this.product(a.tenantId, sku);
   }
 
-  /** Planilha (CSV) SKU;Descrição;EAN1;EAN2;EAN3 — soma ao cadastro, não apaga nada. */
+  /** Planilha (CSV) SKU;Descrição;EAN1;EAN2;… (quantos códigos tiver) — soma ao cadastro, não apaga nada. */
   async importProducts(a: Actor, csv: string): Promise<{ products: number; codes: number }> {
     this.masterData(a);
     const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
     const sep = (lines[0] ?? '').includes(';') ? ';' : ',';
+    // com cabeçalho "Descrição", a 2ª coluna é sempre descrição; sem cabeçalho e só 2 colunas, é SKU;EAN
+    const withDesc = /descri/i.test(lines[0] ?? '');
     let products = 0;
     let codes = 0;
     await this.db.withTenant(a.tenantId, async (db) => {
@@ -756,7 +773,7 @@ export class WmsService {
         const cols = line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ''));
         const sku = (cols[0] ?? '').toUpperCase();
         if (!sku || (i === 0 && /^sku$/i.test(sku))) continue;
-        const [desc, ...eans] = cols.length <= 2 ? [null, cols[1]] : [cols[1], ...cols.slice(2, 5)];
+        const [desc, ...eans] = !withDesc && cols.length <= 2 ? [null, cols[1]] : [cols[1], ...cols.slice(2, 52)];
         await this.repo.upsertProduct(db, a.tenantId, sku, desc && !/^(n\/a|none)$/i.test(desc) ? desc : null);
         products++;
         for (const e of eans) {

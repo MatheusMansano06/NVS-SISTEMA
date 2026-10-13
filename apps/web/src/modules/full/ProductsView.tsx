@@ -64,7 +64,7 @@ export function ProductsView() {
         </label>
         {canEdit && (
           <span className="full-prod-acts">
-            <button type="button" className="act" onClick={() => fileRef.current?.click()} title="CSV: SKU;Descrição;EAN1;EAN2;EAN3">Importar planilha</button>
+            <button type="button" className="act" onClick={() => fileRef.current?.click()} title="CSV: SKU;Descrição;EAN1;EAN2;… (um código por coluna)">Importar planilha</button>
             <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={(e) => e.target.files?.[0] && void importCsv(e.target.files[0])} />
             <Button type="button" onClick={() => setCreating(true)}>+ Novo produto</Button>
           </span>

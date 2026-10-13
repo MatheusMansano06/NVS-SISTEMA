@@ -250,3 +250,9 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .op-full .full h1, .op-full .full section > p { text-align: left; }
 .op-full .full .full-pick-done, .op-full .full .full-pick-done h2, .op-full .full .full-pick-done p { text-align: center; }
 .full .search { max-width: none; width: 100%; }
+
+/* seletor de marketplace */
+.full-mp button[data-mp='ml'][aria-checked='true'] { background: #ffe600; color: #2d3277; }
+.full-mp button[data-mp='shopee'][aria-checked='true'] { background: #ee4d2d; color: #fff; }
+.full-ml[data-mp='shopee'] { background: #ee4d2d; color: #fff; font-size: 1.4rem; }
+.full-body { display: contents; }

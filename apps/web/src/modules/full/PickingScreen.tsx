@@ -169,7 +169,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
               <span className="full-badge" data-item={item.status}>{WMS_ITEM_STATUS_LABELS[item.status]}</span>
               <h2>{item.sku}</h2>
               <p>{item.description}</p>
-              <small>Código ML: <b>{item.mlCode ?? '—'}</b>{item.ean ? ` · EAN ${item.ean}` : ''}</small>
+              <small>{list.marketplace === 'shopee' ? 'Shopee SKU ID' : 'Código ML'}: <b>{item.mlCode ?? '—'}</b>{item.ean ? ` · EAN ${item.ean}` : ''}</small>
             </div>
           </div>
           <div className="full-pick-qty">
@@ -340,7 +340,7 @@ function DialogBody(p: {
       return (
         <form className="full-modal" onSubmit={(e) => { e.preventDefault(); if (n > 0) p.onReprint(n); }}>
           <h2>Imprimir etiquetas do {item.sku}</h2>
-          <p>Código ML {item.mlCode ?? item.sku} · 2 por linha.</p>
+          <p>Código {item.mlCode ?? item.sku} · 2 por linha.</p>
           {num('Quantidade de etiquetas', 5000)}
           <button type="submit" className="full-dark-btn">Imprimir</button>
         </form>

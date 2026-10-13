@@ -8,7 +8,7 @@ import { fileToBase64, fullApi } from './full-api';
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 
 /** Processamento (só Análise): o PDF do envio Full vira lote + listas para a Operação. */
-export function ProcessingView({ onDone }: { onDone: (batchId: string) => void }) {
+export function ProcessingView({ onDone }: { onDone: (batchId: string, marketplace: 'ml' | 'shopee') => void }) {
   const [date, setDate] = useState(today());
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,8 +51,9 @@ export function ProcessingView({ onDone }: { onDone: (batchId: string) => void }
           <div>
             <h2>Carga do envio Full</h2>
             <p>
-              Baixe no Mercado Livre o PDF <b>“Lista de produtos e instruções de preparação”</b> do envio e envie aqui. O sistema lê
-              Código ML, SKU, EAN e quantidades, divide em listas de até 1.000 unidades e libera para a Operação.
+              Envie o PDF do envio Full: do <b>Mercado Livre</b> (“Lista de produtos e instruções de preparação”) ou da <b>Shopee</b>
+              (“Shopee Picking List”). O sistema reconhece sozinho de onde é, lê SKU, código, EAN e quantidades, divide em listas de até
+              1.000 unidades e libera para a Operação.
             </p>
           </div>
         </header>
@@ -81,12 +82,12 @@ export function ProcessingView({ onDone }: { onDone: (batchId: string) => void }
         {error && <p className="banner banner-error" role="alert">{error}</p>}
         {result?.batch && (
           <div className="banner banner-ok full-result" role="status">
-            Lote <b>{result.batch.name}</b> criado: {result.batch.lists.length} lista(s), {result.batch.lists.reduce((s, l) => s + l.skuCount, 0)} SKUs,{' '}
+            Lote <b>{result.batch.name}</b> ({result.batch.marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre'}) criado: {result.batch.lists.length} lista(s), {result.batch.lists.reduce((s, l) => s + l.skuCount, 0)} SKUs,{' '}
             {int(result.units ?? 0)} unidades.
             {result.declaredUnits != null && result.declaredUnits !== result.units && (
               <b> Atenção: o PDF diz {int(result.declaredUnits)} unidades e foram lidas {int(result.units ?? 0)}. Confira as listas.</b>
             )}
-            <button type="button" className="act act-strong" onClick={() => onDone(result.batch!.id)}>Ver o lote →</button>
+            <button type="button" className="act act-strong" onClick={() => onDone(result.batch!.id, result.batch!.marketplace)}>Ver o lote →</button>
           </div>
         )}
       </section>

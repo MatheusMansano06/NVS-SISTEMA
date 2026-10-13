@@ -34,7 +34,10 @@ const mpQuery = z.object({ marketplace: z.enum(WMS_MARKETPLACES).default('ml') }
  * Supervisão Full. Toda rota exige a sessão da empresa + a pessoa da equipe (nome + PIN):
  * Visão Geral e Listas valem na Análise e na Operação; Processamento e ações de supervisor, só Análise/MASTER.
  */
-export function wmsRoutes(service: WmsService, opts: { isMaster: (tenantId: string, operatorId: string) => Promise<boolean> }) {
+export function wmsRoutes(
+  service: WmsService,
+  opts: { isMaster: (tenantId: string, operatorId: string) => Promise<boolean>; inboundPerMinute?: number },
+) {
   return async (app: FastifyInstance) => {
     const auth = { preHandler: app.authenticate };
     const actor = async (req: FastifyRequest): Promise<Actor> => {
@@ -146,7 +149,7 @@ export function wmsRoutes(service: WmsService, opts: { isMaster: (tenantId: stri
     );
 
     // ---- Processamento (PDF do envio, até ~10 MB)
-    app.post('/wms/inbound', { preHandler: app.authenticate, bodyLimit: 15_000_000, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req) =>
+    app.post('/wms/inbound', { preHandler: app.authenticate, bodyLimit: 15_000_000, config: { rateLimit: { max: opts.inboundPerMinute ?? 20, timeWindow: '1 minute' } } }, async (req) =>
       service.inbound(await actor(req), parse(wmsInboundSchema, req.body)),
     );
   };

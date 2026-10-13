@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -165,10 +166,46 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
 
     const upd = (await call('PATCH', '/wms/products/KIT2', ana, { noPhysicalBarcode: true, description: 'Kit 2 peças' })).json();
     expect(upd).toMatchObject({ noPhysicalBarcode: true, description: 'Kit 2 peças' });
-    const imp = (await call('POST', '/wms/products/import', ana, { csv: 'SKU;Descrição;EAN1;EAN2\nNOVO;Novo item;7890000000001;N/A\nKIT2;;333' })).json();
-    expect(imp).toEqual({ products: 2, codes: 2 });
-    expect((await call('GET', '/wms/products', joao)).json().total).toBe(3);
+    const imp = (
+      await call('POST', '/wms/products/import', ana, {
+        csv: '\uFEFFSKU;Descrição;EAN1;EAN2\nNOVO;Novo item;7890000000001;N/A\nKIT2;;333\nsodesc;Só descrição\nMUITOS;;1;2;3;4;5',
+      })
+    ).json();
+    // linha só com descrição não vira código; mais de 3 códigos entram todos
+    expect(imp).toEqual({ products: 4, codes: 7 });
+    expect((await call('GET', '/wms/products?q=SODESC', ana)).json().items[0]).toMatchObject({ description: 'Só descrição', codes: [] });
+    // sem cabeçalho e 2 colunas: SKU;EAN (formato antigo)
+    expect((await call('POST', '/wms/products/import', ana, { csv: 'DOIS;999' })).json()).toEqual({ products: 1, codes: 1 });
+    expect((await call('GET', '/wms/products', joao)).json().total).toBe(6);
     expect((await call('DELETE', '/wms/products/NOVO', ana)).statusCode).toBe(204);
+  });
+
+  it('PDF da Shopee: detectado sozinho, vira lote SH com listas de até 1.000 un. e etiqueta com o código da Shopee', async () => {
+    const { ana, joao } = await company();
+    const pdf = readFileSync(new URL('../src/modules/wms/domain/__fixtures__/FBSINBR2026042800054.pdf', import.meta.url));
+    const r = (await call('POST', '/wms/inbound', ana, { fullDate: '2026-05-06', pdfBase64: pdf.toString('base64') })).json();
+    expect(r).toMatchObject({ status: 'ok', units: 11820, declaredUnits: 11820, batch: { marketplace: 'shopee', inboundRef: 'INBRFSP12604290170', totalItems: 11820 } });
+    expect(r.batch.lists.length).toBeGreaterThanOrEqual(12);
+    expect(r.batch.lists.every((l: { code: string; itemsTotal: number; skuCount: number }) => l.code.startsWith('SH-06-05-2026-L') && (l.itemsTotal <= 1000 || l.skuCount === 1))).toBe(true);
+    // fica separado do ML
+    expect((await call('GET', '/wms/batches?marketplace=ml', ana)).json().batches).toEqual([]);
+    const ov = (await call('GET', '/wms/overview?marketplace=shopee', joao)).json();
+    expect(ov.units.total).toBe(11820);
+
+    // bipa pelo Shopee SKU ID (vira código no Master Data) e a etiqueta sai com QR
+    const found = (await call('GET', '/wms/find?marketplace=shopee&q=25147029740_243914807565', joao)).json();
+    expect(found).toMatchObject({ action: 'open', sku: 'VEOX' });
+    const done = (await call('POST', `/wms/lists/${found.match.listId}/scan`, joao, { barcode: '25147029740_243914807565', mode: 'box' })).json();
+    expect(done).toMatchObject({ status: 'complete', item: { sku: 'VEOX', qtyPicked: 200 } });
+    const zpl = (await call('GET', `/wms/lists/${found.match.listId}/zpl?sku=VEOX&qty=1`, joao)).body;
+    expect(zpl).toContain('^BQN,2,3^FDQA,25147029740_243914807565^FS');
+  });
+
+  it('PDF da Shopee de julho (EAN do armazém quebrado em 2 linhas) fecha 4.073', async () => {
+    const { ana } = await company();
+    const pdf = readFileSync(new URL('../src/modules/wms/domain/__fixtures__/FBSINBR2026072103635.pdf', import.meta.url));
+    const r = await call('POST', '/wms/inbound', ana, { fullDate: '2026-07-22', pdfBase64: pdf.toString('base64') });
+    expect(r.json()).toMatchObject({ status: 'ok', units: 4073 });
   });
 
   it('lotes: limite de ativos pede para arquivar; outra empresa não vê nada', async () => {

@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import type { WmsMarketplace } from '@nvs/shared';
 import { navigate, usePath } from '../../app/router';
 import { useGuidedTour } from '../../shared/tour/Tour';
 import { TOURS } from '../../shared/tour/tours';
@@ -7,6 +9,7 @@ import { OperatorHome } from './OperatorHome';
 import { PickingScreen } from './PickingScreen';
 import { ProcessingView } from './ProcessingView';
 import { ProductsView } from './ProductsView';
+import { getFullMarketplace, setFullMarketplace } from './full-api';
 import '../skus/skus.css';
 import '../listings/listings.css';
 import './full.css';
@@ -21,6 +24,7 @@ type Tab = { path: string; label: string };
 export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
   const base = mode === 'analise' ? '/full' : '/op';
   const path = usePath();
+  const [mp, setMp] = useState<WmsMarketplace>(getFullMarketplace());
   const tour = useGuidedTour('full', TOURS.full, mode === 'analise');
   const sub = path.startsWith(base) ? path.slice(base.length) || '/' : '/';
   const qs = new URLSearchParams(window.location.search);
@@ -57,7 +61,7 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
   } else if (sub.startsWith('/produtos')) {
     body = <ProductsView />;
   } else if (sub.startsWith('/processamento') && mode === 'analise') {
-    body = <ProcessingView onDone={(id) => go(`/lote/${id}`)} />;
+    body = <ProcessingView onDone={(id, m) => { setFullMarketplace(m); setMp(m); go(`/lote/${id}`); }} />;
   } else if (sub === overviewPath || (mode === 'analise' && sub === '/')) {
     body = <FullOverview onShortages={() => go('/faltas')} onLists={() => go('/listas')} />;
   } else {
@@ -70,8 +74,26 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
       {!picking && (
         <header className="skus-head">
           <div>
-            <p className="dash-kicker">Mercado Livre · Full</p>
+            <p className="dash-kicker">{mp === 'ml' ? 'Mercado Livre' : 'Shopee'} · Full</p>
             <h1>Supervisão Full</h1>
+          </div>
+          <div className="seg full-mp" role="tablist" aria-label="Marketplace">
+            {(['ml', 'shopee'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-checked={mp === m}
+                data-mp={m}
+                onClick={() => {
+                  setFullMarketplace(m);
+                  setMp(m);
+                  if (sub.startsWith('/lote') || sub.startsWith('/lista')) go(mode === 'analise' ? '/listas' : '/');
+                }}
+              >
+                {m === 'ml' ? 'Mercado Livre' : 'Shopee'}
+              </button>
+            ))}
           </div>
           <nav className="seg full-tabs" aria-label="Supervisão Full">
             {tabs.map((t) => (
@@ -82,7 +104,7 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
           </nav>
         </header>
       )}
-      {body}
+      <div key={mp} className="full-body">{body}</div>
       {mode === 'analise' && tour.element}
     </div>
   );

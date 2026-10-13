@@ -186,7 +186,7 @@ export const wmsProductUpdateSchema = z.object({
   noPhysicalBarcode: z.boolean().optional(),
 });
 export const wmsProductCodeSchema = z.object({ barcode });
-/** CSV: SKU;Descrição;EAN1;EAN2;EAN3 (soma ao cadastro; não apaga nada). */
+/** CSV: SKU;Descrição;EAN1;EAN2;… (soma ao cadastro; não apaga nada). */
 export const wmsProductImportSchema = z.object({ csv: z.string().min(1).max(5_000_000) });
 
 export interface WmsProductDto {

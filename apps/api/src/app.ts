@@ -208,6 +208,8 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
   await app.register(
     wmsRoutes(new WmsService(database, new PgWmsRepository(), printHub), {
       isMaster: async (tenantId, operatorId) => (await operators.me(tenantId, operatorId)).is_master,
+      // ler PDF pesa: 20 envios/min por IP (nos testes, sem limite prático)
+      inboundPerMinute: env.NODE_ENV === 'test' ? 1000 : 20,
     }),
     { prefix: '/api/v1' },
   );

@@ -19,7 +19,7 @@ import type { OperatorRow } from '../infrastructure/pg-operator-repository.js';
 export const PERSON_COOKIE = 'nvs_person';
 const PERSON_SECONDS = 12 * 3600;
 
-interface PersonToken {
+export interface PersonToken {
   sub: string;
   tenantId: string;
   typ: 'person';
@@ -32,25 +32,30 @@ function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   return r.data;
 }
 
+/**
+ * Pessoa da equipe logada nesta requisição (sempre da mesma empresa da sessão).
+ * Usado por outros módulos (ex.: Supervisão Full) para saber quem bipou/carregou.
+ */
+export function readPerson(app: FastifyInstance, req: FastifyRequest): PersonToken {
+  const raw = req.cookies[PERSON_COOKIE];
+  if (!raw) throw new UnauthorizedError('Escolha seu nome e digite o PIN');
+  let t: PersonToken;
+  try {
+    t = app.jwt.verify<PersonToken>(raw);
+  } catch {
+    throw new UnauthorizedError('Sessão expirada: entre de novo com o PIN');
+  }
+  if (t.typ !== 'person' || t.tenantId !== req.user.tenantId) throw new UnauthorizedError('Sessão inválida');
+  return t;
+}
+
 export function operationRoutes(service: OperatorService, opts: { secureCookies: boolean; tenantName: (id: string) => Promise<string> }) {
   return async (app: FastifyInstance) => {
     const auth = { preHandler: app.authenticate };
     const sign = (t: PersonToken) =>
       // papel mínimo (viewer) + typ: o authenticate da empresa recusa tokens com typ
       app.jwt.sign({ sub: t.sub, tenantId: t.tenantId, role: 'viewer', typ: t.typ, mode: t.mode }, { expiresIn: PERSON_SECONDS });
-    /** Pessoa logada, sempre da mesma empresa da sessão. */
-    const person = (req: FastifyRequest): PersonToken => {
-      const raw = req.cookies[PERSON_COOKIE];
-      if (!raw) throw new UnauthorizedError('Escolha seu nome e digite o PIN');
-      let t: PersonToken;
-      try {
-        t = app.jwt.verify<PersonToken>(raw);
-      } catch {
-        throw new UnauthorizedError('Sessão expirada: entre de novo com o PIN');
-      }
-      if (t.typ !== 'person' || t.tenantId !== req.user.tenantId) throw new UnauthorizedError('Sessão inválida');
-      return t;
-    };
+    const person = (req: FastifyRequest) => readPerson(app, req);
     /** Só MASTER (conferido no banco: tirar o MASTER vale na hora). */
     const master = async (req: FastifyRequest) => {
       const t = person(req);

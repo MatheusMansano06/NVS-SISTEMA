@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import websocket from '@fastify/websocket';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
@@ -49,6 +50,7 @@ import {
 import { TokenCipher } from './shared/infrastructure/token-cipher.js';
 import { serveWeb } from './shared/infrastructure/web-static.js';
 import { healthRoutes } from './modules/health/presentation/routes.js';
+import { PgWmsRepository, PrintHub, WmsService, wmsAgentSocket, wmsRoutes } from './modules/wms/index.js';
 import { OperatorService, PERSON_COOKIE, PgOperatorRepository, operationRoutes } from './modules/operation/index.js';
 
 declare module '@fastify/jwt' {
@@ -200,6 +202,16 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     }),
     { prefix: '/api/v1' },
   );
+  // Supervisão Full (lotes do envio Full, listas, bipagem, etiquetas e Master Data)
+  const printHub = new PrintHub(database);
+  await app.register(websocket, { options: { maxPayload: 1_000_000 } });
+  await app.register(
+    wmsRoutes(new WmsService(database, new PgWmsRepository(), printHub), {
+      isMaster: async (tenantId, operatorId) => (await operators.me(tenantId, operatorId)).is_master,
+    }),
+    { prefix: '/api/v1' },
+  );
+  await app.register(wmsAgentSocket(printHub));
   const onboarding = new OnboardingService(database, new PgOnboardingRepository(), events);
   await app.register(onboardingRoutes(onboarding), { prefix: '/api/v1' });
   await app.register(identityRoutes(identity, {

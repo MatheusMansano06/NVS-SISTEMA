@@ -13,6 +13,8 @@ import { PricingPage } from './modules/pricing/PricingPage';
 import { FreightPage } from './modules/freight/FreightPage';
 import { FinancePage } from './modules/finance/FinancePage';
 import { usePath } from './app/router';
+import { AppShell } from './app/AppShell';
+import { FullRouter } from './modules/full/FullRouter';
 import type { PersonSessionDto, TeamDto } from '@nvs/shared';
 import { OperationApp } from './modules/operation/OperationApp';
 import { PersonProvider } from './modules/operation/PersonContext';
@@ -40,6 +42,7 @@ function Pages() {
   if (path.startsWith('/precificador')) return <PricingPage />;
   if (path.startsWith('/radar-frete')) return <FreightPage />;
   if (path.startsWith('/equipe')) return <TeamPage />;
+  if (path.startsWith('/full')) return <AppShell><FullRouter mode="analise" /></AppShell>;
   if (path.startsWith('/anuncios/promocoes')) return <PromotionsPage />;
   if (path.startsWith('/anuncios')) return <ListingsPage />;
   if (path.startsWith('/financeiro')) return <FinancePage />;

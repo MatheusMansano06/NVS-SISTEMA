@@ -1,17 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { navigate } from '../../app/router';
+import { FullRouter } from '../full/FullRouter';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../../shared/ui/Modal';
 import { PinChange } from './PinChange';
 import { usePerson } from './PersonContext';
 import { TeamManager } from './TeamManager';
 import './operation.css';
-
-const SOON = [
-  { icon: '📦', title: 'Separação', text: 'Lista do que separar para envio, por coleta e Flex.' },
-  { icon: '✅', title: 'Conferência', text: 'Bipe o produto para conferir antes de embalar.' },
-  { icon: '🏷️', title: 'Etiquetas', text: 'Imprimir etiquetas de envio do dia.' },
-  { icon: '🚚', title: 'Expedição', text: 'Fechar coletas e acompanhar o que saiu.' },
-];
 
 /** Operação: as funções da expedição entram aqui (todos da Operação veem o mesmo). */
 export function OperationApp() {
@@ -20,6 +15,10 @@ export function OperationApp() {
   const me = ctx.person.person;
   const [view, setView] = useState<'home' | 'pin'>('home');
   const [team, setTeam] = useState(false);
+  // a Operação abre direto no painel de separação da Supervisão Full
+  useEffect(() => {
+    if (!window.location.pathname.startsWith('/op')) navigate('/op');
+  }, []);
 
   return (
     <div className="station">
@@ -37,23 +36,10 @@ export function OperationApp() {
         {view === 'pin' ? (
           <PinChange person={ctx.person} onCancel={() => setView('home')} onDone={(p) => { ctx.update(p); setView('home'); }} />
         ) : (
-          <section className="station-home">
-            <h1>Bom trabalho, {me.name}! 👋</h1>
-            <p>Estas são as funções da expedição. Elas vão sendo liberadas aqui.</p>
-            <div className="station-cards">
-              {SOON.map((c) => (
-                <article key={c.title} aria-disabled="true">
-                  <span aria-hidden="true">{c.icon}</span>
-                  <strong>{c.title}</strong>
-                  <p>{c.text}</p>
-                  <small>em breve</small>
-                </article>
-              ))}
-            </div>
-          </section>
+          <div className="op-full"><FullRouter mode="operacao" /></div>
         )}
       </main>
-      <Modal open={team} onClose={() => setTeam(false)} label="Equipe">
+      <Modal open={team} onClose={() => setTeam(false)} label="Equipe" wide>
         <h2 className="team-modal-title">Equipe</h2>
         <TeamManager meId={me.id} />
       </Modal>

@@ -144,4 +144,15 @@ export const TOURS = {
     { target: '.op-list', title: 'A equipe', text: 'Mude a função, torne MASTER, resete o PIN de quem esqueceu (ou errou 5 vezes) e desative quem saiu. Sempre fica pelo menos um MASTER.' },
     { title: 'Na Operação também 🎉', text: 'MASTER que entra na Operação tem o botão “Equipe” lá em cima para cadastrar sem precisar vir na Análise.' },
   ],
+  full: [
+    {
+      title: 'Supervisão Full',
+      text:
+        'Aqui fica a expedição do Full do Mercado Livre, do PDF do envio até a etiqueta na caixa.\n' +
+        'A Análise carrega o envio; a Operação separa bipando; as etiquetas saem sozinhas na Zebra.',
+    },
+    { target: '.full-tabs', title: 'As abas', text: 'Visão Geral (andamento e faltas), Listas e Lotes (cada envio e suas listas), Processamento (carregar o PDF) e Produtos (os códigos de barras de cada SKU).' },
+    { title: 'Processamento', text: 'Baixe no ML o PDF “Lista de produtos e instruções de preparação” do envio e envie em Processamento: o sistema monta as listas de até 1.000 unidades e cadastra o Código ML e o EAN de cada produto.' },
+    { title: 'Na Operação 🎉', text: 'Quem entra na Operação pega uma lista (ou bipa um produto no atalho) e separa. Ao terminar cada item, as etiquetas com o Código ML vão para a impressora.' },
+  ],
 } satisfies Record<string, TourStep[]>;

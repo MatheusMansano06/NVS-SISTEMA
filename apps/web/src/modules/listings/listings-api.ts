@@ -1,10 +1,12 @@
 import type {
+  ListingEditorDto,
   ListingListDto,
   ListingPricingDto,
   ListingSalesDto,
   ListingTab,
   PromotionCandidatesDto,
   PromotionsDto,
+  WholesaleDto,
 } from '@nvs/shared';
 import { http } from '../../shared/http';
 
@@ -32,6 +34,20 @@ export const listingsApi = {
     ),
   enroll: (connectionId: string, promotionId: string, itemId: string, body: { promotionType: string; dealPrice?: number }) =>
     http<{ ok: true }>(`/api/v1/listings/promotions/${enc(connectionId)}/${enc(promotionId)}/items/${enc(itemId)}`, { body }),
+  editor: (id: string) => http<ListingEditorDto>(`/api/v1/listings/${enc(id)}/editor`),
+  setDescription: (id: string, text: string) =>
+    http<{ ok: true }>(`/api/v1/listings/${enc(id)}/description`, { method: 'PUT', body: { text } }),
+  setAttributes: (id: string, attributes: { id: string; value: string }[]) =>
+    http<{ ok: true; changed: number }>(`/api/v1/listings/${enc(id)}/attributes`, { method: 'PUT', body: { attributes } }),
+  setDimensions: (id: string, body: { width: number; height: number; length: number; weight: number; packageType: string }) =>
+    http<{ ok: true }>(`/api/v1/listings/${enc(id)}/dimensions`, { method: 'PUT', body }),
+  setPictures: (id: string, pictureIds: string[]) =>
+    http<{ ok: true }>(`/api/v1/listings/${enc(id)}/pictures`, { method: 'PUT', body: { pictureIds } }),
+  uploadPicture: (id: string, file: { name: string; type: string; data: string }) =>
+    http<{ id: string; url: string | null }>(`/api/v1/listings/${enc(id)}/pictures/upload`, { body: file }),
+  wholesale: (id: string) => http<WholesaleDto>(`/api/v1/listings/${enc(id)}/wholesale`),
+  setWholesale: (id: string, tiers: { minUnits: number; price: number }[]) =>
+    http<{ ok: true; tiers: number }>(`/api/v1/listings/${enc(id)}/wholesale`, { method: 'PUT', body: { tiers } }),
   setStatus: (id: string, status: 'active' | 'paused' | 'closed') =>
     http<{ id: string; status: string }>(`/api/v1/listings/${enc(id)}/status`, { method: 'PUT', body: { status } }),
 };

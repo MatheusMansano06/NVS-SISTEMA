@@ -40,6 +40,19 @@ export interface MlApi {
   listingFees(token: string, price: number, categoryId: string | null): Promise<MlListingFee[]>;
   /** Custo de frete grátis bancado pelo vendedor (tabela do ML); null se indisponível. */
   freeShippingCost(token: string, sellerId: string, itemId: string): Promise<number | null>;
+  /** Anúncio completo (atributos, fotos, envio) para o editor. */
+  itemFull(token: string, itemId: string): Promise<MlItemFull>;
+  /** Descrição em texto puro; null se o anúncio não tiver. */
+  description(token: string, itemId: string): Promise<string | null>;
+  setDescription(token: string, itemId: string, text: string): Promise<void>;
+  /** Sobe uma imagem para o ML e devolve o id da foto. */
+  uploadPicture(token: string, file: { name: string; type: string; bytes: Buffer }): Promise<{ id: string; url: string | null }>;
+  /** Preços do anúncio (o "standard" é a base das faixas de atacado). */
+  prices(token: string, itemId: string): Promise<{ id: string; type: string; amount: number; currency_id?: string }[]>;
+  /** Preço que um comprador EMPRESA vê numa quantidade (contexto B2B). */
+  businessPrice(token: string, itemId: string, quantity: number): Promise<number | null>;
+  /** Grava as faixas de preço por quantidade (B2B). Lista só com o standard remove as faixas. */
+  setQuantityPrices(token: string, itemId: string, prices: unknown[]): Promise<void>;
   /** Campanhas da Central de Promoções do vendedor. */
   promotions(token: string, sellerId: string): Promise<MlPromotion[]>;
   /** Anúncios elegíveis e ainda fora da campanha (status=candidate), paginados por `searchAfter`. */
@@ -51,6 +64,18 @@ export interface MlApi {
   ): Promise<{ results: MlPromotionItem[]; searchAfter: string | null }>;
   /** Inscreve o anúncio na campanha (escreve no ML). */
   enrollPromotion(token: string, itemId: string, body: { promotion_id: string; promotion_type: string; deal_price?: number }): Promise<void>;
+}
+
+export interface MlItemFull {
+  id: string;
+  title: string;
+  status: string;
+  price?: number | null;
+  category_id?: string | null;
+  attributes?: { id: string; name?: string | null; value_id?: string | null; value_name?: string | null; value_type?: string | null }[] | null;
+  pictures?: { id: string; secure_url?: string | null; url?: string | null }[] | null;
+  shipping?: { logistic_type?: string | null; tags?: string[] | null; free_shipping?: boolean | null } | null;
+  catalog_listing?: boolean | null;
 }
 
 export interface MlPromotion {
@@ -219,6 +244,60 @@ export class HttpMlApi implements MlApi {
     return r?.coverage?.all_country?.list_cost ?? null;
   }
 
+  itemFull(token: string, itemId: string) {
+    return this.get<MlItemFull>(`/items/${encodeURIComponent(itemId)}?include_attributes=all`, token);
+  }
+
+  async description(token: string, itemId: string) {
+    const r = await this.optional(() => this.get<{ plain_text?: string | null }>(`/items/${encodeURIComponent(itemId)}/description`, token));
+    return r?.plain_text ?? null;
+  }
+
+  async setDescription(token: string, itemId: string, text: string) {
+    await this.send('PUT', `/items/${encodeURIComponent(itemId)}/description`, token, { plain_text: text });
+  }
+
+  async uploadPicture(token: string, file: { name: string; type: string; bytes: Buffer }) {
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(file.bytes)], { type: file.type }), file.name);
+    const r = await this.request<{ id: string; variations?: { secure_url?: string; url?: string }[] }>(
+      '/pictures/items/upload',
+      { method: 'POST', headers: { authorization: `Bearer ${token}`, accept: 'application/json' }, body: form },
+      false,
+    );
+    return { id: r.id, url: r.variations?.[0]?.secure_url ?? r.variations?.[0]?.url ?? null };
+  }
+
+  async prices(token: string, itemId: string) {
+    const r = await this.get<{ prices?: { id: string; type: string; amount: number; currency_id?: string }[] }>(
+      `/items/${encodeURIComponent(itemId)}/prices`,
+      token,
+    );
+    return r.prices ?? [];
+  }
+
+  async businessPrice(token: string, itemId: string, quantity: number) {
+    const qs = new URLSearchParams({ context: 'channel_marketplace,user_type_business', quantity: String(quantity) });
+    const r = await this.optional(() => this.get<{ amount?: number | null }>(`/items/${encodeURIComponent(itemId)}/sale_price?${qs}`, token));
+    return r?.amount ?? null;
+  }
+
+  async setQuantityPrices(token: string, itemId: string, prices: unknown[]) {
+    await this.send('POST', `/items/${encodeURIComponent(itemId)}/prices/standard/quantity`, token, { prices });
+  }
+
+  private send(method: string, path: string, token: string, body: unknown) {
+    return this.request<unknown>(
+      path,
+      {
+        method,
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      false,
+    );
+  }
+
   async promotions(token: string, sellerId: string) {
     const r = await this.get<{ results?: MlPromotion[] }>(
       `/seller-promotions/users/${encodeURIComponent(sellerId)}?app_version=v2`,
@@ -285,7 +364,10 @@ export class HttpMlApi implements MlApi {
         }
         throw new MlApiError(`Falha de rede com o Mercado Livre: ${(err as Error).message}`, 0);
       }
-      if (res.ok) return (await res.json()) as T;
+      if (res.ok) {
+        const text = await res.text();
+        return (text ? JSON.parse(text) : undefined) as T; // algumas escritas respondem sem corpo
+      }
       if ((res.status === 429 || res.status >= 500) && attempt < attempts) {
         await sleep(500 * 2 ** attempt);
         continue;

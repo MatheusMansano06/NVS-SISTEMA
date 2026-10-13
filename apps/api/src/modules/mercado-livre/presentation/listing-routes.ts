@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import {
   enrollPromotionSchema,
+  listingAttributesSchema,
+  listingDescriptionSchema,
+  listingDimensionsSchema,
+  listingPictureUploadSchema,
+  listingPicturesSchema,
+  listingWholesaleSchema,
   listListingsSchema,
   setListingPriceSchema,
   setListingStatusSchema,
@@ -10,6 +16,7 @@ import { z } from 'zod';
 import { ValidationError } from '../../../shared/kernel/errors.js';
 import type { ListingService } from '../application/listing-service.js';
 import type { PromotionService } from '../application/promotion-service.js';
+import type { ListingEditorService } from '../application/listing-editor-service.js';
 
 function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   const r = schema.safeParse(data);
@@ -24,7 +31,11 @@ const pagingSchema = z.object({
 });
 
 /** Aba Anúncios (Mercado Livre): lista, vendas, simulação de preço e ações. */
-export function listingRoutes(service: ListingService | null, promotions: PromotionService | null = null) {
+export function listingRoutes(
+  service: ListingService | null,
+  promotions: PromotionService | null = null,
+  editor: ListingEditorService | null = null,
+) {
   return async (app: FastifyInstance) => {
     const read = { preHandler: app.requirePermission('dashboard:read') };
     const write = { preHandler: app.requirePermission('listings:manage') };
@@ -59,6 +70,35 @@ export function listingRoutes(service: ListingService | null, promotions: Promot
       const { id } = parse(idParam, req.params);
       return promos().enroll(req.user.tenantId, connectionId, promotionId, id, parse(enrollPromotionSchema, req.body));
     });
+
+    // ---- Editor do anúncio
+    const ed = () => {
+      if (!editor) throw new ValidationError('Integração com o Mercado Livre ainda não configurada neste ambiente');
+      return editor;
+    };
+    const id = (req: { params: unknown }) => parse(idParam, req.params).id;
+
+    app.get('/listings/:id/editor', read, async (req) => ed().get(req.user.tenantId, id(req)));
+    app.put('/listings/:id/description', write, async (req) =>
+      ed().setDescription(req.user.tenantId, id(req), parse(listingDescriptionSchema, req.body).text),
+    );
+    app.put('/listings/:id/attributes', write, async (req) =>
+      ed().setAttributes(req.user.tenantId, id(req), parse(listingAttributesSchema, req.body).attributes),
+    );
+    app.put('/listings/:id/dimensions', write, async (req) =>
+      ed().setDimensions(req.user.tenantId, id(req), parse(listingDimensionsSchema, req.body)),
+    );
+    app.put('/listings/:id/pictures', write, async (req) =>
+      ed().setPictures(req.user.tenantId, id(req), parse(listingPicturesSchema, req.body).pictureIds),
+    );
+    // uma imagem por requisição (base64), para mostrar o progresso de cada uma
+    app.post('/listings/:id/pictures/upload', { ...write, bodyLimit: 15_000_000 }, async (req) =>
+      ed().uploadPicture(req.user.tenantId, id(req), parse(listingPictureUploadSchema, req.body)),
+    );
+    app.get('/listings/:id/wholesale', read, async (req) => ed().wholesale(req.user.tenantId, id(req)));
+    app.put('/listings/:id/wholesale', write, async (req) =>
+      ed().setWholesale(req.user.tenantId, id(req), parse(listingWholesaleSchema, req.body).tiers),
+    );
 
     app.get('/listings', read, async (req) => need().list(req.user.tenantId, parse(listListingsSchema, req.query)));
 

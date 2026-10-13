@@ -31,6 +31,7 @@ import {
   PgListingRepository,
   ListingService,
   PromotionService,
+  ListingEditorService,
   listingRoutes,
   mercadoLivreRoutes,
   type MlApi,
@@ -156,10 +157,12 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     : null;
   app.decorate('ml', ml);
   await app.register(mercadoLivreRoutes(ml), { prefix: '/api/v1' });
+  const listingService = ml && mlClient ? new ListingService(database, new PgListingRepository(), ml, mlClient) : null;
   await app.register(
     listingRoutes(
-      ml && mlClient ? new ListingService(database, new PgListingRepository(), ml, mlClient) : null,
+      listingService,
       ml && mlClient ? new PromotionService(database, new PgListingRepository(), ml, mlClient, sharedCache) : null,
+      listingService && ml && mlClient ? new ListingEditorService(listingService, ml, mlClient) : null,
     ),
     { prefix: '/api/v1' },
   );

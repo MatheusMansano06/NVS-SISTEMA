@@ -288,6 +288,12 @@ export class MlIntegrationService {
     await this.importListings(tenantId, connectionId, conn, missing);
   }
 
+  /** Relê anúncios no ML e atualiza o catálogo local (após uma edição pelo sistema). */
+  async refreshListings(tenantId: string, connectionId: string, ids: string[]): Promise<void> {
+    const { conn } = await this.accessToken(tenantId, connectionId);
+    await this.importListings(tenantId, connectionId, conn, ids);
+  }
+
   /** Busca anúncios em lotes de 20 (multiget) e grava no catálogo. */
   private async importListings(
     tenantId: string,

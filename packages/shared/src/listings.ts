@@ -194,3 +194,58 @@ export const enrollPromotionSchema = z.object({
   promotionType: z.string().trim().min(1).max(40),
   dealPrice: z.coerce.number().finite().positive().max(10_000_000).optional(),
 });
+
+// ================= Editor do anúncio
+
+export const PACKAGE_TYPES = ['Com embalagem adicional', 'Sem embalagem adicional'] as const;
+
+export interface ListingEditorDto {
+  id: string;
+  title: string;
+  sku: string | null;
+  price: number | null;
+  pictureUrl: string | null;
+  permalink: string | null;
+  logistic: ListingDto['logistic'];
+  /** Full: dimensões medidas pelo ML e estoque gerido por ele. */
+  full: boolean;
+  catalog: boolean;
+  description: string | null;
+  /** Ficha técnica (sem os campos de embalagem, editados em Dimensões). */
+  attributes: { id: string; name: string; value: string }[];
+  pictures: { id: string; url: string }[];
+  dimensions: { width: string; height: string; length: string; weight: string; packageType: string } | null;
+  shippingTags: string[];
+}
+
+export interface WholesaleDto {
+  standardPrice: number | null;
+  /** Preço que um comprador empresa vê em cada quantidade. */
+  sample: { quantity: number; price: number | null }[];
+  active: boolean;
+}
+
+const measure = z.coerce.number().finite().positive().max(1000);
+export const listingDescriptionSchema = z.object({ text: z.string().max(50_000) });
+export const listingAttributesSchema = z.object({
+  attributes: z.array(z.object({ id: z.string().regex(/^[A-Z0-9_]+$/), value: z.string().trim().max(255) })).max(300),
+});
+export const listingDimensionsSchema = z.object({
+  width: measure,
+  height: measure,
+  length: measure,
+  weight: z.coerce.number().int().positive().max(100_000),
+  packageType: z.enum(PACKAGE_TYPES),
+});
+export const listingPicturesSchema = z.object({ pictureIds: z.array(z.string().min(1).max(80)).min(1).max(12) });
+export const listingPictureUploadSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  /** Conteúdo em base64 (até ~10 MB). */
+  data: z.string().min(1).max(14_000_000),
+});
+export const listingWholesaleSchema = z.object({
+  tiers: z
+    .array(z.object({ minUnits: z.coerce.number().int().min(2).max(10_000), price: z.coerce.number().finite().positive() }))
+    .max(5),
+});

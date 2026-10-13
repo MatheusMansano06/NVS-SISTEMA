@@ -30,7 +30,7 @@ function randomCnpj(): string {
 
 /** API falsa do Mercado Livre: 120 pedidos nos últimos 90 dias (1 a cada 18h). */
 function fakeMl(sellerId: number) {
-  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null };
+  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '' };
   const now = Date.now();
   const orders: MlOrder[] = Array.from({ length: 120 }, (_, i) => ({
     id: 9_000_000 + i,
@@ -42,6 +42,8 @@ function fakeMl(sellerId: number) {
   }));
   let refreshSeq = 0;
   const enrolled = new Set<string>();
+  const b2b = new Map<number, number>();
+  const pkg = [{ id: 'SELLER_PACKAGE_WIDTH', name: 'Largura', value_name: '10 cm' }];
   // anúncios: MLB0..4 vendidos (ativos, com foto); MLB9001..3 pausados (P1 e P2 sem estoque)
   const catalog = new Map<string, MlItem>();
   for (let i = 0; i < 5; i++) {
@@ -82,6 +84,32 @@ function fakeMl(sellerId: number) {
         results: page.map((id) => ({ id, original_price: 100, suggested_discounted_price: 90, min_discounted_price: 80, max_discounted_price: 95 })),
         searchAfter: after ? null : 'p2',
       };
+    },
+    async itemFull(_t, id) {
+      const i = catalog.get(id)!;
+      return { ...i, attributes: [...(i.attributes ?? []).map((a) => ({ ...a, name: a.id })), ...pkg], pictures: [{ id: 'P1', secure_url: 'https://x/1.jpg' }] };
+    },
+    async description() {
+      return 'Descrição atual';
+    },
+    async setDescription(_t, _id, text) {
+      calls.desc = text;
+    },
+    async uploadPicture() {
+      return { id: 'NOVA', url: 'https://x/nova.jpg' };
+    },
+    async prices() {
+      return [{ id: 'STD', type: 'standard', amount: 100, currency_id: 'BRL' }];
+    },
+    async businessPrice(_t, _id, qty) {
+      const t = [...b2b].filter(([m]) => qty >= m).sort((a, b) => b[0] - a[0])[0];
+      return t ? t[1] : 100;
+    },
+    async setQuantityPrices(_t, _id, prices) {
+      b2b.clear();
+      for (const p of prices as { amount?: number; conditions?: { min_purchase_unit: number } }[]) {
+        if (p.conditions) b2b.set(p.conditions.min_purchase_unit, p.amount!);
+      }
     },
     async enrollPromotion(_t, itemId, body) {
       expect(body).toEqual({ promotion_id: 'P-DEAL', promotion_type: 'DEAL', deal_price: 88 });
@@ -302,6 +330,23 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     // inscrever invalida o cache: a lista já vem sem o anúncio
     const after = (await app.inject({ method: 'GET', url: candUrl, cookies })).json();
     expect(after.items.map((c: { id: string }) => c.id)).toEqual(['MLB1', 'MLB2']);
+    // ---- Editor: descrição e atacado B2B (confere a aplicação relendo o preço B2B)
+    const ed = (await app.inject({ method: 'GET', url: '/api/v1/listings/MLB1/editor', cookies })).json();
+    expect(ed).toMatchObject({ description: 'Descrição atual', dimensions: { width: '10' }, pictures: [{ id: 'P1' }] });
+    expect(ed.attributes.some((a: { id: string }) => a.id.startsWith('SELLER_PACKAGE_'))).toBe(false);
+    const d = await app.inject({ method: 'PUT', url: '/api/v1/listings/MLB1/description', cookies, payload: { text: 'Nova' } });
+    expect(d.statusCode).toBe(200);
+    expect(fake.calls.desc).toBe('Nova');
+    const w = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/listings/MLB1/wholesale',
+      cookies,
+      payload: { tiers: [{ minUnits: 10, price: 85 }, { minUnits: 5, price: 92 }] },
+    });
+    expect(w.json()).toEqual({ ok: true, tiers: 2 });
+    const ws = (await app.inject({ method: 'GET', url: '/api/v1/listings/MLB1/wholesale', cookies })).json();
+    expect(ws).toMatchObject({ standardPrice: 100, active: true, sample: [{ quantity: 1, price: 100 }, { quantity: 5, price: 92 }, { quantity: 10, price: 85 }, { quantity: 25, price: 85 }] });
+
     // outra empresa não usa a conexão desta
     const other = await account();
     const cross = await app.inject({ method: 'GET', url: candUrl, cookies: other });

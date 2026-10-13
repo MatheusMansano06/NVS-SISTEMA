@@ -4,6 +4,16 @@ import { int, money, pct } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
 import { listingsApi } from './listings-api';
+import type { EditorTab } from './ListingEditorModal';
+
+const EDIT: [EditorTab, string][] = [
+  ['description', 'Descrição'],
+  ['pictures', 'Fotos'],
+  ['attributes', 'Ficha técnica'],
+  ['dimensions', 'Dimensões'],
+  ['wholesale', 'Atacado B2B'],
+  ['flex', 'Flex'],
+];
 
 const LOGISTIC: Record<ListingDto['logistic'], { label: string; hint: string }> = {
   full: { label: 'Full', hint: 'ML armazena e envia' },
@@ -35,11 +45,12 @@ interface Props {
   onChanged: (patch: Partial<ListingDto>) => void;
   onPricing: () => void;
   onSales: () => void;
+  onEdit: (tab: EditorTab) => void;
   onMsg: (kind: 'ok' | 'error', text: string) => void;
 }
 
 /** Cartão de anúncio: foto, preço/margem, métricas e ações no mesmo lugar. */
-export function ListingCard({ item, canManage, onChanged, onPricing, onSales, onMsg }: Props) {
+export function ListingCard({ item, canManage, onChanged, onPricing, onSales, onEdit, onMsg }: Props) {
   const [stock, setStock] = useState(item.stock === null ? '' : String(item.stock));
   const [busy, setBusy] = useState<'stock' | 'status' | null>(null);
   useEffect(() => setStock(item.stock === null ? '' : String(item.stock)), [item.stock]);
@@ -198,6 +209,14 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
             </dd>
           </div>
         </dl>
+
+        {!closed && (
+          <nav className="lcard-edit" aria-label="Editar anúncio">
+            {EDIT.map(([tab, label]) => (
+              <button key={tab} type="button" onClick={() => onEdit(tab)}>{label}</button>
+            ))}
+          </nav>
+        )}
 
         <footer className="lcard-actions">
           <button type="button" className="act act-strong" onClick={onPricing}>Preço e margem</button>

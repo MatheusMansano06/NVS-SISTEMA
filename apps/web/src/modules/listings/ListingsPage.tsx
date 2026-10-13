@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ListingCard } from './ListingCard';
 import { ListingPricingModal } from './ListingPricingModal';
 import { ListingSalesModal } from './ListingSalesModal';
+import { ListingEditorModal, type EditorTab } from './ListingEditorModal';
 import { HowTo, ListingsNav } from './ListingsNav';
 import { listingsApi } from './listings-api';
 import '../skus/skus.css';
@@ -22,7 +23,7 @@ const TABS: { id: ListingTab; label: string }[] = [
 const STEPS = [
   { title: 'Encontre o anúncio', text: 'Use as abas (Ativos, Pausados, Finalizados) e a busca por título, SKU ou código MLB.' },
   { title: 'Confira a margem', text: 'O selo MC mostra quanto sobra por venda: verde ≥15%, amarelo 8–15%, vermelho abaixo. Sem custo, cadastre no chip “custo”.' },
-  { title: 'Ajuste na hora', text: 'Edite o estoque no próprio card, mude preço em “Preço e margem” e pause ou reative — tudo vai direto para o Mercado Livre.' },
+  { title: 'Ajuste na hora', text: 'Estoque no próprio card; preço em “Preço e margem”; descrição, fotos, ficha, dimensões e atacado nos botões de edição. Tudo vai direto para o Mercado Livre.' },
 ];
 
 /** Anúncios do Mercado Livre em cartões: lê do banco local (rápido) e só fala com o ML ao alterar. */
@@ -40,6 +41,7 @@ export function ListingsPage() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [pricing, setPricing] = useState<ListingDto | null>(null);
   const [sales, setSales] = useState<ListingDto | null>(null);
+  const [editing, setEditing] = useState<{ item: ListingDto; tab: EditorTab } | null>(null);
   const ctrl = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -145,6 +147,7 @@ export function ListingsPage() {
                 onChanged={(change) => patch(item.id, change)}
                 onPricing={() => setPricing(item)}
                 onSales={() => setSales(item)}
+                onEdit={(tab) => setEditing({ item, tab })}
                 onMsg={notify}
               />
             ))}
@@ -176,6 +179,20 @@ export function ListingsPage() {
             onSaved={() => {
               void load();
               notify('ok', 'Anúncio atualizado.');
+            }}
+          />
+        )}
+      </Modal>
+      <Modal open={editing !== null} onClose={() => setEditing(null)} label="Editar anúncio" wide>
+        {editing && (
+          <ListingEditorModal
+            key={`${editing.item.id}:${editing.tab}`}
+            item={editing.item}
+            initialTab={editing.tab}
+            canManage={canManage}
+            onSaved={(text) => {
+              notify('ok', text);
+              void load();
             }}
           />
         )}

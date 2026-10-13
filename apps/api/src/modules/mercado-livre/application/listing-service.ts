@@ -103,14 +103,14 @@ export class ListingService {
   }
 
   /** Conexão (e token) da conta dona do anúncio. */
-  private async session(tenantId: string, id: string) {
+  async session(tenantId: string, id: string) {
     const row = await this.db.withTenant(tenantId, (db) => this.repo.one(db, id));
     if (!row) throw new NotFoundError('Anúncio não encontrado');
     const status = await this.ml.status(tenantId);
     const conn = status.connections.find((c) => c.accountId === row.account_id);
     if (!conn || conn.status !== 'active') throw new Blocked('Conecte a conta do Mercado Livre para alterar este anúncio.');
     const { token, conn: c } = await this.ml.accessToken(tenantId, conn.id);
-    return { row, token, mlUserId: c.ml_user_id };
+    return { row, token, mlUserId: c.ml_user_id, connectionId: conn.id };
   }
 
   /** Simula tarifa e frete reais para um preço (consulta ao vivo no marketplace). */
@@ -188,7 +188,7 @@ export class ListingService {
   }
 
   /** Erros do ML viram resposta 502 legível, sem vazar detalhes internos. */
-  private async wrap<T>(fn: () => Promise<T>): Promise<T> {
+  async wrap<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (err) {

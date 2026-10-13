@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
@@ -70,7 +71,7 @@ try {
         await client.query('ROLLBACK');
         if (err.code !== '55P03' || attempt >= 12) throw err; // 55P03 = lock_not_available
         console.log(`  tabela ocupada, nova tentativa (${attempt}/12)`);
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
+        await sleep(2000 * attempt);
       }
     }
   }

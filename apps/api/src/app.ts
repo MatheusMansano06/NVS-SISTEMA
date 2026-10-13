@@ -37,6 +37,7 @@ import {
   ListingEditorService,
   PricingService,
   PgCategoryCache,
+  CachedMlLookups,
   pricingRoutes,
   listingRoutes,
   mercadoLivreRoutes,
@@ -164,7 +165,8 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     : null;
   app.decorate('ml', ml);
   await app.register(mercadoLivreRoutes(ml), { prefix: '/api/v1' });
-  const listingService = ml && mlClient ? new ListingService(database, new PgListingRepository(), ml, mlClient) : null;
+  const mlLookups = mlClient ? new CachedMlLookups(mlClient, sharedCache) : null;
+  const listingService = ml && mlClient && mlLookups ? new ListingService(database, new PgListingRepository(), ml, mlClient, mlLookups) : null;
   await app.register(
     listingRoutes(
       listingService,
@@ -173,7 +175,7 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     ),
     { prefix: '/api/v1' },
   );
-  await app.register(pricingRoutes(ml && mlClient ? new PricingService(database, ml, mlClient, new PgCategoryCache(database)) : null), { prefix: '/api/v1' });
+  await app.register(pricingRoutes(ml && mlClient ? new PricingService(database, ml, mlClient, new PgCategoryCache(database), mlLookups!) : null), { prefix: '/api/v1' });
   const onboarding = new OnboardingService(database, new PgOnboardingRepository(), events);
   await app.register(onboardingRoutes(onboarding), { prefix: '/api/v1' });
   await app.register(identityRoutes(identity, {

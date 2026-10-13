@@ -23,6 +23,27 @@ class NotApplied extends AppError {
   }
 }
 
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/** Assinatura dos formatos aceitos (o tipo informado pelo navegador não basta). */
+export function imageKind(b: Buffer): 'image/jpeg' | 'image/png' | 'image/webp' | null {
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (b.length >= 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
+/** Base64 válido, até 10 MB, e conteúdo que é mesmo uma imagem do tipo informado. */
+export function decodeImage(type: string, data: string): Buffer {
+  if (data.length % 4 !== 0 || !BASE64.test(data)) throw new AppError('Arquivo inválido.', 'VALIDATION_ERROR', 400);
+  const bytes = Buffer.from(data, 'base64');
+  if (bytes.length > 10 * 1024 * 1024) throw new AppError('Imagem acima de 10 MB.', 'VALIDATION_ERROR', 400);
+  const kind = imageKind(bytes);
+  if (!kind) throw new AppError('O arquivo não é uma imagem JPG, PNG ou WEBP.', 'VALIDATION_ERROR', 400);
+  if (kind !== type) throw new AppError('O conteúdo do arquivo não bate com o tipo informado.', 'VALIDATION_ERROR', 400);
+  return bytes;
+}
+
 /** Primeiro número de "28 cm" / "1880 g". */
 export const firstNumber = (s: string | null | undefined): number | null => {
   const n = Number(String(s ?? '').replace(',', '.').split(/\s+/)[0]);
@@ -154,8 +175,7 @@ export class ListingEditorService {
   }
 
   async uploadPicture(tenantId: string, id: string, file: { name: string; type: string; data: string }) {
-    const bytes = Buffer.from(file.data, 'base64');
-    if (bytes.length > 10 * 1024 * 1024) throw new AppError('Imagem acima de 10 MB.', 'VALIDATION_ERROR', 400);
+    const bytes = decodeImage(file.type, file.data);
     const { token } = await this.listings.session(tenantId, id);
     return this.listings.wrap(() => this.api.uploadPicture(token, { name: file.name, type: file.type, bytes }));
   }

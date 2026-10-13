@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { MlStatusDto } from '@nvs/shared';
+import { z } from 'zod';
 import { AppError } from '../../../shared/kernel/errors.js';
 import type { MlIntegrationService, MlNotification } from '../application/ml-integration-service.js';
 
@@ -8,6 +9,13 @@ class NotConfiguredError extends AppError {
     super('Integração com o Mercado Livre ainda não configurada neste ambiente', 'NOT_CONFIGURED', 503);
   }
 }
+
+const notificationSchema = z.object({
+  topic: z.string().max(40),
+  resource: z.string().max(200).regex(/^\/[\w/.-]+$/),
+  user_id: z.union([z.number().int().positive(), z.string().regex(/^\d{1,20}$/)]),
+  application_id: z.union([z.number().int().positive(), z.string().regex(/^[\w-]{1,40}$/)]),
+});
 
 /** `service` nulo = variáveis do ML ausentes neste ambiente (rotas respondem 503). */
 export function mercadoLivreRoutes(service: MlIntegrationService | null) {
@@ -30,16 +38,17 @@ export function mercadoLivreRoutes(service: MlIntegrationService | null) {
       return reply.redirect(result.ok ? '/?ml=connected' : `/?ml=error&reason=${result.reason}`);
     });
 
-    // o ML exige resposta rápida (200 em até 500ms): confirma e processa em segundo plano
-    app.post(`${base}/notifications`, { config: { rateLimit: false } }, async (req, reply) => {
-      if (service) {
-        const n = (req.body ?? {}) as MlNotification;
-        setImmediate(() => {
-          service.handleNotification(n).catch((err) => req.log.error({ err }, 'Mercado Livre: notificação falhou'));
-        });
-      }
-      return reply.code(200).send({ ok: true });
-    });
+    // o ML exige resposta rápida (200 em até 500ms): confirma e processa em segundo plano, por uma fila
+    // com descarte de repetidos. Limite alto (o ML manda muitos avisos), mas finito; corpo validado.
+    app.post(
+      `${base}/notifications`,
+      { config: { rateLimit: { max: 3000, timeWindow: '1 minute' } }, bodyLimit: 8_192 },
+      async (req, reply) => {
+        const n = notificationSchema.safeParse(req.body ?? {});
+        if (service && n.success) service.enqueueNotification(n.data as MlNotification);
+        return reply.code(200).send({ ok: true });
+      },
+    );
 
     app.get(`${base}/status`, { preHandler: app.authenticate }, async (req): Promise<MlStatusDto> => {
       if (!service) return { configured: false, connections: [] };

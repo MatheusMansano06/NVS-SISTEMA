@@ -48,6 +48,11 @@ const MAX_LISTING_PAGES = 200; // até 20 mil anúncios por status (scan de 100 
 export class MlIntegrationService {
   private inflight = new Set<Promise<void>>();
   private processingOrders = new Set<string>();
+  private refreshing = new Map<string, Promise<{ token: string; conn: ConnectionRow }>>();
+  // fila de notificações: o ML reenvia muito; repetidas em 30s são descartadas e a fila tem limite
+  private notifSeen = new Map<string, number>();
+  private notifQueue: MlNotification[] = [];
+  private notifWorkers = 0;
 
   constructor(
     private readonly db: Database,
@@ -104,12 +109,31 @@ export class MlIntegrationService {
     return { ok: true, tenantId: saved.tenant_id, connectionId };
   }
 
-  /** Access token válido, renovando com o refresh token (uso único) quando perto de expirar. */
+  /**
+   * Access token válido. Caminho rápido: leitura simples (sem trava). Perto de expirar, renova com o refresh
+   * token (uso único) — uma renovação por conexão por vez nesta instância (as outras requisições esperam a
+   * mesma promessa em vez de ocupar conexões do pool) e com trava na linha entre instâncias.
+   */
   async accessToken(tenantId: string, connectionId: string): Promise<{ token: string; conn: ConnectionRow }> {
+    const conn = await this.db.withTenant(tenantId, (db) => this.repo.findConnection(db, connectionId));
+    if (!conn) throw new Error('Conexão não encontrada');
+    if (conn.status === 'revoked') throw new MlApiError('Autorização revogada', 401, 'revoked');
+    if (conn.expires_at.getTime() - Date.now() > REFRESH_MARGIN_MS) {
+      return { token: this.cipher.decrypt(conn.access_token_enc), conn };
+    }
+    const running = this.refreshing.get(connectionId);
+    if (running) return running;
+    const job = this.refreshToken(tenantId, connectionId).finally(() => this.refreshing.delete(connectionId));
+    this.refreshing.set(connectionId, job);
+    return job;
+  }
+
+  private refreshToken(tenantId: string, connectionId: string): Promise<{ token: string; conn: ConnectionRow }> {
     return this.db.withTenant(tenantId, async (db) => {
       const conn = await this.repo.lockConnection(db, connectionId);
       if (!conn) throw new Error('Conexão não encontrada');
       if (conn.status === 'revoked') throw new MlApiError('Autorização revogada', 401, 'revoked');
+      // outra instância pode ter renovado enquanto esperávamos a trava
       if (conn.expires_at.getTime() - Date.now() > REFRESH_MARGIN_MS) {
         return { token: this.cipher.decrypt(conn.access_token_enc), conn };
       }
@@ -167,6 +191,7 @@ export class MlIntegrationService {
   /** Inicia (em segundo plano) se não houver uma em andamento. */
   async startSync(tenantId: string, connectionId: string): Promise<void> {
     const runId = await this.db.withTenant(tenantId, async (db) => {
+      await this.repo.lockSync(db, connectionId); // dois cliques seguidos não abrem duas sincronizações
       const last = await this.repo.latestRun(db, connectionId);
       if (last?.status === 'running') return null;
       return this.repo.startRun(db, tenantId, connectionId);
@@ -455,7 +480,9 @@ export class MlIntegrationService {
    */
   async syncIncremental(tenantId: string, connectionId: string): Promise<void> {
     const runId = await this.db.withTenant(tenantId, async (db) => {
+      await this.repo.lockSync(db, connectionId);
       if ((await this.repo.latestRun(db, connectionId))?.status === 'running') return null; // completa em andamento
+      if ((await this.repo.latestRun(db, connectionId, 'incremental'))?.status === 'running') return null;
       return this.repo.startRun(db, tenantId, connectionId, 'incremental');
     });
     if (!runId) return;
@@ -511,6 +538,39 @@ export class MlIntegrationService {
   }
 
   // ================= Notificações (tempo real)
+  /**
+   * Entrada do webhook: descarta repetidas (mesmo recurso em 30s), limita a fila e processa com no máximo
+   * 4 em paralelo. Assim um flood de avisos não vira um flood de chamadas ao ML e ao banco.
+   */
+  enqueueNotification(n: MlNotification): boolean {
+    const key = `${n.topic}|${n.resource}|${n.user_id}`;
+    const now = Date.now();
+    if ((this.notifSeen.get(key) ?? 0) > now) return false;
+    if (this.notifSeen.size > 10_000) {
+      for (const [k, exp] of this.notifSeen) if (exp <= now) this.notifSeen.delete(k);
+    }
+    this.notifSeen.set(key, now + 30_000);
+    if (this.notifQueue.length >= 2_000) return false;
+    this.notifQueue.push(n);
+    this.drainNotifications();
+    return true;
+  }
+
+  private drainNotifications() {
+    while (this.notifWorkers < 4 && this.notifQueue.length) {
+      const n = this.notifQueue.shift()!;
+      this.notifWorkers++;
+      const job = this.handleNotification(n)
+        .catch((err) => this.log.error({ err }, 'Mercado Livre: notificação falhou'))
+        .finally(() => {
+          this.notifWorkers--;
+          this.inflight.delete(job);
+          this.drainNotifications();
+        });
+      this.inflight.add(job);
+    }
+  }
+
   async handleNotification(n: MlNotification): Promise<void> {
     if (String(n.application_id ?? '') !== this.opts.clientId) return; // não é do nosso app
     if (!n.user_id || !n.resource) return;

@@ -23,7 +23,11 @@ const KNOWN_TYPES = Object.values(PAYMENT_TYPES).flat();
  */
 function ordersCte(f: SalesFilter, params: unknown[]): string {
   params.push(f.range.from, f.range.to);
-  const where = [`(o.ordered_at AT TIME ZONE '${TIMEZONE}')::date BETWEEN $1 AND $2`];
+  // limites como instantes (meia-noite de São Paulo): usa o índice (tenant_id, ordered_at)
+  const where = [
+    `o.ordered_at >= ($1::date)::timestamp AT TIME ZONE '${TIMEZONE}'`,
+    `o.ordered_at < ($2::date + 1)::timestamp AT TIME ZONE '${TIMEZONE}'`,
+  ];
   if (f.accountId) {
     params.push(f.accountId);
     where.push(`o.account_id = $${params.length}`);
@@ -44,7 +48,7 @@ function ordersCte(f: SalesFilter, params: unknown[]): string {
         JOIN order_items i ON i.order_id = o.id
         CROSS JOIN LATERAL (SELECT coalesce(i.quantity * i.unit_price / nullif(o.gross_amount, 0), 1) AS share) s
        WHERE ${where.join(' AND ')}
-    ), ord AS (
+    ), ord AS MATERIALIZED (
       SELECT id, external_id, ordered_at, status, payment_type, installments, logistic_bucket, ship_state, ship_city,
              ship_zip, buyer_nickname, pack_id,
              sum(quantity) AS units, round(sum(gross), 2) AS gross, round(sum(fee), 2) AS fee,
@@ -60,53 +64,53 @@ function ordersCte(f: SalesFilter, params: unknown[]): string {
 const n = (v: string | null) => (v === null ? null : Number(v));
 
 export class PgSalesAnalyticsRepository {
+  /** Tudo da visão geral numa consulta só: a base (CTE) é calculada uma vez e reaproveitada. */
   async overview(db: Queryable, f: SalesFilter) {
     const params: unknown[] = [];
     const cte = ordersCte(f, params);
-    const q = <T extends Record<string, unknown>>(sql: string) => db.query<T>(`${cte} ${sql}`, params).then((r) => r.rows);
-
-    const [k] = await q<{ orders: string; units: string; revenue: string; profit: string | null; known: boolean; cancelled: string }>(
-      `SELECT count(*) FILTER (WHERE status = 'paid') AS orders,
-              coalesce(sum(units) FILTER (WHERE status = 'paid'), 0) AS units,
-              coalesce(sum(gross) FILTER (WHERE status = 'paid'), 0) AS revenue,
-              sum(profit) FILTER (WHERE status = 'paid') AS profit,
-              coalesce(bool_and(cost IS NOT NULL) FILTER (WHERE status = 'paid'), true) AS known,
-              count(*) FILTER (WHERE status <> 'paid') AS cancelled
-         FROM ord`,
+    const month = `to_char(ordered_at AT TIME ZONE '${TIMEZONE}', 'YYYY-MM')`;
+    const { rows } = await db.query<{
+      kpis: { orders: number; units: number; revenue: number; profit: number | null; known: boolean };
+      cancelled: number;
+      payments: { payment_type: string | null; orders: number }[];
+      shipping: { bucket: string; orders: number }[];
+      states: { uf: string; orders: number; revenue: number }[];
+      months: { month: string; orders: number; revenue: number; profit: number | null; known: boolean }[];
+      month_states: { month: string; uf: string; orders: number; revenue: number }[];
+    }>(
+      `${cte}, paid AS (SELECT * FROM ord WHERE status = 'paid')
+       SELECT
+         (SELECT json_build_object('orders', count(*), 'units', coalesce(sum(units), 0), 'revenue', coalesce(sum(gross), 0),
+                                   'profit', sum(profit), 'known', coalesce(bool_and(cost IS NOT NULL), true)) FROM paid) AS kpis,
+         (SELECT count(*)::int FROM ord WHERE status <> 'paid') AS cancelled,
+         (SELECT coalesce(json_agg(x), '[]') FROM (SELECT payment_type, count(*) AS orders FROM paid GROUP BY 1) x) AS payments,
+         (SELECT coalesce(json_agg(x ORDER BY x.orders DESC), '[]') FROM
+            (SELECT coalesce(logistic_bucket, 'outros') AS bucket, count(*) AS orders FROM paid GROUP BY 1) x) AS shipping,
+         (SELECT coalesce(json_agg(x ORDER BY x.orders DESC, x.revenue DESC), '[]') FROM
+            (SELECT ship_state AS uf, count(*) AS orders, sum(gross) AS revenue FROM paid WHERE ship_state IS NOT NULL GROUP BY 1) x) AS states,
+         (SELECT coalesce(json_agg(x ORDER BY x.month DESC), '[]') FROM
+            (SELECT ${month} AS month, count(*) AS orders, sum(gross) AS revenue, sum(profit) AS profit,
+                    bool_and(cost IS NOT NULL) AS known FROM paid GROUP BY 1) x) AS months,
+         (SELECT coalesce(json_agg(x), '[]') FROM
+            (SELECT ${month} AS month, ship_state AS uf, count(*) AS orders, sum(gross) AS revenue
+               FROM paid WHERE ship_state IS NOT NULL GROUP BY 1, 2) x) AS month_states`,
+      params,
     );
-    const payments = await q<{ payment_type: string | null; orders: string }>(
-      `SELECT payment_type, count(*) AS orders FROM ord WHERE status = 'paid' GROUP BY 1`,
-    );
-    const shipping = await q<{ bucket: string | null; orders: string }>(
-      `SELECT coalesce(logistic_bucket, 'outros') AS bucket, count(*) AS orders FROM ord WHERE status = 'paid' GROUP BY 1 ORDER BY 2 DESC`,
-    );
-    const states = await q<{ uf: string; orders: string; revenue: string }>(
-      `SELECT ship_state AS uf, count(*) AS orders, sum(gross) AS revenue
-         FROM ord WHERE status = 'paid' AND ship_state IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 3 DESC`,
-    );
-    const months = await q<{ month: string; orders: string; revenue: string; profit: string | null; known: boolean }>(
-      `SELECT to_char(ordered_at AT TIME ZONE '${TIMEZONE}', 'YYYY-MM') AS month, count(*) AS orders, sum(gross) AS revenue,
-              sum(profit) AS profit, bool_and(cost IS NOT NULL) AS known
-         FROM ord WHERE status = 'paid' GROUP BY 1 ORDER BY 1 DESC`,
-    );
-    const monthStates = await q<{ month: string; uf: string; orders: string; revenue: string }>(
-      `SELECT to_char(ordered_at AT TIME ZONE '${TIMEZONE}', 'YYYY-MM') AS month, ship_state AS uf,
-              count(*) AS orders, sum(gross) AS revenue
-         FROM ord WHERE status = 'paid' AND ship_state IS NOT NULL GROUP BY 1, 2`,
-    );
+    const r = rows[0]!;
+    const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
     return {
       kpis: {
-        orders: Number(k!.orders),
-        units: Number(k!.units),
-        revenue: Number(k!.revenue),
-        profit: k!.known ? n(k!.profit) ?? 0 : null,
-        cancelled: Number(k!.cancelled),
+        orders: Number(r.kpis.orders),
+        units: Number(r.kpis.units),
+        revenue: Number(r.kpis.revenue),
+        profit: r.kpis.known ? n(r.kpis.profit) ?? 0 : null,
+        cancelled: Number(r.cancelled),
       },
-      payments: payments.map((r) => ({ type: r.payment_type, orders: Number(r.orders) })),
-      shipping: shipping.map((r) => ({ bucket: r.bucket ?? 'outros', orders: Number(r.orders) })),
-      states: states.map((r) => ({ uf: r.uf, orders: Number(r.orders), revenue: Number(r.revenue) })),
-      months: months.map((r) => ({ month: r.month, orders: Number(r.orders), revenue: Number(r.revenue), profit: r.known ? n(r.profit) ?? 0 : null })),
-      monthStates: monthStates.map((r) => ({ month: r.month, uf: r.uf, orders: Number(r.orders), revenue: Number(r.revenue) })),
+      payments: r.payments.map((x) => ({ type: x.payment_type, orders: Number(x.orders) })),
+      shipping: r.shipping.map((x) => ({ bucket: x.bucket, orders: Number(x.orders) })),
+      states: r.states.map((x) => ({ uf: x.uf, orders: Number(x.orders), revenue: Number(x.revenue) })),
+      months: r.months.map((x) => ({ month: x.month, orders: Number(x.orders), revenue: Number(x.revenue), profit: x.known ? n(x.profit) ?? 0 : null })),
+      monthStates: r.month_states.map((x) => ({ month: x.month, uf: x.uf, orders: Number(x.orders), revenue: Number(x.revenue) })),
     };
   }
 
@@ -130,14 +134,24 @@ export class PgSalesAnalyticsRepository {
                    OR ship_city ILIKE ${p} OR EXISTS (SELECT 1 FROM order_items x WHERE x.order_id = ord.id AND (x.title ILIKE ${p} OR x.sku ILIKE ${p})))`);
     }
     const filter = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const total = await db.query<{ n: string }>(`${cte} SELECT count(*) AS n FROM ord ${filter}`, params);
     params.push(f.limit, f.offset);
     const { rows } = await db.query<{
       id: string; external_id: string; ordered_at: Date; status: 'paid' | 'cancelled' | 'returned'; payment_type: string | null;
       installments: number | null; logistic_bucket: string | null; ship_state: string | null; ship_city: string | null;
       ship_zip: string | null; buyer_nickname: string | null; pack_id: string | null; gross: string; fee: string;
-      freight: string; tax: string; cost: string | null; profit: string | null;
-    }>(`${cte} SELECT * FROM ord ${filter} ORDER BY ordered_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
+      freight: string; tax: string; cost: string | null; profit: string | null; total_count: string;
+    }>(
+      // contagem e página na mesma consulta (a base não é recalculada)
+      `${cte} SELECT *, count(*) OVER () AS total_count FROM ord ${filter}
+        ORDER BY ordered_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+    // página além do fim: conta à parte (raro)
+    const total = rows.length
+      ? Number(rows[0]!.total_count)
+      : f.offset
+        ? Number((await db.query<{ n: string }>(`${cte} SELECT count(*) AS n FROM ord ${filter}`, params.slice(0, -2))).rows[0]!.n)
+        : 0;
     const items = rows.length
       ? (
           await db.query<{ order_id: string; title: string; sku: string; quantity: number; unit_price: string; listing_id: string | null }>(
@@ -147,7 +161,7 @@ export class PgSalesAnalyticsRepository {
           )
         ).rows
       : [];
-    return { rows, items, total: Number(total.rows[0]!.n) };
+    return { rows, items, total };
   }
 
   /** DIFAL cobrado nas faturas do ML por mês (AAAA-MM), das contas filtradas. */
@@ -155,7 +169,7 @@ export class PgSalesAnalyticsRepository {
     const { rows } = await db.query<{ month: string; amount: string }>(
       `SELECT to_char(period_key, 'YYYY-MM') AS month, sum(difal) AS amount
          FROM ml_billing_periods
-        WHERE to_char(period_key, 'YYYY-MM') BETWEEN $1 AND $2 ${accountId ? 'AND account_id = $3' : ''}
+        WHERE period_key BETWEEN ($1 || '-01')::date AND ($2 || '-01')::date ${accountId ? 'AND account_id = $3' : ''}
         GROUP BY 1 ORDER BY 1 DESC`,
       accountId ? [fromMonth, toMonth, accountId] : [fromMonth, toMonth],
     );

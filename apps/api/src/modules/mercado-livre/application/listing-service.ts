@@ -12,6 +12,7 @@ import { AppError, NotFoundError } from '../../../shared/kernel/errors.js';
 import { formatDimensions, logisticOf, typeLabel, unitMargin } from '../domain/listing-margin.js';
 import { MlApiError, type MlApi, type MlItemFull } from '../infrastructure/ml-api.js';
 import { PgListingRepository, toNumber, type ListingRow } from '../infrastructure/pg-listing-repository.js';
+import type { CachedMlLookups } from '../infrastructure/cached-ml-lookups.js';
 import type { MlIntegrationService } from './ml-integration-service.js';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -31,6 +32,7 @@ export class ListingService {
     private readonly repo: PgListingRepository,
     private readonly ml: MlIntegrationService,
     private readonly api: MlApi,
+    private readonly lookups: CachedMlLookups,
   ) {}
 
   private toDto(r: ListingRow, taxPct: number): ListingDto {
@@ -182,32 +184,19 @@ export class ListingService {
   }
 
   /** Simula tarifa e frete reais para um preço (consulta ao vivo no marketplace). */
+  /**
+   * Tarifa e frete reais para um preço (padrão: o atual). Usa o cache de consultas ao ML (`refresh` ignora);
+   * o preço vigente fica salvo no anúncio para a lista mostrar a margem sem consultar nada.
+   */
   async pricing(tenantId: string, id: string, price?: number, refresh = false): Promise<ListingPricingDto> {
-    const row0 = await this.db.withTenant(tenantId, (db) => this.repo.one(db, id));
-    if (!row0) throw new NotFoundError('Anúncio não encontrado');
-    const current = toNumber(row0.price);
-    const isCurrent = price === undefined || (current !== null && Math.abs(price - current) < 0.005);
-    // já consultado para este preço: responde do banco, sem chamar o marketplace
-    if (!refresh && isCurrent && row0.pricing_price !== null && current !== null && Math.abs(Number(row0.pricing_price) - current) < 0.005) {
-      const taxPct = await this.db.withTenant(tenantId, (db) => this.repo.taxPct(db));
-      const fee = netFee(toNumber(row0.fee_amount), toNumber(row0.fee_bonus) ?? 0);
-      const freight = toNumber(row0.freight_cost);
-      return {
-        price: current,
-        fee,
-        feePct: toNumber(row0.fee_pct),
-        freight,
-        margin: unitMargin({ price: current, fee, freight, cost: toNumber(row0.custo_unit), taxPct, source: 'live' }),
-        type: row0.listing_type_id,
-        options: [],
-      };
-    }
     const { row, token, mlUserId } = await this.session(tenantId, id);
-    const target = price ?? toNumber(row.price);
+    const current = toNumber(row.price);
+    const isCurrent = price === undefined || (current !== null && Math.abs(price - current) < 0.005);
+    const target = price ?? current;
     if (!target || target <= 0) throw new Blocked('Anúncio sem preço para simular.');
     const [fees, freightCost, taxPct] = await Promise.all([
-      this.wrap(() => this.api.listingFees(token, target, row.category_id)),
-      row.free_shipping ? this.wrap(() => this.api.freeShippingCost(token, mlUserId, id)) : Promise.resolve(0),
+      this.wrap(() => this.lookups.listingFees(token, target, row.category_id, refresh)),
+      row.free_shipping ? this.wrap(() => this.lookups.freeShippingCost(token, tenantId, mlUserId, id, refresh)) : Promise.resolve(0),
       this.db.withTenant(tenantId, (db) => this.repo.taxPct(db)),
     ]);
     const f = fees.find((x) => x.listing_type_id === row.listing_type_id);

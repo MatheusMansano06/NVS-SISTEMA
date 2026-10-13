@@ -113,6 +113,19 @@ export class PgMlRepository {
   }
 
   /** Lê a conexão travando a linha (evita duas renovações simultâneas do refresh token de uso único). */
+  async findConnection(db: Queryable, id: string): Promise<ConnectionRow | null> {
+    const { rows } = await db.query<ConnectionRow>(
+      `SELECT ${CONN_COLS} FROM ml_connections c JOIN marketplace_accounts a ON a.id = c.account_id WHERE c.id = $1`,
+      [id],
+    );
+    return rows[0] ?? null;
+  }
+
+  /** Serializa sincronizações da mesma conexão (entre requisições e instâncias) até o fim da transação. */
+  async lockSync(db: Queryable, connectionId: string): Promise<void> {
+    await db.query("SELECT pg_advisory_xact_lock(hashtext('ml-sync:' || $1))", [connectionId]);
+  }
+
   async lockConnection(db: Queryable, id: string): Promise<ConnectionRow | null> {
     const { rows } = await db.query<ConnectionRow>(
       `SELECT ${CONN_COLS} FROM ml_connections c JOIN marketplace_accounts a ON a.id = c.account_id

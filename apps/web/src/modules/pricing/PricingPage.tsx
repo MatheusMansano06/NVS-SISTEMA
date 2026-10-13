@@ -152,7 +152,7 @@ function Calculator({ onSaved }: { onSaved: () => void }) {
     setEstimated(false);
     try {
       if (mode === 'listing' && listing) {
-        const r = await listingsApi.pricing(listing.id, priceNum === listing.price ? undefined : priceNum, c.signal, true);
+        const r = await listingsApi.pricing(listing.id, priceNum === listing.price ? undefined : priceNum, c.signal);
         setOptions(
           r.options.map((o) => ({
             type: o.type,

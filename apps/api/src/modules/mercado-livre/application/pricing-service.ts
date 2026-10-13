@@ -15,6 +15,7 @@ import { AppError, NotFoundError } from '../../../shared/kernel/errors.js';
 import { typeLabel } from '../domain/listing-margin.js';
 import { MlApiError, type MlApi } from '../infrastructure/ml-api.js';
 import type { CategoryRow, PgCategoryCache } from '../infrastructure/pg-category-cache.js';
+import type { CachedMlLookups } from '../infrastructure/cached-ml-lookups.js';
 import type { MlIntegrationService } from './ml-integration-service.js';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -40,6 +41,7 @@ export class PricingService {
     private readonly ml: MlIntegrationService,
     private readonly api: MlApi,
     private readonly cache: PgCategoryCache,
+    private readonly lookups: CachedMlLookups,
   ) {}
 
   /** Token de qualquer conta ativa da empresa (as tarifas são as mesmas para o site MLB). */
@@ -141,7 +143,7 @@ export class PricingService {
     if (!free) return { freight: 0, freeShipping: false, source: 'none' };
     const { token, sellerId } = await this.anySession(tenantId);
     const cost = await this.wrap(() =>
-      this.api.freightByDimensions(token, sellerId, {
+      this.lookups.freightByDimensions(token, tenantId, sellerId, {
         dimensions: `${Math.ceil(q.height)}x${Math.ceil(q.width)}x${Math.ceil(q.length)},${q.weight}`,
         price: q.price,
         type: q.type,
@@ -155,7 +157,7 @@ export class PricingService {
 
   async quote(tenantId: string, price: number, categoryId?: string): Promise<PricingQuoteDto> {
     const token = await this.anyToken(tenantId);
-    const fees = await this.wrap(() => this.api.listingFees(token, price, categoryId ?? null));
+    const fees = await this.wrap(() => this.lookups.listingFees(token, price, categoryId ?? null));
     const out: FeeQuoteDto[] = (['gold_special', 'gold_pro'] as const).flatMap((type) => {
       const f = fees.find((x) => x.listing_type_id === type);
       if (!f) return [];

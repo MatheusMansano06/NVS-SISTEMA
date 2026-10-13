@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadEnv } from '../src/config/env.js';
 import { buildApp } from '../src/app.js';
+import { Database } from '../src/shared/infrastructure/database.js';
 import type { MlApi, MlOrder } from '../src/modules/mercado-livre/index.js';
 import type { MlItem } from '../src/modules/mercado-livre/domain/ml-order.js';
 import { resolvePeriod, todayIn } from '../src/modules/sales/domain/period.js';
@@ -30,7 +31,7 @@ function randomCnpj(): string {
 
 /** API falsa do Mercado Livre: 120 pedidos nos últimos 90 dias (1 a cada 18h). */
 function fakeMl(sellerId: number) {
-  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null, catCalls: 0, lastFreight: '', billing: 0 };
+  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null, catCalls: 0, lastFreight: '', billing: 0, orderFetch: {} as Record<string, number> };
   const now = Date.now();
   const orders: MlOrder[] = Array.from({ length: 120 }, (_, i) => ({
     id: 9_000_000 + i,
@@ -208,6 +209,7 @@ function fakeMl(sellerId: number) {
       return { results: inRange.slice(offset, offset + 50), paging: { total: inRange.length, offset, limit: 50 } };
     },
     async order(_t, id) {
+      calls.orderFetch[id] = (calls.orderFetch[id] ?? 0) + 1;
       return {
         ...orders[0]!,
         id: Number(id),
@@ -278,8 +280,10 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
   });
   afterAll(() => app.close());
 
+  let firstCookies: Record<string, string> = {};
   it('conecta, sincroniza em etapas, renova o token e preenche o dashboard', async () => {
     const cookies = await account();
+    firstCookies = cookies;
     const before = await app.inject({ method: 'GET', url: '/api/v1/integrations/mercado-livre/status', cookies });
     expect(before.json()).toEqual({ configured: true, connections: [] });
 
@@ -502,6 +506,37 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
       url: `/api/v1/integrations/mercado-livre/callback?code=codigo-bom&state=${await stateOf(cookies)}`,
     });
     expect(taken.headers.location).toBe('/?ml=error&reason=taken');
+  });
+
+  it('notificações repetidas em sequência viram uma só consulta ao ML; corpo inválido é ignorado', async () => {
+    const send = (payload: object) =>
+      app.inject({ method: 'POST', url: '/api/v1/integrations/mercado-livre/notifications', payload });
+    const n = { topic: 'orders_v2', resource: '/orders/5557777', user_id: sellerId, application_id: 'app-teste' };
+    const rs = await Promise.all(Array.from({ length: 8 }, () => send(n)));
+    expect(rs.every((r) => r.statusCode === 200)).toBe(true);
+    expect((await send({ topic: 'orders_v2', resource: "'; drop table x", user_id: 'abc' })).statusCode).toBe(200);
+    await app.ml!.whenIdle();
+    expect(fake.calls.orderFetch['5557777']).toBe(1);
+  });
+
+  it('dois pedidos de sincronização ao mesmo tempo abrem uma só', async () => {
+    const cookies = await account();
+    const state = await stateOf(cookies);
+    // conta nova do mesmo vendedor não pode (já é de outra empresa): usa a conexão da 1ª empresa via status
+    expect(state).toBeTruthy();
+    const svc = app.ml!;
+    const tenant = (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies: firstCookies })).json().tenant.id as string;
+    const conn = (await svc.status(tenant)).connections[0]!;
+    await svc.whenIdle();
+    const db = new Database(TEST_DB!);
+    const count = async () =>
+      (await db.withTenant(tenant, (c) => c.query("SELECT count(*)::int AS n FROM ml_sync_runs WHERE connection_id = $1 AND kind = 'full'", [conn.id]))).rows[0].n as number;
+    const before = await count();
+    await Promise.all([svc.startSync(tenant, conn.id), svc.startSync(tenant, conn.id), svc.startSync(tenant, conn.id)]);
+    const after = await count();
+    await svc.whenIdle();
+    await db.close();
+    expect(after - before).toBe(1);
   });
 
   it('ignora notificações de outro aplicativo e exige login para conectar', async () => {

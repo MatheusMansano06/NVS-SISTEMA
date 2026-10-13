@@ -129,7 +129,7 @@ export function listingRoutes(
 
     app.delete('/listings/:id', write, async (req) => need().remove(req.user.tenantId, parse(idParam, req.params).id));
 
-    app.get('/listings/:id/pricing', read, async (req) => {
+    app.get('/listings/:id/pricing', { ...read, config: { rateLimit: { max: 90, timeWindow: '1 minute' } } }, async (req) => {
       const { id } = parse(idParam, req.params);
       const { price, refresh } = parse(z.object({ price: z.coerce.number().positive().optional(), refresh: z.enum(['1']).optional() }), req.query);
       return need().pricing(req.user.tenantId, id, price, refresh === '1');

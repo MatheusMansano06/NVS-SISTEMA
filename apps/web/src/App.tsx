@@ -10,6 +10,7 @@ import { ListingsPage } from './modules/listings/ListingsPage';
 import { PromotionsPage } from './modules/listings/PromotionsPage';
 import { SalesPage } from './modules/sales/SalesPage';
 import { PricingPage } from './modules/pricing/PricingPage';
+import { FreightPage } from './modules/freight/FreightPage';
 import { FinancePage } from './modules/finance/FinancePage';
 import { usePath } from './app/router';
 
@@ -28,6 +29,7 @@ function Pages() {
   if (path.startsWith('/skus')) return <SkuPage />;
   if (path.startsWith('/vendas')) return <SalesPage />;
   if (path.startsWith('/precificador')) return <PricingPage />;
+  if (path.startsWith('/radar-frete')) return <FreightPage />;
   if (path.startsWith('/anuncios/promocoes')) return <PromotionsPage />;
   if (path.startsWith('/anuncios')) return <ListingsPage />;
   if (path.startsWith('/financeiro')) return <FinancePage />;

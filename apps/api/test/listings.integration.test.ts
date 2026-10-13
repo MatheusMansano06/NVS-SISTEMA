@@ -159,4 +159,33 @@ describe.skipIf(!TEST_DB)('Aba Anúncios', () => {
     const bad = await app.inject({ method: 'PUT', url: '/api/v1/tours/Nao Vale', cookies: a.cookies, payload: { status: 'done' } });
     expect(bad.statusCode).toBe(400);
   });
+
+  it('radar de frete: alerta quando o frete do ML sobe (≥30% e ≥R$3) e mostra o efeito na margem', async () => {
+    const a = await company('51');
+    const tenantId = (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies: a.cookies })).json().tenant.id as string;
+    await db.withTenant(tenantId, async (c) => {
+      const h = (id: string, daysAgo: number, cost: number) =>
+        c.query(
+          'INSERT INTO listing_freight_history (tenant_id, listing_id, day, list_cost) VALUES ($1, $2, current_date - $3::int, $4)',
+          [tenantId, id, daysAgo, cost],
+        );
+      // MLB511: 10 → 40 (alerta); MLB512: 20 → 21 (variação pequena, sem alerta)
+      await h('MLB511', 6, 10);
+      await h('MLB511', 2, 40);
+      await h('MLB511', 1, 40);
+      await h('MLB512', 6, 20);
+      await h('MLB512', 1, 21);
+    });
+    const r = (await app.inject({ method: 'GET', url: '/api/v1/freight-radar', cookies: a.cookies })).json();
+    expect(r.monitored).toBe(2);
+    expect(r.alerts.map((x: { id: string }) => x.id)).toEqual(['MLB511']);
+    expect(r.alerts[0]).toMatchObject({ current: 40, reference: 10, referenceSource: 'history', units30d: 1, monthlyImpact: 30 });
+    expect(r.alerts[0].since).toBe(new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10));
+    // margem: 100 − tarifa 14 − frete − custo 30 (sem imposto) → antes 46, depois 16
+    expect(r.alerts[0]).toMatchObject({ marginBefore: 46, marginAfter: 16 });
+    expect(r.alerts[0].history).toHaveLength(3);
+    // outra empresa não vê
+    const b = await company('52');
+    expect((await app.inject({ method: 'GET', url: '/api/v1/freight-radar', cookies: b.cookies })).json().monitored).toBe(0);
+  });
 });

@@ -22,17 +22,21 @@ export interface MlShipment {
     zip_code?: string | null;
     city?: { name?: string | null } | null;
     state?: { id?: string | null; name?: string | null } | null;
+    latitude?: number | null;
+    longitude?: number | null;
   } | null;
 }
 
 /** Destino do envio: UF (de "BR-SP"), cidade e CEP. */
-export function shipmentAddress(s: MlShipment): { uf: string | null; city: string | null; zip: string | null } {
+export function shipmentAddress(s: MlShipment): { uf: string | null; city: string | null; zip: string | null; lat?: number | null; lng?: number | null } {
   const a = s.receiver_address;
   const uf = a?.state?.id?.replace(/^BR-/, '').toUpperCase() ?? null;
   return {
     uf: uf && /^[A-Z]{2}$/.test(uf) ? uf : null,
     city: a?.city?.name ?? null,
     zip: a?.zip_code ?? null,
+    lat: typeof a?.latitude === 'number' && Math.abs(a.latitude) <= 90 ? a.latitude : null,
+    lng: typeof a?.longitude === 'number' && Math.abs(a.longitude) <= 180 ? a.longitude : null,
   };
 }
 

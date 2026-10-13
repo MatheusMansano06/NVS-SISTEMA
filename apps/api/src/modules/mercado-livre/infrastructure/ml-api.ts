@@ -75,6 +75,15 @@ export interface MlApi {
   billingPeriods(token: string): Promise<MlBillingPeriod[]>;
   /** Resumo da fatura do período: cobranças, bonificações e impostos. */
   billingSummary(token: string, key: string): Promise<MlBillingSummary>;
+  /** Flex no anúncio: consultar, ativar (POST) e desativar (DELETE). */
+  flexItem(token: string, itemId: string): Promise<boolean | null>;
+  setFlexItem(token: string, itemId: string, enabled: boolean): Promise<void>;
+  /** Assinaturas Flex do vendedor (uma por origem). */
+  flexSubscriptions(token: string, userId: string): Promise<MlFlexSubscription[]>;
+  flexZones(token: string, userId: string, serviceId: number): Promise<MlFlexZones | null>;
+  flexRadius(token: string, userId: string, serviceId: number): Promise<number | null>;
+  /** A categoria aceita Flex (self_service nas logísticas ME2)? null se o ML não informar. */
+  categoryAllowsFlex(token: string, categoryId: string): Promise<boolean | null>;
   /** Promoções em que o anúncio está (para o bônus de tarifa). */
   itemPromotions(token: string, itemId: string): Promise<MlItemPromotion[]>;
   /** Campanhas da Central de Promoções do vendedor. */
@@ -88,6 +97,31 @@ export interface MlApi {
   ): Promise<{ results: MlPromotionItem[]; searchAfter: string | null }>;
   /** Inscreve o anúncio na campanha (escreve no ML). */
   enrollPromotion(token: string, itemId: string, body: { promotion_id: string; promotion_type: string; deal_price?: number }): Promise<void>;
+}
+
+export interface MlFlexSubscription {
+  service_id: number;
+  mode?: string | null;
+  status?: string | null;
+  origin?: { city?: { name?: string | null } | null; zip_code?: string | null; id?: string | null } | null;
+  configuration?: { set?: { coverage?: { type?: string | null } | null } | null } | null;
+}
+
+export interface MlFlexPrice {
+  price?: { fraction?: string | null; cents?: string | null } | null;
+  weight?: { from_kg?: number | null; to_kg?: number | null } | null;
+}
+
+export interface MlFlexZones {
+  zones?: { id: string }[] | null;
+  availables?: {
+    zones?: {
+      id: string;
+      label?: string | null;
+      polygon?: { geometry?: { type?: string; coordinates?: unknown } | null } | null;
+      pricing?: { prices?: MlFlexPrice[] | null } | null;
+    }[] | null;
+  } | null;
 }
 
 export interface MlBillingPeriod {
@@ -351,6 +385,51 @@ export class HttpMlApi implements MlApi {
 
   async setQuantityPrices(token: string, itemId: string, prices: unknown[]) {
     await this.send('POST', `/items/${encodeURIComponent(itemId)}/prices/standard/quantity`, token, { prices });
+  }
+
+  async flexItem(token: string, itemId: string) {
+    const r = await this.optional(() => this.get<{ has_flex?: boolean }>(`/flex/sites/MLB/items/${encodeURIComponent(itemId)}/v2`, token));
+    return r ? Boolean(r.has_flex) : null;
+  }
+
+  async setFlexItem(token: string, itemId: string, enabled: boolean) {
+    await this.request<unknown>(
+      `/flex/sites/MLB/items/${encodeURIComponent(itemId)}/v2`,
+      { method: enabled ? 'POST' : 'DELETE', headers: { authorization: `Bearer ${token}`, accept: 'application/json' } },
+      false,
+    );
+  }
+
+  async flexSubscriptions(token: string, userId: string) {
+    const r = await this.optional(() => this.get<MlFlexSubscription[]>(`/flex/sites/MLB/users/${encodeURIComponent(userId)}/subscriptions/v1`, token));
+    return r ?? [];
+  }
+
+  flexZones(token: string, userId: string, serviceId: number) {
+    return this.optional(() =>
+      this.get<MlFlexZones>(
+        `/flex/sites/MLB/users/${encodeURIComponent(userId)}/services/${serviceId}/configurations/coverage/zones/v1?show_availables=true`,
+        token,
+      ),
+    );
+  }
+
+  async flexRadius(token: string, userId: string, serviceId: number) {
+    const r = await this.optional(() =>
+      this.get<{ radius?: number | null }>(
+        `/flex/sites/MLB/users/${encodeURIComponent(userId)}/services/${serviceId}/configurations/coverage/radius/v1`,
+        token,
+      ),
+    );
+    return r?.radius ?? null;
+  }
+
+  async categoryAllowsFlex(token: string, categoryId: string) {
+    const r = await this.optional(() =>
+      this.get<{ logistics?: { mode?: string; types?: string[] }[] | null }>(`/categories/${encodeURIComponent(categoryId)}/shipping_preferences`, token),
+    );
+    if (!r?.logistics) return null;
+    return r.logistics.some((l) => l.mode === 'me2' && (l.types ?? []).includes('self_service'));
   }
 
   async billingPeriods(token: string) {

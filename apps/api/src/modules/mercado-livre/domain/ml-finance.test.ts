@@ -75,8 +75,9 @@ describe('shipmentAddress', () => {
   it('UF de "BR-SP", cidade e CEP', () => {
     expect(
       shipmentAddress({ receiver_address: { zip_code: '04351030', city: { name: 'São Paulo' }, state: { id: 'BR-SP' } } }),
-    ).toEqual({ uf: 'SP', city: 'São Paulo', zip: '04351030' });
-    expect(shipmentAddress({})).toEqual({ uf: null, city: null, zip: null });
+    ).toEqual({ uf: 'SP', city: 'São Paulo', zip: '04351030', lat: null, lng: null });
+    expect(shipmentAddress({})).toEqual({ uf: null, city: null, zip: null, lat: null, lng: null });
+    expect(shipmentAddress({ receiver_address: { latitude: -23.55, longitude: -46.63 } })).toMatchObject({ lat: -23.55, lng: -46.63 });
   });
 });
 

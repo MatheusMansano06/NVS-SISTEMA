@@ -129,7 +129,7 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
             {STATUS_LABEL[item.status] ?? item.status}
           </span>
           {full && <span className="tag tag-full">FULL</span>}
-          {item.logistic === 'flex' && <span className="tag tag-flex">FLEX</span>}
+          {(item.logistic === 'flex' || item.flex) && <span className="tag tag-flex">FLEX</span>}
           {item.catalog && <span className="tag tag-cat">Catálogo</span>}
         </div>
       </div>

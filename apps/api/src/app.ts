@@ -39,6 +39,8 @@ import {
   PricingService,
   PgCategoryCache,
   CachedMlLookups,
+  FlexService,
+  FreightRadarService,
   pricingRoutes,
   listingRoutes,
   mercadoLivreRoutes,
@@ -61,6 +63,8 @@ declare module 'fastify' {
     ml: MlIntegrationService | null;
     /** Retenção das vendas (13 meses de detalhe; depois, totais mensais). */
     retention: SalesRetention;
+    /** Radar de Frete (null sem ML configurado). */
+    radar: FreightRadarService | null;
     requirePermission: (
       p: Permission,
     ) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -171,11 +175,16 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
   await app.register(mercadoLivreRoutes(ml), { prefix: '/api/v1' });
   const mlLookups = mlClient ? new CachedMlLookups(mlClient, sharedCache) : null;
   const listingService = ml && mlClient && mlLookups ? new ListingService(database, new PgListingRepository(), ml, mlClient, mlLookups) : null;
+  const flexService = listingService && ml && mlClient ? new FlexService(database, listingService, ml, mlClient, sharedCache) : null;
+  const radarService = ml && mlLookups ? new FreightRadarService(database, ml, new PgMlRepository(database), mlLookups, app.log) : null;
+  app.decorate('radar', radarService);
   await app.register(
     listingRoutes(
       listingService,
       ml && mlClient ? new PromotionService(database, new PgListingRepository(), ml, mlClient, sharedCache) : null,
       listingService && ml && mlClient ? new ListingEditorService(listingService, ml, mlClient) : null,
+      flexService,
+      radarService,
     ),
     { prefix: '/api/v1' },
   );

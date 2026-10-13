@@ -82,6 +82,7 @@ describe('mapMlItem', () => {
       categoryId: null,
       freeShipping: false,
       logisticType: null,
+      flexEnabled: false,
       catalogListing: false,
       picturesCount: 1,
       dimensions: null,

@@ -61,6 +61,7 @@ export class ListingService {
       type: typeLabel(r.listing_type_id),
       freeShipping: r.free_shipping,
       logistic: logisticOf(r.logistic_type),
+      flex: r.flex_enabled,
       picturesCount: r.pictures_count,
       dimensions: formatDimensions(r.dimensions),
       listedAt: r.listed_at?.toISOString() ?? null,

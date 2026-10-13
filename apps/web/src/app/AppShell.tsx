@@ -15,6 +15,7 @@ const NAV: { label: string; icon: IconName; path?: string }[] = [
   { label: 'Vendas', icon: 'cart', path: '/vendas' },
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
   { label: 'Precificador', icon: 'tag', path: '/precificador' },
+  { label: 'Radar de Frete', icon: 'radar', path: '/radar-frete' },
   { label: 'Integrações', icon: 'plug' },
 ];
 

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  setFlexSchema,
   duplicateListingSchema,
   enrollPromotionSchema,
   listingTypeSchema,
@@ -19,6 +20,8 @@ import { ValidationError } from '../../../shared/kernel/errors.js';
 import type { ListingService } from '../application/listing-service.js';
 import type { PromotionService } from '../application/promotion-service.js';
 import type { ListingEditorService } from '../application/listing-editor-service.js';
+import type { FlexService } from '../application/flex-service.js';
+import type { FreightRadarService } from '../application/freight-radar-service.js';
 
 function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   const r = schema.safeParse(data);
@@ -37,6 +40,8 @@ export function listingRoutes(
   service: ListingService | null,
   promotions: PromotionService | null = null,
   editor: ListingEditorService | null = null,
+  flex: FlexService | null = null,
+  radar: FreightRadarService | null = null,
 ) {
   return async (app: FastifyInstance) => {
     const read = { preHandler: app.requirePermission('dashboard:read') };
@@ -100,6 +105,31 @@ export function listingRoutes(
     app.get('/listings/:id/wholesale', read, async (req) => ed().wholesale(req.user.tenantId, id(req)));
     app.put('/listings/:id/wholesale', write, async (req) =>
       ed().setWholesale(req.user.tenantId, id(req), parse(listingWholesaleSchema, req.body).tiers),
+    );
+
+    // ---- Flex
+    const fx = () => {
+      if (!flex) throw new ValidationError('Integração com o Mercado Livre ainda não configurada neste ambiente');
+      return flex;
+    };
+    app.get('/flex/status', read, async (req) =>
+      fx().status(req.user.tenantId, parse(z.object({ refresh: z.enum(['1']).optional() }), req.query).refresh === '1'),
+    );
+    app.get('/flex/opportunities', read, async (req) => fx().opportunities(req.user.tenantId));
+
+    // ---- Radar de Frete
+    const rd = () => {
+      if (!radar) throw new ValidationError('Integração com o Mercado Livre ainda não configurada neste ambiente');
+      return radar;
+    };
+    app.get('/freight-radar', read, async (req) => rd().radar(req.user.tenantId));
+    // leitura sob demanda: pesada (1 consulta por anúncio), então limitada
+    app.post('/freight-radar/refresh', { ...write, config: { rateLimit: { max: 2, timeWindow: '1 hour' } } }, async (req) => ({
+      read: await rd().snapshot(req.user.tenantId),
+    }));
+
+    app.put('/listings/:id/flex', write, async (req) =>
+      fx().setItem(req.user.tenantId, parse(idParam, req.params).id, parse(setFlexSchema, req.body).enabled),
     );
 
     app.get('/listings', read, async (req) => need().list(req.user.tenantId, parse(listListingsSchema, req.query)));

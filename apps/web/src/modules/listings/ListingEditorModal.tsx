@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { PACKAGE_TYPES, type ListingDto, type ListingEditorDto, type WholesaleDto } from '@nvs/shared';
+import { PACKAGE_TYPES, type FlexStatusDto, type ListingDto, type ListingEditorDto, type WholesaleDto } from '@nvs/shared';
 import { money } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { Button } from '../../shared/ui/Button';
@@ -13,7 +13,7 @@ const TABS: { id: EditorTab; label: string; hint: string }[] = [
   { id: 'attributes', label: 'Ficha técnica', hint: 'Características do produto (marca, modelo, compatibilidade…). Ficha completa aparece mais nas buscas.' },
   { id: 'dimensions', label: 'Dimensões', hint: 'Medidas e peso do pacote. O ML usa isso para calcular o frete — medida errada encarece o envio.' },
   { id: 'wholesale', label: 'Atacado B2B', hint: 'Desconto por quantidade que só compradores empresa (CNPJ) veem. Até 5 faixas.' },
-  { id: 'flex', label: 'Flex', hint: 'Entregas no mesmo dia feitas por você. É ativado na conta do ML, não anúncio a anúncio.' },
+  { id: 'flex', label: 'Flex', hint: 'Entrega no mesmo dia feita por você, para quem compra dentro da sua área. Ative ou desative aqui, anúncio por anúncio.' },
 ];
 
 const errMsg = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback);
@@ -65,7 +65,7 @@ export function ListingEditorModal({ item, initialTab, canManage, onSaved }: { i
           {tab === 'attributes' && <AttributesTab data={data} canManage={canManage} onSaved={onSaved} />}
           {tab === 'dimensions' && <DimensionsTab data={data} canManage={canManage} onSaved={onSaved} />}
           {tab === 'wholesale' && <WholesaleTab data={data} canManage={canManage} onSaved={onSaved} />}
-          {tab === 'flex' && <FlexTab data={data} />}
+          {tab === 'flex' && <FlexTab data={data} canManage={canManage} onSaved={onSaved} />}
         </div>
       )}
     </div>
@@ -417,17 +417,97 @@ function WholesaleTab({ data, canManage, onSaved }: TabProps) {
   );
 }
 
-function FlexTab({ data }: { data: ListingEditorDto }) {
-  const flex = data.logistic === 'flex' || data.shippingTags.includes('self_service_in');
+function FlexTab({ data, canManage, onSaved }: TabProps) {
+  const initial = data.logistic === 'flex' || data.shippingTags.includes('self_service_in');
+  const [on, setOn] = useState(initial);
+  const [status, setStatus] = useState<FlexStatusDto | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const { saving, error, run } = useSave(onSaved);
+
+  useEffect(() => {
+    listingsApi
+      .flexStatus()
+      .then(setStatus)
+      .catch((err) => setLoadError(errMsg(err, 'Não foi possível ler sua configuração de Flex.')));
+  }, []);
+
+  const acc = status?.accounts[0];
+  const accountReady = Boolean(acc?.active);
+
   return (
-    <div className="ledit-locked ledit-info">
-      <strong>{data.full ? (flex ? 'Full + Flex' : 'Full') : flex ? 'Flex ativo neste anúncio' : 'Flex não ativo neste anúncio'}</strong>
-      <p>
-        O Flex (você entrega no mesmo dia, na sua região) é ligado <b>na conta do Mercado Livre</b> — área de cobertura, horário de
-        coleta e reputação — e não anúncio a anúncio pela API.
+    <div className="lflex">
+      <div className="lflex-toggle" data-on={on || undefined}>
+        <div>
+          <strong>{on ? 'Flex ativo neste anúncio' : 'Flex desligado neste anúncio'}</strong>
+          <p>
+            {on
+              ? 'Compradores dentro da sua área veem entrega no mesmo dia (ou no dia seguinte) e você faz a entrega.'
+              : 'Ative para oferecer entrega rápida feita por você para quem compra dentro da sua área.'}
+            {data.full && ' Funciona junto com o Full: o ML escolhe a opção mais rápida para cada comprador.'}
+          </p>
+        </div>
+        {canManage && (
+          <Button
+            type="button"
+            variant={on ? 'ghost' : 'primary'}
+            loading={saving}
+            disabled={!on && status !== null && !accountReady}
+            onClick={() =>
+              void run(
+                async () => {
+                  await listingsApi.setFlex(data.id, !on);
+                  setOn(!on);
+                },
+                on ? 'Flex desativado no anúncio.' : 'Flex ativado no anúncio.',
+                'Não foi possível mudar o Flex.',
+              )
+            }
+          >
+            {on ? 'Desativar Flex' : 'Ativar Flex'}
+          </Button>
+        )}
+      </div>
+      {error && <p className="banner banner-error" role="alert">{error}</p>}
+      {loadError && <p className="banner banner-error" role="alert">{loadError}</p>}
+
+      {status && !status.accounts.length && (
+        <div className="ledit-locked">
+          <strong>Sua conta ainda não usa Flex</strong>
+          <p>Para ativar nos anúncios, primeiro habilite o Flex na conta do Mercado Livre (endereço de coleta dentro da área atendida, reputação amarela ou verde).</p>
+          <a className="act" href="https://www.mercadolivre.com.br/envios/flex" target="_blank" rel="noreferrer">Configurar Flex no ML</a>
+        </div>
+      )}
+      {acc && (
+        <div className="lflex-account">
+          <div>
+            <small>Conta</small>
+            <b>{acc.account}</b>
+            <span>{acc.active ? 'Flex ativo' : `Flex ${acc.status}`}{acc.origin?.city ? ` · sai de ${acc.origin.city}` : ''}</span>
+          </div>
+          <div>
+            <small>Sua área</small>
+            <b>
+              {acc.coverage?.type === 'radius'
+                ? `Raio de ${acc.coverage.radiusKm.toLocaleString('pt-BR')} km`
+                : acc.coverage?.zones.length
+                  ? acc.coverage.zones.map((z) => z.label).join(', ')
+                  : '—'}
+            </b>
+            <span>configurada no Mercado Livre</span>
+          </div>
+          {acc.pricing.length > 0 && (
+            <div>
+              <small>O ML te paga por entrega</small>
+              <b>{acc.pricing.map((p) => `${money(p.price)} ${p.toKg ? `até ${p.toKg.toLocaleString('pt-BR')} kg` : `acima de ${p.fromKg?.toLocaleString('pt-BR')} kg`}`).join(' · ')}</b>
+              <span>por faixa de peso</span>
+            </div>
+          )}
+        </div>
+      )}
+      <p className="lprice-note">
+        A área de entrega (zonas ou raio) e os horários são configurados na conta do ML. Veja quais anúncios mais vendem dentro da sua área em
+        Anúncios → Oportunidades de Flex.
       </p>
-      <p>Tags de envio deste anúncio: {data.shippingTags.length ? data.shippingTags.join(', ') : '—'}</p>
-      {data.permalink && <a className="act" href="https://www.mercadolivre.com.br/vendas/configuracao/envios" target="_blank" rel="noreferrer">Abrir configurações de envio no ML</a>}
     </div>
   );
 }

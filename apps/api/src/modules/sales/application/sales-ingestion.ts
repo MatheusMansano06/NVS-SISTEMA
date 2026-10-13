@@ -40,6 +40,7 @@ export interface IncomingListing {
   categoryId: string | null;
   freeShipping: boolean;
   logisticType: string | null;
+  flexEnabled?: boolean;
   catalogListing: boolean;
   picturesCount: number | null;
   dimensions: string | null;
@@ -140,12 +141,17 @@ export class SalesIngestion {
   }
 
   /** Destino do envio para todos os pedidos do pacote (marca como consultado mesmo sem endereço). */
-  async setShipmentAddress(db: Queryable, shippingRef: string, a: { uf: string | null; city: string | null; zip: string | null }) {
+  async setShipmentAddress(
+    db: Queryable,
+    shippingRef: string,
+    a: { uf: string | null; city: string | null; zip: string | null; lat?: number | null; lng?: number | null },
+  ) {
     await db.query(
       `UPDATE orders SET ship_state = coalesce($2, ship_state), ship_city = coalesce($3, ship_city),
-              ship_zip = coalesce($4, ship_zip), address_checked_at = now()
+              ship_zip = coalesce($4, ship_zip), ship_lat = coalesce($5, ship_lat), ship_lng = coalesce($6, ship_lng),
+              address_checked_at = now()
         WHERE shipping_ref = $1`,
-      [shippingRef, a.uf, a.city, a.zip],
+      [shippingRef, a.uf, a.city, a.zip, a.lat ?? null, a.lng ?? null],
     );
   }
 
@@ -185,9 +191,9 @@ export class SalesIngestion {
                                price, available_quantity, status, sub_status, sku, variation_skus,
                                sold_quantity, listing_type_id, category_id, free_shipping, logistic_type,
                                catalog_listing, pictures_count, dimensions, listed_at,
-                               original_price, fee_bonus, promo_name, updated_at)
+                               original_price, fee_bonus, promo_name, flex_enabled, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                 $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, now())
+                 $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, now())
          ON CONFLICT (tenant_id, marketplace, external_id) DO UPDATE
            SET title = EXCLUDED.title, picture_url = COALESCE(EXCLUDED.picture_url, listings.picture_url),
                permalink = EXCLUDED.permalink, price = EXCLUDED.price,
@@ -199,11 +205,12 @@ export class SalesIngestion {
                logistic_type = EXCLUDED.logistic_type, catalog_listing = EXCLUDED.catalog_listing,
                pictures_count = EXCLUDED.pictures_count, dimensions = EXCLUDED.dimensions,
                listed_at = EXCLUDED.listed_at, original_price = EXCLUDED.original_price,
-               fee_bonus = EXCLUDED.fee_bonus, promo_name = EXCLUDED.promo_name, updated_at = now()`,
+               fee_bonus = EXCLUDED.fee_bonus, promo_name = EXCLUDED.promo_name, flex_enabled = EXCLUDED.flex_enabled,
+               updated_at = now()`,
         [tenantId, accountId, marketplace, l.externalId, l.title, l.pictureUrl, l.permalink, l.price,
          l.availableQuantity, l.status, l.subStatus, l.sku, l.variationSkus,
          l.soldQuantity, l.listingTypeId, l.categoryId, l.freeShipping, l.logisticType,
-         l.catalogListing, l.picturesCount, l.dimensions, l.listedAt, l.originalPrice, l.feeBonus, l.promoName],
+         l.catalogListing, l.picturesCount, l.dimensions, l.listedAt, l.originalPrice, l.feeBonus, l.promoName, l.flexEnabled ?? false],
       );
     }
   }

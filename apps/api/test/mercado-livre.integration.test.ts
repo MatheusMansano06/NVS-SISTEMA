@@ -43,6 +43,7 @@ function fakeMl(sellerId: number) {
   }));
   let refreshSeq = 0;
   const enrolled = new Set<string>();
+  const flexOn = new Set<string>();
   const b2b = new Map<number, number>();
   const pkg = [{ id: 'SELLER_PACKAGE_WIDTH', name: 'Largura', value_name: '10 cm' }];
   // anúncios: MLB0..4 vendidos (ativos, com foto); MLB9001..3 pausados (P1 e P2 sem estoque)
@@ -118,6 +119,38 @@ function fakeMl(sellerId: number) {
       }
     },
     async changeListingType() {},
+    async flexItem(_t, id) {
+      return flexOn.has(id);
+    },
+    async setFlexItem(_t, id, enabled) {
+      if (enabled) flexOn.add(id);
+      else flexOn.delete(id);
+    },
+    async flexSubscriptions() {
+      return [{ service_id: 77, mode: 'FLEX', status: 'in', origin: { city: { name: 'São Paulo' }, zip_code: '04351030' }, configuration: { set: { coverage: { type: 'zone' } } } }];
+    },
+    async flexZones() {
+      return {
+        zones: [{ id: 'Sao_Paulo' }],
+        availables: {
+          zones: [
+            {
+              id: 'Sao_Paulo',
+              label: 'Sao_Paulo',
+              polygon: { geometry: { type: 'Polygon', coordinates: [[[-46.8, -23.7], [-46.4, -23.7], [-46.4, -23.4], [-46.8, -23.4], [-46.8, -23.7]]] } },
+              pricing: { prices: [{ price: { fraction: '7', cents: '99' }, weight: { from_kg: null, to_kg: 0.5 } }, { price: { fraction: '8', cents: '99' }, weight: { from_kg: 0.5, to_kg: 5 } }] },
+            },
+            { id: 'Campinas', label: 'Campinas' },
+          ],
+        },
+      };
+    },
+    async flexRadius() {
+      return null;
+    },
+    async categoryAllowsFlex() {
+      return true;
+    },
     async billingPeriods() {
       const m = new Date().toISOString().slice(0, 7);
       return [{ key: `${m}-01`, period_status: 'OPEN', amount: 900 }];
@@ -238,7 +271,10 @@ function fakeMl(sellerId: number) {
       return { ids: page, scrollId: page.length ? String(from + 2) : null };
     },
     async items(_t, ids) {
-      return ids.map((id) => catalog.get(id)).filter((i): i is MlItem => Boolean(i));
+      return ids
+        .map((id) => catalog.get(id))
+        .filter((i): i is MlItem => Boolean(i))
+        .map((i) => ({ ...i, shipping: { ...(i.shipping ?? {}), tags: flexOn.has(i.id) ? ['self_service_in'] : [] } }));
     },
   };
   return { api, calls, orders, catalog };
@@ -483,6 +519,32 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect(ov.months[0]).toMatchObject({ difalBilled: 70, difal: 70 });
     const byListing = (await app.inject({ method: 'GET', url: '/api/v1/sales/overview?period=this_month&listingId=MLB1', cookies })).json();
     expect(byListing.difal.billed).toBeNull(); // fatura é da conta, não do anúncio
+
+    // ---- Flex: configuração da conta e ativar no anúncio
+    const fx = (await app.inject({ method: 'GET', url: '/api/v1/flex/status', cookies })).json();
+    expect(fx.accounts[0]).toMatchObject({
+      active: true,
+      coverage: { type: 'zone', zones: [{ id: 'Sao_Paulo', label: 'Sao Paulo' }] },
+      pricing: [{ fromKg: null, toKg: 0.5, price: 7.99 }, { fromKg: 0.5, toKg: 5, price: 8.99 }],
+    });
+    const on = await app.inject({ method: 'PUT', url: '/api/v1/listings/MLB2/flex', cookies, payload: { enabled: true } });
+    expect(on.json()).toEqual({ id: 'MLB2', flex: true });
+    const withFlex = (await app.inject({ method: 'GET', url: '/api/v1/listings?status=active&q=MLB2', cookies })).json();
+    expect(withFlex.items[0].flex).toBe(true);
+
+    // ---- Oportunidades de Flex: vendas com entrega dentro da zona (polígono) e anúncio ainda sem Flex
+    const tid = (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies })).json().tenant.id as string;
+    const dbx = new Database(TEST_DB!);
+    await dbx.withTenant(tid, async (c) => {
+      // MLB0: vendas em SP (dentro); MLB3: em Campinas (fora); MLB2 já tem Flex
+      await c.query(`UPDATE orders o SET ship_lat = -23.55, ship_lng = -46.63 FROM order_items i WHERE i.order_id = o.id AND i.listing_id IN ('MLB0', 'MLB2')`);
+      await c.query(`UPDATE orders o SET ship_lat = -22.90, ship_lng = -47.06 FROM order_items i WHERE i.order_id = o.id AND i.listing_id = 'MLB3'`);
+    });
+    await dbx.close();
+    const opp = (await app.inject({ method: 'GET', url: '/api/v1/flex/opportunities', cookies })).json();
+    expect(opp).toMatchObject({ method: 'zones', areaLabel: 'Sao Paulo' });
+    expect(opp.items.map((x: { id: string }) => x.id)).toEqual(['MLB0']);
+    expect(opp.items[0].shareInArea).toBe(1);
 
     // outra empresa não usa a conexão desta
     const other = await account();

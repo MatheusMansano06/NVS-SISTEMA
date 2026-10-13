@@ -12,3 +12,5 @@ export { PricingService } from './application/pricing-service.js';
 export { pricingRoutes } from './presentation/pricing-routes.js';
 export { PgCategoryCache } from './infrastructure/pg-category-cache.js';
 export { CachedMlLookups } from './infrastructure/cached-ml-lookups.js';
+export { FlexService } from './application/flex-service.js';
+export { FreightRadarService } from './application/freight-radar-service.js';

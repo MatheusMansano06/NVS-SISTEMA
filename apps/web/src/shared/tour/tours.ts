@@ -120,4 +120,17 @@ export const TOURS = {
     { target: '.sku-list .sku-row:first-child .sku-cost', title: 'Digite o custo', text: 'Escreva o custo unitário e saia do campo (ou Enter): salva sozinho. O primeiro custo vale para todo o histórico; mudanças depois valem a partir do dia em que forem feitas.' },
     { title: 'É isso! 🎉', text: 'Assim que você preenche, o Dashboard, a Análise Financeira e os Anúncios já mostram o lucro certo.' },
   ],
+  radar: [
+    {
+      title: 'Radar de Frete',
+      text:
+        'Todo dia eu leio quanto o Mercado Livre está cobrando de frete em cada anúncio com frete grátis.\n' +
+        'Serve para pegar aquele caso que ninguém percebe: o frete que era R$ 10 e do nada vai para R$ 40, comendo a margem de todas as vendas.\n' +
+        'Aqui também ficam as oportunidades de Flex: anúncios que mais vendem perto de você e ainda não têm Flex.',
+    },
+    { target: '.freight .skus-head .seg', title: 'Duas visões', text: '“Altas de frete” mostra o que subiu. “Oportunidades de Flex” mostra onde ativar o Flex faz mais diferença.' },
+    { target: '.radar-kpis', title: 'O resumo', text: 'Quantas altas, quanto isso custa a mais por mês no seu volume de vendas, quantos anúncios estão sendo vigiados e a data da última leitura.' },
+    { target: '.radar-list .radar-card:first-child', title: 'Cada alerta', text: 'Frete antes e agora (com o gráfico dos últimos 30 dias), a margem por venda antes e depois e o impacto no mês. Os botões levam direto para conferir medidas, ajustar o preço ou ativar o Flex.' },
+    { title: 'Dica de ouro 🎉', text: 'Quando o frete dispara do nada, a causa mais comum é medida ou peso errado no anúncio. Comece conferindo as medidas.' },
+  ],
 } satisfies Record<string, TourStep[]>;

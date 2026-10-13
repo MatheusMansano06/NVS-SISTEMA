@@ -5,12 +5,14 @@ const env = loadEnv();
 const app = await buildApp({ env });
 const stopScheduler = app.ml?.startScheduler();
 const stopRetention = app.retention.startScheduler();
+const stopRadar = app.radar?.startScheduler();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     app.log.info({ signal }, 'encerrando');
     stopScheduler?.();
     stopRetention();
+    stopRadar?.();
     app.close().then(() => process.exit(0));
   });
 }

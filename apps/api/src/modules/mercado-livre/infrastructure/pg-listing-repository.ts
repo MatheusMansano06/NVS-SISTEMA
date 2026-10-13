@@ -34,6 +34,7 @@ export interface ListingRow {
   original_price: string | null;
   fee_bonus: string | null;
   promo_name: string | null;
+  flex_enabled: boolean;
 }
 
 /** Colunas da aba; tarifa/frete médios por unidade vêm prontos da sincronização (sales_*_avg). */
@@ -43,7 +44,7 @@ const SELECT = `
          l.free_shipping, l.logistic_type, l.catalog_listing, l.category_id, l.pictures_count,
          l.dimensions, l.listed_at, sc.custo_unit, l.sales_fee_avg AS avg_fee, l.sales_freight_avg AS avg_freight,
          l.fee_amount, l.fee_pct, l.freight_cost, l.pricing_price, l.pricing_at,
-         l.original_price, l.fee_bonus, l.promo_name
+         l.original_price, l.fee_bonus, l.promo_name, l.flex_enabled
     FROM listings l
     JOIN marketplace_accounts a ON a.id = l.account_id
     LEFT JOIN sku_costs sc ON sc.sku = l.sku`;

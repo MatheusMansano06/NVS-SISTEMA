@@ -51,6 +51,8 @@ export interface ListingDto {
   type: string | null;
   freeShipping: boolean;
   logistic: 'full' | 'flex' | 'agency' | 'collect' | 'standard';
+  /** Flex ativo no anúncio (pode conviver com Full/Coleta). */
+  flex: boolean;
   picturesCount: number | null;
   /** Dimensões já formatadas (ex.: "27 x 20 x 13 cm · 305 g"). */
   dimensions: string | null;
@@ -392,4 +394,86 @@ export interface FreightQuoteDto {
   freeShipping: boolean;
   /** 'ml' = calculado pelo Mercado Livre com a reputação da conta; 'none' = comprador paga. */
   source: 'ml' | 'none';
+}
+
+// ================= Flex
+
+export interface FlexAccountDto {
+  connectionId: string;
+  account: string;
+  /** Situação da assinatura Flex no ML: in = ativa. */
+  status: string;
+  active: boolean;
+  origin: { city: string | null; zip: string | null } | null;
+  coverage: { type: 'zone'; zones: { id: string; label: string }[] } | { type: 'radius'; radiusKm: number } | null;
+  /** Quanto o ML paga por entrega Flex, por faixa de peso (kg). */
+  pricing: { fromKg: number | null; toKg: number | null; price: number }[];
+}
+
+export interface FlexStatusDto {
+  accounts: FlexAccountDto[];
+}
+
+export const setFlexSchema = z.object({ enabled: z.boolean() });
+
+// ================= Radar de Frete
+
+/** Alerta: subiu ≥ 30% e ≥ R$ 3 em relação à referência (leitura anterior ou média paga nas vendas). */
+export const FREIGHT_ALERT_PCT = 0.3;
+export const FREIGHT_ALERT_MIN = 3;
+
+export interface FreightRadarItemDto {
+  id: string;
+  title: string;
+  sku: string | null;
+  pictureUrl: string | null;
+  price: number | null;
+  /** Frete cobrado hoje pelo ML (leitura mais recente). */
+  current: number;
+  /** Referência: leitura anterior diferente, ou a média paga nas vendas. */
+  reference: number | null;
+  referenceSource: 'history' | 'sales' | null;
+  /** Desde quando está no valor atual. */
+  since: string | null;
+  marginBefore: number | null;
+  marginAfter: number | null;
+  units30d: number;
+  /** Quanto a mais por mês no volume atual. */
+  monthlyImpact: number | null;
+  /** Frete como % do preço. */
+  freightPct: number | null;
+  flex: boolean;
+  full: boolean;
+  dimensions: string | null;
+  history: { day: string; cost: number }[];
+}
+
+export interface FreightRadarDto {
+  lastReading: string | null;
+  monitored: number;
+  alerts: FreightRadarItemDto[];
+  /** Anúncios em que o frete pesa ≥ 20% do preço (mesmo sem alta recente). */
+  heavy: FreightRadarItemDto[];
+}
+
+export interface FlexOpportunityDto {
+  id: string;
+  title: string;
+  sku: string | null;
+  pictureUrl: string | null;
+  price: number | null;
+  /** Vendas (pagas, 90 dias) com destino dentro da sua área de Flex. */
+  ordersInArea: number;
+  unitsInArea: number;
+  /** % das vendas localizadas do anúncio que caem na área. */
+  shareInArea: number;
+  categoryOk: boolean | null;
+}
+
+export interface FlexOpportunitiesDto {
+  /** Como a área foi comparada: polígonos das zonas, ou cidade de origem (contas por raio). */
+  method: 'zones' | 'city' | 'none';
+  areaLabel: string | null;
+  located: number;
+  items: FlexOpportunityDto[];
 }

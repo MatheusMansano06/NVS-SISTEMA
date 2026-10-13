@@ -92,7 +92,7 @@ export interface MlItem {
   category_id?: string | null;
   date_created?: string | null;
   catalog_listing?: boolean | null;
-  shipping?: { free_shipping?: boolean | null; logistic_type?: string | null; dimensions?: string | null } | null;
+  shipping?: { free_shipping?: boolean | null; logistic_type?: string | null; dimensions?: string | null; tags?: string[] | null } | null;
   attributes?: { id: string; value_name?: string | null }[] | null;
   variations?: {
     seller_custom_field?: string | null;
@@ -121,6 +121,8 @@ export function mapMlItem(i: MlItem): IncomingListing {
     categoryId: i.category_id ?? null,
     freeShipping: i.shipping?.free_shipping ?? false,
     logisticType: i.shipping?.logistic_type ?? null,
+    // Flex pode conviver com Full/Coleta: vem como tag do envio
+    flexEnabled: i.shipping?.logistic_type === 'self_service' || Boolean(i.shipping?.tags?.includes('self_service_in')),
     catalogListing: i.catalog_listing ?? false,
     picturesCount: i.pictures?.length ?? null,
     dimensions: i.shipping?.dimensions ?? null,

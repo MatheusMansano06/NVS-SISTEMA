@@ -91,6 +91,22 @@ export function ListingsPage() {
   }, [tab]);
 
   const tour = useGuidedTour('anuncios', TOURS['anuncios'], Boolean(data?.items.length));
+  // vindo do Radar de Frete (?editar=MLB…&aba=dimensions): abre o editor do anúncio na aba certa
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const id = qs.get('editar');
+    if (!id) return;
+    const tab = (qs.get('aba') ?? 'description') as EditorTab;
+    window.history.replaceState(null, '', window.location.pathname);
+    (async () => {
+      for (const status of ['active', 'paused'] as const) {
+        const r = await listingsApi.list({ status, q: id, offset: 0, limit: 1 }).catch(() => null);
+        const hit = r?.items.find((i) => i.id === id);
+        if (hit) return setEditing({ item: hit, tab });
+      }
+    })();
+  }, []);
+
   const counts = data?.counts;
   return (
     <AppShell>

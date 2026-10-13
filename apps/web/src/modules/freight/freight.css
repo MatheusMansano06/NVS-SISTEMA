@@ -1,0 +1,43 @@
+/* ============ Radar de Frete ============ */
+.radar-kpis .link { justify-self: start; font-size: .78rem; padding: 0; }
+.radar-list { display: grid; gap: 10px; }
+.radar-sub { margin: 8px 0 0; font-size: 1rem; color: var(--navy); }
+.radar-sub small { color: var(--gray-500); font-weight: 500; }
+.radar-card {
+  display: grid; grid-template-columns: 56px minmax(0, 1.4fr) minmax(170px, 1fr) minmax(150px, .9fr) auto; gap: 16px; align-items: center;
+  padding: 12px 16px 12px 12px; border-radius: 24px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); animation: rise .35s both;
+}
+.radar-card[data-alert] { box-shadow: 0 0 0 1.5px #f6cfd5; background: linear-gradient(90deg, #fff7f8, #fff 45%); }
+.radar-card .thumb { width: 56px; height: 56px; border-radius: 16px; object-fit: cover; }
+.radar-card .thumb-empty { display: grid; place-items: center; background: var(--gray-50); color: var(--gray-300); }
+.radar-main { display: grid; gap: 2px; min-width: 0; }
+.radar-main strong { color: var(--navy); }
+.radar-title { color: var(--gray-500); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radar-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: .74rem; color: var(--gray-500); }
+.radar-freight, .radar-margin { display: grid; gap: 2px; }
+.radar-freight small, .radar-margin small { font-size: .64rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-500); font-weight: 700; }
+.radar-freight b, .radar-margin b { font-size: 1.05rem; color: var(--navy); font-variant-numeric: tabular-nums; }
+.radar-freight s, .radar-margin s { color: var(--gray-500); font-weight: 500; font-size: .82rem; margin-right: 4px; }
+.radar-card[data-alert] .radar-freight b { color: #a3182b; }
+.radar-freight span, .radar-margin span { font-size: .74rem; color: var(--gray-500); }
+.radar-card[data-alert] .radar-freight span { color: #a3182b; font-weight: 600; }
+.radar-spark { color: #d6293e; margin-top: 2px; }
+.radar-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.radar-actions .act { justify-content: center; }
+.radar-card .sku-error { grid-column: 2 / -1; }
+.opp-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: 18px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); font-size: .84rem; color: var(--gray-500); }
+.opp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.opp-list li { display: grid; grid-template-columns: auto 48px minmax(0, 1fr) 130px 130px auto; gap: 14px; align-items: center; padding: 10px 14px; border-radius: 20px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); }
+.opp-list li[data-done] { opacity: .65; }
+.opp-list .thumb { width: 48px; height: 48px; border-radius: 14px; object-fit: cover; }
+.opp-num { display: grid; gap: 1px; }
+.opp-num small { font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-500); font-weight: 700; }
+.opp-num b { color: var(--navy); font-variant-numeric: tabular-nums; }
+.opp-num span { font-size: .72rem; color: var(--gray-500); }
+@media (max-width: 1000px) {
+  .radar-card { grid-template-columns: 56px minmax(0, 1fr); }
+  .radar-freight, .radar-margin, .radar-actions { grid-column: 1 / -1; }
+  .radar-actions { flex-direction: row; flex-wrap: wrap; }
+  .opp-list li { grid-template-columns: auto 48px minmax(0, 1fr); }
+  .opp-num { grid-column: span 1; }
+}

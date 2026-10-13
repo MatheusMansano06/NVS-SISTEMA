@@ -1,5 +1,6 @@
 import type {
   CategoryOptionDto,
+  FlexStatusDto,
   ListingEditorDto,
   ListingMonthDto,
   ListingListDto,
@@ -61,6 +62,9 @@ export const listingsApi = {
   duplicate: (id: string, body: { categoryId?: string; title?: string }) =>
     http<{ id: string; permalink: string | null; status: 'paused' }>(`/api/v1/listings/${enc(id)}/duplicate`, { body }),
   remove: (id: string) => http<{ id: string; deleted: true }>(`/api/v1/listings/${enc(id)}`, { method: 'DELETE' }),
+  flexStatus: (refresh = false) => http<FlexStatusDto>(`/api/v1/flex/status${refresh ? '?refresh=1' : ''}`),
+  setFlex: (id: string, enabled: boolean) =>
+    http<{ id: string; flex: boolean }>(`/api/v1/listings/${enc(id)}/flex`, { method: 'PUT', body: { enabled } }),
   setStatus: (id: string, status: 'active' | 'paused' | 'closed') =>
     http<{ id: string; status: string }>(`/api/v1/listings/${enc(id)}/status`, { method: 'PUT', body: { status } }),
 };

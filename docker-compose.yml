@@ -1,0 +1,43 @@
+# Stack completa: docker compose up --build
+# Apenas o banco (dev local com npm run dev): docker compose up -d db
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nvs
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nvs_dev_password}
+      POSTGRES_DB: nvs_dev
+    ports: ['5432:5432']
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nvs -d nvs_dev']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.api }
+    command: ['node', 'database/migrate.mjs', 'up']
+    environment:
+      DATABASE_URL: postgres://nvs:${POSTGRES_PASSWORD:-nvs_dev_password}@db:5432/nvs_dev
+    depends_on: { db: { condition: service_healthy } }
+
+  api:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.api }
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://nvs:${POSTGRES_PASSWORD:-nvs_dev_password}@db:5432/nvs_dev
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET (min. 32 caracteres)}
+      CORS_ORIGIN: http://localhost:8080
+    ports: ['3333:3333']
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.web }
+    ports: ['8080:80']
+    depends_on: [api]
+
+volumes:
+  pgdata:

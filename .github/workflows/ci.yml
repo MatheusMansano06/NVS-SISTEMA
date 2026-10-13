@@ -1,0 +1,29 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: nvs, POSTGRES_PASSWORD: nvs_ci, POSTGRES_DB: nvs_test }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nvs" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://nvs:nvs_ci@localhost:5432/nvs_test
+      TEST_DATABASE_URL: postgres://nvs:nvs_ci@localhost:5432/nvs_test
+      JWT_SECRET: ci-only-secret-0123456789-0123456789-0123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run db:migrate
+      - run: npm test
+      - run: npm run build

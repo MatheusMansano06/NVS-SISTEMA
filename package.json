@@ -1,0 +1,36 @@
+{
+  "name": "nvs-sistema-tech",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "database"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @nvs/shared",
+    "predev": "npm run build:shared",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @nvs/api\" \"npm run dev -w @nvs/web\"",
+    "build": "npm run build:shared && npm run build -w @nvs/api && npm run build -w @nvs/web",
+    "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "npm run build:shared && npm run test --workspaces --if-present",
+    "db:migrate": "npm run migrate -w @nvs/database",
+    "db:status": "npm run status -w @nvs/database",
+    "format": "prettier --write .",
+    "db:migrate:test": "DATABASE_URL=$TEST_DATABASE_URL npm run migrate -w @nvs/database",
+    "db:seed:demo": "npm run seed:demo -w @nvs/database --"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.12.0",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1"
+  }
+}

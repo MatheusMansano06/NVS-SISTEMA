@@ -1,0 +1,14 @@
+{
+  "name": "@nvs/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "migrate": "node migrate.mjs up",
+    "status": "node migrate.mjs status",
+    "seed:demo": "node seeds/demo-sales.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}

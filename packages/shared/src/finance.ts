@@ -1,0 +1,136 @@
+import { z } from 'zod';
+import { MARKETPLACES } from './onboarding.js';
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (AAAA-MM-DD)');
+
+export const LOGISTIC_BUCKETS = ['full', 'flex', 'places_coleta', 'me1', 'outros'] as const;
+export type LogisticBucketId = (typeof LOGISTIC_BUCKETS)[number];
+export const LOGISTIC_LABELS: Record<LogisticBucketId, string> = {
+  full: 'Full',
+  flex: 'Flex',
+  places_coleta: 'Coleta',
+  me1: 'ME1',
+  outros: 'A combinar',
+};
+
+export const SALE_STATUSES = ['aprovada', 'cancelada', 'devolucao'] as const;
+export type SaleStatus = (typeof SALE_STATUSES)[number];
+
+/** Faixas de margem do NVS-WMS: bom ≥ 13%, atenção 10–13%, crítico < 10%. */
+export const MARGIN_BANDS = ['bom', 'atencao', 'critico'] as const;
+export type MarginBand = (typeof MARGIN_BANDS)[number];
+export const marginBand = (mcPct: number): MarginBand => (mcPct >= 13 ? 'bom' : mcPct >= 10 ? 'atencao' : 'critico');
+
+export const financeQuerySchema = z
+  .object({
+    from: isoDate,
+    to: isoDate,
+    marketplace: z.enum(MARKETPLACES).optional(),
+    accountId: z.string().uuid().optional(),
+    /** NVS-WMS: soma o frete comprador na base da MC em todas as modalidades. */
+    considerarFreteComprador: z.coerce.boolean().optional(),
+    fresh: z.coerce.boolean().optional(),
+  })
+  .refine((q) => q.from <= q.to, { message: 'A data inicial deve ser antes da final', path: ['from'] })
+  .refine((q) => (Date.parse(q.to) - Date.parse(q.from)) / 86_400_000 <= 366, {
+    message: 'Período máximo de 1 ano',
+    path: ['to'],
+  });
+export type FinanceQuery = z.infer<typeof financeQuerySchema>;
+
+/** Modalidade do anúncio no ML. */
+export const LISTING_TYPE_LABELS: Record<string, string> = {
+  gold_special: 'Clássico',
+  gold_pro: 'Premium',
+  gold_premium: 'Diamante',
+  gold: 'Ouro',
+  silver: 'Prata',
+  bronze: 'Bronze',
+  free: 'Grátis',
+};
+
+export const COST_FILTERS = ['com_custo', 'sem_custo'] as const;
+
+export const financeLinesQuerySchema = z.object({
+  status: z.enum(SALE_STATUSES).optional(),
+  bucket: z.enum(LOGISTIC_BUCKETS).optional(),
+  listingType: z.string().trim().max(40).optional(),
+  custo: z.enum(COST_FILTERS).optional(),
+  /** compat: equivale a custo=sem_custo */
+  semCusto: z.coerce.boolean().optional(),
+  margem: z.enum(MARGIN_BANDS).optional(),
+  sku: z.string().trim().max(120).optional(),
+  pedido: z.string().trim().max(60).optional(),
+  q: z.string().trim().max(120).optional(),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type FinanceLinesQuery = z.infer<typeof financeLinesQuerySchema>;
+
+export interface FinanceCards {
+  vendasAprovadas: number;
+  vendasCanceladas: number;
+  devolucoesParciais: number;
+  faturamento: number;
+  custoTotal: number | null;
+  impostoTotal: number | null;
+  tarifa: number;
+  freteComprador: number;
+  freteVendedor: number;
+  cupomSeller: number;
+  mcTotal: number | null;
+  mcPct: number | null;
+  ticketMedio: number;
+  ticketMc: number | null;
+  qtdAprovadas: number;
+  qtdCanceladas: number;
+  qtdDevolucoes: number;
+  unidades: number;
+}
+
+export interface FinanceSummaryDto {
+  range: { from: string; to: string };
+  cards: FinanceCards;
+  /** Composição sobre a base da MC (vendas aprovadas com custo). */
+  composicao: { key: 'custo' | 'imposto' | 'tarifa' | 'frete' | 'mc'; label: string; valor: number; pct: number }[];
+  series: { day: string; aprovadas: number; mc: number | null }[];
+  semCusto: { qtd: number; valor: number; skus: string[] };
+  breakdown: { bucket: LogisticBucketId; valor: number }[];
+  freteIncerto: number;
+  enriquecimentoPendente: number;
+  generatedAt: string;
+}
+
+export interface FinanceLineDto {
+  orderId: string;
+  listingId: string | null;
+  listingType: string | null;
+  date: string;
+  status: SaleStatus;
+  bucket: LogisticBucketId;
+  sku: string;
+  title: string;
+  pictureUrl: string | null;
+  valorUnit: number;
+  qtd: number;
+  faturamento: number;
+  cupom: number;
+  custo: number | null;
+  imposto: number | null;
+  tarifa: number;
+  freteComprador: number;
+  freteVendedor: number;
+  mc: number | null;
+  mcPct: number | null;
+}
+
+export interface FinanceLinesDto {
+  items: FinanceLineDto[];
+  total: number;
+}
+
+export const taxRateSchema = z.object({ ratePct: z.coerce.number().finite().min(0).max(100) });
+export interface TaxRateDto {
+  ratePct: number | null;
+  vigenteDesde: string | null;
+}

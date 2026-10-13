@@ -1,0 +1,41 @@
+/* ============ Fundo fluido ============ */
+.fluid-bg {
+  position: absolute; inset: 0; z-index: -1;
+  background:
+    radial-gradient(120% 90% at 100% 0%, #f1f5ff 0%, transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, #f6f8fd 100%);
+}
+.blob {
+  position: absolute; border-radius: 50%;
+  will-change: transform;
+  transition: transform .9s cubic-bezier(.2, .7, .2, 1);
+}
+.blob-blue {
+  width: 62vmax; height: 62vmax; right: -18vmax; top: -22vmax;
+  background: radial-gradient(circle at 40% 40%, rgba(31,95,255,.34), rgba(31,95,255,.10) 55%, transparent 72%);
+  transform: translate3d(calc(var(--mx) * -30px), calc(var(--my) * -24px), 0);
+  animation: drift 26s ease-in-out infinite alternate;
+}
+.blob-yellow {
+  width: 38vmax; height: 38vmax; right: 6vmax; bottom: -16vmax;
+  background: radial-gradient(circle at 50% 50%, rgba(245,184,0,.30), rgba(245,184,0,.08) 55%, transparent 72%);
+  transform: translate3d(calc(var(--mx) * 44px), calc(var(--my) * 30px), 0);
+  animation: drift 32s ease-in-out infinite alternate-reverse;
+}
+.blob-gray {
+  width: 46vmax; height: 46vmax; left: -22vmax; bottom: -24vmax;
+  background: radial-gradient(circle, rgba(106,114,133,.20), rgba(106,114,133,.06) 55%, transparent 72%);
+  transform: translate3d(calc(var(--mx) * 20px), calc(var(--my) * -18px), 0);
+  animation: drift 38s ease-in-out infinite alternate;
+}
+@keyframes drift { to { margin: 3vmax 0 0 -3vmax; } }
+
+.fluid-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fluid-lines path {
+  fill: none; stroke: url(#nvs-line); stroke-width: 2; stroke-linecap: round;
+  stroke-dasharray: 6 14; animation: flow 22s linear infinite;
+}
+.fluid-lines path + path { stroke-width: 1.2; opacity: .6; animation-duration: 30s; }
+.fluid-lines circle { fill: #fff; stroke: var(--blue); stroke-width: 2; }
+@keyframes flow { to { stroke-dashoffset: -400; } }
+

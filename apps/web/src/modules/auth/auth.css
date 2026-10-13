@@ -1,0 +1,96 @@
+/* ============ Página ============ */
+.auth {
+  --mx: 0; --my: 0; /* posição do cursor (-1..1), atualizada via JS */
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  align-items: center;
+  gap: clamp(24px, 6vw, 96px);
+  padding: clamp(20px, 5vw, 72px);
+  overflow: clip; /* clip (não hidden): impede que o foco role o fundo */
+  isolation: isolate;
+}
+
+/* ============ Marca (lado esquerdo) ============ */
+.auth-brand { max-width: 560px; justify-self: end; animation: rise .8s cubic-bezier(.2,.7,.2,1) both; }
+.auth-logo {
+  width: clamp(150px, 20vw, 240px); height: auto; display: block;
+  margin-bottom: clamp(28px, 6vh, 64px);
+  transform: translate3d(calc(var(--mx) * 6px), calc(var(--my) * 4px), 0);
+  transition: transform .6s cubic-bezier(.2,.7,.2,1);
+}
+.auth-brand h1 {
+  margin: 0 0 16px; font-weight: 650; letter-spacing: -0.035em; line-height: 1.04;
+  font-size: clamp(2rem, 4.2vw, 3.5rem); color: var(--navy);
+}
+.auth-brand h1 span {
+  background: linear-gradient(100deg, var(--blue-deep) 0%, var(--blue) 45%, #5b8cff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.auth-brand p { margin: 0; font-size: clamp(1rem, 1.3vw, 1.15rem); color: var(--gray-500); max-width: 38ch; line-height: 1.55; }
+
+/* ============ Painel do formulário (forma orgânica) ============ */
+.auth-panel {
+  --px: 50%; --py: 0%;
+  position: relative; width: min(100%, 460px); justify-self: start;
+  padding: clamp(28px, 4vw, 44px);
+  border-radius: 56px 56px 56px 140px / 56px 56px 56px 120px; /* assimétrico, sem cantos retos */
+  background:
+    radial-gradient(420px circle at var(--px) var(--py), rgba(31,95,255,.10), transparent 60%),
+    rgba(255,255,255,.78);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2); backdrop-filter: blur(22px) saturate(1.2);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.9) inset,
+    0 0 0 1px rgba(207,212,224,.55),
+    0 40px 80px -30px rgba(20,72,214,.30),
+    0 18px 36px -24px rgba(11,28,77,.25);
+  animation: rise .8s .08s cubic-bezier(.2,.7,.2,1) both;
+}
+/* filete amarelo que “escapa” do canto — assinatura visual da marca */
+.auth-panel::after {
+  content: ''; position: absolute; left: 22px; bottom: 22px; width: 56px; height: 4px;
+  border-radius: 99px; background: linear-gradient(90deg, var(--yellow), transparent);
+  opacity: .9; pointer-events: none;
+}
+.auth-view { animation: swap .45s cubic-bezier(.2,.7,.2,1) both; }
+.auth-view > form > * { animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+.auth-view > form > *:nth-child(2) { animation-delay: .04s; }
+.auth-view > form > *:nth-child(3) { animation-delay: .08s; }
+.auth-view > form > *:nth-child(4) { animation-delay: .12s; }
+.auth-view > form > *:nth-child(5) { animation-delay: .16s; }
+.auth-view > form > *:nth-child(6) { animation-delay: .20s; }
+@keyframes swap { from { opacity: 0; transform: translateX(18px) scale(.985); } }
+
+h2 { margin: 0; font-size: 1.65rem; font-weight: 650; letter-spacing: -0.025em; color: var(--navy); }
+
+/* ============ Linha “lembrar / esqueci” ============ */
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.check { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: .9rem; color: var(--ink); user-select: none; }
+.check input {
+  appearance: none; width: 22px; height: 22px; margin: 0; border-radius: 50%;
+  border: 1.5px solid var(--gray-300); background: #fff; display: grid; place-items: center;
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.check input::after {
+  content: ''; width: 10px; height: 6px; border: 2px solid #fff; border-top: 0; border-right: 0;
+  transform: rotate(-45deg) scale(0); margin-top: -2px; transition: transform .2s cubic-bezier(.3,1.6,.5,1);
+}
+.check input:checked { background: var(--blue); border-color: var(--blue); }
+.check input:checked::after { transform: rotate(-45deg) scale(1); }
+.check:active input { transform: scale(.9); }
+
+/* ============ Avisos ============ */
+.banner-error { animation: shake .35s; }
+.switch { margin: 0; text-align: center; color: var(--gray-500); font-size: .92rem; }
+
+/* ============ Responsivo ============ */
+@media (max-width: 880px) {
+  .auth { grid-template-columns: 1fr; align-content: center; gap: 28px; padding: 24px 16px 32px; }
+  .auth-brand { justify-self: center; text-align: center; max-width: 460px; }
+  .auth-brand p { display: none; }
+  .auth-logo { margin: 0 auto 18px; width: 140px; }
+  .auth-brand h1 { font-size: 1.7rem; margin: 0; }
+  .auth-panel { justify-self: center; border-radius: 44px 44px 44px 88px / 44px 44px 44px 80px; }
+}
+@media (max-height: 640px) and (min-width: 881px) { .auth-logo { margin-bottom: 20px; } }

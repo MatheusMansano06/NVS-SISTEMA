@@ -1,0 +1,325 @@
+import {
+  marginBand,
+  type FinanceCards,
+  type FinanceLineDto,
+  type FinanceLinesDto,
+  type FinanceLinesQuery,
+  type FinanceQuery,
+  type FinanceSummaryDto,
+  type LogisticBucketId,
+  type SaleStatus,
+} from '@nvs/shared';
+import type { Cache } from '../../../shared/kernel/cache.js';
+import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
+import { contributionMargin } from '../domain/contribution.js';
+import { TIMEZONE } from '../domain/period.js';
+
+interface Row {
+  id: string;
+  external_id: string;
+  status: 'paid' | 'cancelled' | 'returned';
+  day: string;
+  produto: string;
+  tarifa: string;
+  fc: string;
+  fv: string;
+  cupom: string;
+  devolucao: string;
+  custo: string;
+  imposto: string;
+  cost_known: boolean;
+  bucket: LogisticBucketId;
+  listing_type: string | null;
+  freight_uncertain: boolean;
+  enriched: boolean;
+  items: { sku: string; title: string; qty: number; price: number; listing_id: string | null; known: boolean }[];
+  pictures: Record<string, string> | null;
+}
+
+interface Computed {
+  row: Row;
+  status: SaleStatus;
+  certified: boolean;
+  produto: number;
+  fc: number;
+  fv: number;
+  tarifa: number;
+  cupom: number;
+  devolucao: number;
+  custo: number;
+  imposto: number;
+  mc: number;
+  mcPct: number;
+  faturamentoLinha: number;
+}
+
+const n = Number;
+const q2 = (v: number) => Math.round(v * 100) / 100;
+const CACHE_TTL = 30;
+
+/**
+ * Análise Financeira (port do NVS-WMS financeiro_ml.aggregator):
+ * - aprovada / cancelada / devolução parcial;
+ * - MC só com vendas que têm custo (as demais aparecem em "ficaram fora por falta de custo");
+ * - frete vendedor conta em aprovadas, canceladas e devoluções; frete comprador só nas aprovadas;
+ * - composição (custo, imposto, tarifa, frete, MC) sobre a base da MC.
+ */
+export class FinanceService {
+  constructor(
+    private readonly db: Database,
+    private readonly cache: Cache,
+  ) {}
+
+  async summary(tenantId: string, q: FinanceQuery): Promise<FinanceSummaryDto> {
+    const orders = await this.computed(tenantId, q);
+    const c = { aprov: 0, canc: 0, dev: 0, qA: 0, qC: 0, qD: 0, units: 0, fc: 0, fv: 0, tarifa: 0, cupom: 0 };
+    const cert = { custo: 0, imposto: 0, mc: 0, base: 0, qtd: 0, tarifa: 0, fv: 0 };
+    const sem = { qtd: 0, valor: 0, skus: new Set<string>() };
+    const buckets = new Map<LogisticBucketId, number>();
+    const days = new Map<string, { aprovadas: number; mc: number; certified: number }>();
+    let freteIncerto = 0;
+    let pendente = 0;
+
+    for (const o of orders) {
+      const card = o.produto - o.cupom - (o.status === 'devolucao' ? o.devolucao : 0);
+      const units = o.row.items.reduce((s, i) => s + i.qty, 0);
+      if (o.row.freight_uncertain) freteIncerto++;
+      if (!o.row.enriched) pendente++;
+      c.fv += o.fv; // frete vendedor é custo real mesmo em cancelado/devolvido
+      if (o.status === 'cancelada') {
+        c.canc += card;
+        c.cupom += o.cupom;
+        c.qC++;
+        continue;
+      }
+      c.fc += o.fc;
+      c.tarifa += o.tarifa;
+      c.cupom += o.cupom;
+      if (o.status === 'devolucao') {
+        c.dev += card;
+        c.qD++;
+      } else {
+        c.aprov += card;
+        c.qA++;
+        c.units += units;
+        buckets.set(o.row.bucket, (buckets.get(o.row.bucket) ?? 0) + card);
+      }
+      const d = days.get(o.row.day) ?? { aprovadas: 0, mc: 0, certified: 0 };
+      if (o.status === 'aprovada') d.aprovadas += card;
+      if (o.certified) {
+        cert.custo += o.custo;
+        cert.imposto += o.imposto;
+        cert.mc += o.mc;
+        d.mc += o.mc;
+        d.certified++;
+        if (o.status === 'aprovada') {
+          cert.base += card;
+          cert.qtd++;
+          cert.tarifa += o.tarifa;
+          cert.fv += o.fv;
+        }
+      } else {
+        sem.qtd++;
+        sem.valor += card;
+        for (const it of o.row.items) if (!it.known) sem.skus.add(it.sku);
+      }
+      days.set(o.row.day, d);
+    }
+
+    const anyCertified = cert.qtd > 0 || orders.some((o) => o.certified && o.status !== 'cancelada');
+    const cards: FinanceCards = {
+      vendasAprovadas: q2(c.aprov),
+      vendasCanceladas: q2(c.canc),
+      devolucoesParciais: q2(c.dev),
+      faturamento: q2(c.aprov + c.canc + c.dev),
+      custoTotal: anyCertified ? q2(cert.custo) : null,
+      impostoTotal: anyCertified ? q2(cert.imposto) : null,
+      tarifa: q2(c.tarifa),
+      freteComprador: q2(c.fc),
+      freteVendedor: q2(c.fv),
+      cupomSeller: q2(c.cupom),
+      mcTotal: anyCertified ? q2(cert.mc) : null,
+      mcPct: cert.base > 0 ? q2((cert.mc / cert.base) * 100) : null,
+      ticketMedio: c.qA ? q2(c.aprov / c.qA) : 0,
+      ticketMc: cert.qtd ? q2(cert.mc / cert.qtd) : null,
+      qtdAprovadas: c.qA,
+      qtdCanceladas: c.qC,
+      qtdDevolucoes: c.qD,
+      unidades: c.units,
+    };
+    const pct = (v: number) => (cert.base > 0 ? q2((v / cert.base) * 100) : 0);
+    // composição só com vendas que têm custo: as fatias somam 100% da base da MC
+    const composicao: FinanceSummaryDto['composicao'] =
+      cert.base > 0
+        ? [
+            { key: 'custo', label: 'Custo', valor: q2(cert.custo), pct: pct(cert.custo) },
+            { key: 'imposto', label: 'Imposto', valor: q2(cert.imposto), pct: pct(cert.imposto) },
+            { key: 'tarifa', label: 'Tarifa', valor: q2(cert.tarifa), pct: pct(cert.tarifa) },
+            { key: 'frete', label: 'Frete', valor: q2(cert.fv), pct: pct(cert.fv) },
+            { key: 'mc', label: 'MC', valor: q2(cert.mc), pct: pct(cert.mc) },
+          ]
+        : [];
+
+    return {
+      range: { from: q.from, to: q.to },
+      cards,
+      composicao,
+      series: fillDays(q.from, q.to).map((day) => {
+        const d = days.get(day);
+        return { day, aprovadas: q2(d?.aprovadas ?? 0), mc: d && d.certified ? q2(d.mc) : null };
+      }),
+      semCusto: { qtd: sem.qtd, valor: q2(sem.valor), skus: [...sem.skus].slice(0, 30) },
+      breakdown: [...buckets.entries()].map(([bucket, valor]) => ({ bucket, valor: q2(valor) })).sort((a, b) => b.valor - a.valor),
+      freteIncerto,
+      enriquecimentoPendente: pendente,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Tabela linha a linha (item de pedido), com valores do pedido rateados pela quantidade. */
+  async lines(tenantId: string, q: FinanceQuery, f: FinanceLinesQuery): Promise<FinanceLinesDto> {
+    const all = this.toLines(await this.computed(tenantId, q));
+    const term = f.q?.toLowerCase();
+    const sku = f.sku?.toLowerCase();
+    const pedido = f.pedido?.toUpperCase();
+    const custo = f.custo ?? (f.semCusto ? 'sem_custo' : undefined);
+    const filtered = all.filter(
+      (l) =>
+        (!f.status || l.status === f.status) &&
+        (!f.bucket || l.bucket === f.bucket) &&
+        (!f.listingType || l.listingType === f.listingType) &&
+        (!custo || (custo === 'sem_custo' ? l.mc === null : l.mc !== null)) &&
+        (!sku || l.sku.toLowerCase().includes(sku)) &&
+        (!pedido || l.orderId.includes(pedido) || (l.listingId ?? '').toUpperCase().includes(pedido)) &&
+        (!f.margem || (l.mcPct !== null && marginBand(l.mcPct) === f.margem)) &&
+        (!term || l.sku.toLowerCase().includes(term) || l.title.toLowerCase().includes(term) || l.orderId.includes(term)),
+    );
+    return { items: filtered.slice(f.offset, f.offset + f.limit), total: filtered.length };
+  }
+
+  async exportCsv(tenantId: string, q: FinanceQuery, f: FinanceLinesQuery): Promise<string> {
+    const { items } = await this.lines(tenantId, q, { ...f, offset: 0, limit: 1_000_000 });
+    const br = (v: number | null) => (v === null ? '' : v.toFixed(2).replace('.', ','));
+    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const out = ['pedido;data;status;frete;sku;titulo;valor_unit;qtd;faturamento;cupom;custo;imposto;tarifa;frete_comprador;frete_vendedor;mc;mc_pct'];
+    for (const l of items) {
+      out.push(
+        [esc(l.orderId), l.date, l.status, l.bucket, esc(l.sku), esc(l.title), br(l.valorUnit), l.qtd, br(l.faturamento),
+          br(l.cupom), br(l.custo), br(l.imposto), br(l.tarifa), br(l.freteComprador), br(l.freteVendedor), br(l.mc), br(l.mcPct)].join(';'),
+      );
+    }
+    return '﻿' + out.join('\r\n');
+  }
+
+  private toLines(orders: Computed[]): FinanceLineDto[] {
+    const lines: FinanceLineDto[] = [];
+    for (const o of orders) {
+      const units = Math.max(1, o.row.items.reduce((s, i) => s + i.qty, 0));
+      for (const it of o.row.items) {
+        const share = it.qty / units;
+        lines.push({
+          orderId: o.row.external_id,
+          listingId: it.listing_id,
+          listingType: o.row.listing_type,
+          date: o.row.day,
+          status: o.status,
+          bucket: o.row.bucket,
+          sku: it.sku,
+          title: it.title,
+          pictureUrl: (it.listing_id && o.row.pictures?.[it.listing_id]) || null,
+          valorUnit: q2(it.price),
+          qtd: it.qty,
+          faturamento: q2(o.faturamentoLinha * share),
+          cupom: q2(o.cupom * share),
+          custo: o.certified ? q2(o.custo * share) : null,
+          imposto: o.certified ? q2(o.imposto * share) : null,
+          tarifa: q2(o.tarifa * share),
+          freteComprador: q2(o.fc * share),
+          freteVendedor: q2(o.fv * share),
+          mc: o.certified ? q2(o.mc * share) : null,
+          mcPct: o.certified ? o.mcPct : null,
+        });
+      }
+    }
+    return lines;
+  }
+
+  /** Pedidos do período com MC calculada (cache curto, invalidado quando custos mudam). */
+  private async computed(tenantId: string, q: FinanceQuery): Promise<Computed[]> {
+    const version = (await this.cache.get<number>(`dash-version:${tenantId}`)) ?? 0;
+    const key = `fin:${tenantId}:${version}:${q.from}:${q.to}:${q.marketplace ?? '*'}:${q.accountId ?? '*'}:${q.considerarFreteComprador ? 'fc' : ''}`;
+    if (!q.fresh) {
+      const hit = await this.cache.get<Computed[]>(key);
+      if (hit) return hit;
+    }
+    const rows = await this.db.withTenant(tenantId, (db) => this.fetch(db, q));
+    const result = rows.map((row): Computed => {
+      const status: SaleStatus =
+        row.status === 'cancelled' ? 'cancelada' : row.status === 'returned' || n(row.devolucao) > 0 ? 'devolucao' : 'aprovada';
+      const v = {
+        produto: n(row.produto),
+        freteComprador: n(row.fc),
+        freteVendedor: n(row.fv),
+        custo: n(row.custo),
+        imposto: n(row.imposto),
+        tarifa: n(row.tarifa),
+        cupom: n(row.cupom),
+        devolucao: status === 'devolucao' ? n(row.devolucao) : 0,
+        bucket: row.bucket,
+      };
+      const m = contributionMargin(v, q.considerarFreteComprador);
+      return {
+        row,
+        status,
+        certified: row.cost_known,
+        produto: v.produto,
+        fc: v.freteComprador,
+        fv: v.freteVendedor,
+        tarifa: v.tarifa,
+        cupom: v.cupom,
+        devolucao: v.devolucao,
+        custo: v.custo,
+        imposto: v.imposto,
+        ...m,
+      };
+    });
+    await this.cache.set(key, result, CACHE_TTL);
+    return result;
+  }
+
+  private async fetch(db: Queryable, q: FinanceQuery): Promise<Row[]> {
+    const { rows } = await db.query<Row>(
+      `SELECT o.id, o.external_id, o.status,
+              to_char((o.ordered_at AT TIME ZONE '${TIMEZONE}')::date, 'YYYY-MM-DD') AS day,
+              o.gross_amount AS produto, o.marketplace_fee AS tarifa, o.buyer_shipping AS fc, o.shipping_cost AS fv,
+              o.coupon_seller AS cupom, o.refund_partial AS devolucao, o.product_cost AS custo, o.tax_amount AS imposto,
+              o.cost_known OR o.source = 'demo' AS cost_known, o.logistic_bucket AS bucket, o.listing_type, o.freight_uncertain,
+              (o.finance_enriched_at IS NOT NULL OR o.source = 'demo') AS enriched,
+              coalesce(json_agg(json_build_object('sku', i.sku, 'title', i.title, 'qty', i.quantity, 'price', i.unit_price,
+                         'listing_id', i.listing_id, 'known', i.unit_cost IS NOT NULL OR o.source = 'demo'))
+                         FILTER (WHERE i.id IS NOT NULL), '[]') AS items,
+              (SELECT json_object_agg(l.external_id, l.picture_url) FROM listings l
+                WHERE l.external_id = ANY(array_agg(i.listing_id)) AND l.picture_url IS NOT NULL) AS pictures
+         FROM orders o LEFT JOIN order_items i ON i.order_id = o.id
+        WHERE o.ordered_at >= ($1::date)::timestamp AT TIME ZONE '${TIMEZONE}'
+          AND o.ordered_at <  ($2::date + 1)::timestamp AT TIME ZONE '${TIMEZONE}'
+          AND ($3::text IS NULL OR o.marketplace = $3)
+          AND ($4::uuid IS NULL OR o.account_id = $4)
+        GROUP BY o.id
+        ORDER BY o.ordered_at DESC`,
+      [q.from, q.to, q.marketplace ?? null, q.accountId ?? null],
+    );
+    return rows;
+  }
+}
+
+function fillDays(from: string, to: string): string[] {
+  const out: string[] = [];
+  const d = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (d <= end && out.length < 400) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}

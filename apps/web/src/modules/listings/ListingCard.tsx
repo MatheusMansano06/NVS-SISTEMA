@@ -207,7 +207,7 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
             <dt>Vendidos</dt>
             <dd>
               <b>{item.sold === null ? '—' : int(item.sold)}</b>
-              <button type="button" className="mini" onClick={onSales} aria-label="Ver vendas deste anúncio" title="Ver vendas deste anúncio">
+              <button type="button" className="mini" onClick={onSales} aria-label="Ver vendas deste anúncio na aba Vendas" title="Ver vendas deste anúncio na aba Vendas">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
               </button>
             </dd>

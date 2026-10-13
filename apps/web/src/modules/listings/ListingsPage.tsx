@@ -7,7 +7,6 @@ import { Pagination } from '../../shared/ui/Pagination';
 import { useAuth } from '../auth/AuthContext';
 import { ListingCard } from './ListingCard';
 import { ListingPricingModal } from './ListingPricingModal';
-import { ListingSalesModal } from './ListingSalesModal';
 import { ListingEditorModal, type EditorTab } from './ListingEditorModal';
 import { DuplicateModal } from './DuplicateModal';
 import { HowTo, ListingsNav } from './ListingsNav';
@@ -41,7 +40,6 @@ export function ListingsPage() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [pricing, setPricing] = useState<ListingDto | null>(null);
-  const [sales, setSales] = useState<ListingDto | null>(null);
   const [duplicating, setDuplicating] = useState<ListingDto | null>(null);
   const [editing, setEditing] = useState<{ item: ListingDto; tab: EditorTab } | null>(null);
   const ctrl = useRef<AbortController | null>(null);
@@ -148,7 +146,7 @@ export function ListingsPage() {
                 canManage={canManage}
                 onChanged={(change) => patch(item.id, change)}
                 onPricing={() => setPricing(item)}
-                onSales={() => setSales(item)}
+                onSales={() => navigate(`/vendas?anuncio=${encodeURIComponent(item.id)}`)}
                 onEdit={(tab) => setEditing({ item, tab })}
                 onDuplicate={() => setDuplicating(item)}
                 onMsg={notify}
@@ -211,9 +209,6 @@ export function ListingsPage() {
             }}
           />
         )}
-      </Modal>
-      <Modal open={sales !== null} onClose={() => setSales(null)} label="Vendas do anúncio" wide>
-        {sales && <ListingSalesModal item={sales} />}
       </Modal>
     </AppShell>
   );

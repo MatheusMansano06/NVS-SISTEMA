@@ -16,6 +16,8 @@ export interface MlOrder {
   }[];
   shipping?: { id?: number | null } | null;
   payments?: MlPayment[] | null;
+  buyer?: { nickname?: string | null } | null;
+  pack_id?: number | string | null;
 }
 
 const STATUS: Record<string, IncomingOrder['status']> = {
@@ -26,6 +28,9 @@ const STATUS: Record<string, IncomingOrder['status']> = {
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const mainPayment = (payments: MlPayment[] | null | undefined) =>
+  (payments ?? []).find((p) => p.status === 'approved') ?? payments?.[0] ?? null;
 
 /** SKU "humano" (regra do NVS-WMS): códigos gerados pelo ML (MLB…_…) não servem como SKU. */
 const looksHuman = (s: string | null | undefined): s is string => Boolean(s) && !(s!.startsWith('MLB') && s!.includes('_'));
@@ -59,6 +64,11 @@ export function mapMlOrder(o: MlOrder): IncomingOrder | null {
     buyerShipping: buyerShippingCost(o.payments, null),
     refundPartial: partialRefund(o.status, o.payments),
     listingType: o.order_items[0]?.listing_type_id ?? null,
+    buyerNickname: o.buyer?.nickname ?? null,
+    packId: o.pack_id != null ? String(o.pack_id) : null,
+    // o pagamento principal (o de maior valor aprovado) define a forma de pagamento
+    paymentType: mainPayment(o.payments)?.payment_type ?? null,
+    installments: mainPayment(o.payments)?.installments ?? null,
     items,
   };
 }

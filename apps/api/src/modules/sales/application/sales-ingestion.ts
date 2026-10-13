@@ -15,6 +15,10 @@ export interface IncomingOrder {
   buyerShipping: number;
   refundPartial: number;
   listingType: string | null;
+  buyerNickname?: string | null;
+  packId?: string | null;
+  paymentType?: string | null;
+  installments?: number | null;
   items: { sku: string; title: string; quantity: number; unitPrice: number; listingId: string | null }[];
 }
 
@@ -63,18 +67,24 @@ export class SalesIngestion {
     for (const o of orders) {
       const { rows } = await db.query<{ id: string }>(
         `INSERT INTO orders (tenant_id, account_id, marketplace, external_id, status, ordered_at,
-                             gross_amount, marketplace_fee, units, shipping_ref, buyer_shipping, refund_partial, listing_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                             gross_amount, marketplace_fee, units, shipping_ref, buyer_shipping, refund_partial, listing_type,
+                             buyer_nickname, pack_id, payment_type, installments)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          ON CONFLICT (tenant_id, marketplace, external_id) DO UPDATE
            SET status = EXCLUDED.status, ordered_at = EXCLUDED.ordered_at,
                gross_amount = EXCLUDED.gross_amount, marketplace_fee = EXCLUDED.marketplace_fee,
                units = EXCLUDED.units, shipping_ref = EXCLUDED.shipping_ref, account_id = EXCLUDED.account_id,
                refund_partial = EXCLUDED.refund_partial, listing_type = EXCLUDED.listing_type,
+               buyer_nickname = COALESCE(EXCLUDED.buyer_nickname, orders.buyer_nickname),
+               pack_id = COALESCE(EXCLUDED.pack_id, orders.pack_id),
+               payment_type = COALESCE(EXCLUDED.payment_type, orders.payment_type),
+               installments = COALESCE(EXCLUDED.installments, orders.installments),
                -- fretes já calculados pelo envio (rateados em pacote) não são sobrescritos
                buyer_shipping = CASE WHEN orders.finance_enriched_at IS NULL THEN EXCLUDED.buyer_shipping ELSE orders.buyer_shipping END
          RETURNING id`,
         [tenantId, accountId, marketplace, o.externalId, o.status, o.orderedAt, o.gross, o.fee, o.units, o.shippingRef,
-         o.buyerShipping, o.refundPartial, o.listingType],
+         o.buyerShipping, o.refundPartial, o.listingType, o.buyerNickname ?? null, o.packId ?? null,
+         o.paymentType ?? null, o.installments ?? null],
       );
       const orderId = rows[0]!.id;
       orderIds.push(orderId);
@@ -123,6 +133,27 @@ export class SalesIngestion {
       [shippingRef, f.buyer, f.seller, f.bucket, f.uncertain],
     );
     return rows.map((r) => r.id);
+  }
+
+  /** Destino do envio para todos os pedidos do pacote (marca como consultado mesmo sem endereço). */
+  async setShipmentAddress(db: Queryable, shippingRef: string, a: { uf: string | null; city: string | null; zip: string | null }) {
+    await db.query(
+      `UPDATE orders SET ship_state = coalesce($2, ship_state), ship_city = coalesce($3, ship_city),
+              ship_zip = coalesce($4, ship_zip), address_checked_at = now()
+        WHERE shipping_ref = $1`,
+      [shippingRef, a.uf, a.city, a.zip],
+    );
+  }
+
+  /** Envios de pedidos (mais recentes primeiro) ainda sem endereço consultado. */
+  async pendingAddresses(db: Queryable, accountId: string, limit: number): Promise<string[]> {
+    const { rows } = await db.query<{ shipping_ref: string }>(
+      `SELECT shipping_ref FROM orders
+        WHERE account_id = $1 AND address_checked_at IS NULL AND shipping_ref IS NOT NULL
+        GROUP BY shipping_ref ORDER BY max(ordered_at) DESC LIMIT $2`,
+      [accountId, limit],
+    );
+    return rows.map((r) => r.shipping_ref);
   }
 
   async setCoupon(db: Queryable, orderId: string, coupon: number, markEnriched: boolean): Promise<void> {

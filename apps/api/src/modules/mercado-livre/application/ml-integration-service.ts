@@ -6,7 +6,7 @@ import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js
 import type { EventBus } from '../../../shared/kernel/event-bus.js';
 import type { SalesIngestion } from '../../sales/index.js';
 import { feeBonusOf, mapMlItem, mapMlOrder, type MlOrder } from '../domain/ml-order.js';
-import { sellerCoupon, shipmentFreight } from '../domain/ml-finance.js';
+import { sellerCoupon, shipmentAddress, shipmentFreight } from '../domain/ml-finance.js';
 import { MlApiError, ORDERS_PAGE_SIZE, type MlApi } from '../infrastructure/ml-api.js';
 import type { ConnectionRow, PgMlRepository } from '../infrastructure/pg-ml-repository.js';
 
@@ -213,6 +213,7 @@ export class MlIntegrationService {
 
       // 4. fretes (comprador/vendedor), cupons e devoluções de todo o período importado
       await this.enrichFinance(tenantId, connectionId, runId, conn, d90, true);
+      await this.backfillAddresses(tenantId, connectionId, conn, 2000);
 
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
       this.events.publish({ type: 'marketplace.synced', tenantId, payload: { connectionId } });
@@ -366,9 +367,10 @@ export class MlIntegrationService {
               costs,
               sellerId,
             });
-            const ids = await this.db.withTenant(tenantId, (db) =>
-              this.sales.setShipmentFinance(db, next.shippingRef!, freight),
-            );
+            const ids = await this.db.withTenant(tenantId, async (db) => {
+              await this.sales.setShipmentAddress(db, next.shippingRef!, shipmentAddress(shipment));
+              return this.sales.setShipmentFinance(db, next.shippingRef!, freight);
+            });
             touched.push(...ids);
           }
         }
@@ -383,6 +385,26 @@ export class MlIntegrationService {
       }
     };
     await Promise.all(Array.from({ length: 4 }, worker));
+  }
+
+  /**
+   * Completa o destino (UF/cidade/CEP) de pedidos antigos, já enriquecidos antes de guardarmos o endereço.
+   * Em lotes, em segundo plano, para não pesar no limite de requisições do ML.
+   */
+  async backfillAddresses(tenantId: string, connectionId: string, conn: ConnectionRow, limit = 400): Promise<number> {
+    const refs = await this.db.withTenant(tenantId, (db) => this.sales.pendingAddresses(db, conn.account_id, limit));
+    const queue = [...refs];
+    const worker = async () => {
+      for (let ref = queue.shift(); ref; ref = queue.shift()) {
+        const { token } = await this.accessToken(tenantId, connectionId);
+        const shipment = await this.api.shipment(token, ref).catch(() => null);
+        await this.db.withTenant(tenantId, (db) =>
+          this.sales.setShipmentAddress(db, ref, shipment ? shipmentAddress(shipment) : { uf: null, city: null, zip: null }),
+        );
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
+    return refs.length;
   }
 
   // ================= Atualização automática (de hora em hora)
@@ -403,6 +425,7 @@ export class MlIntegrationService {
       await this.importRange(tenantId, connectionId, runId, conn, since, now, 'orders_recent');
       await this.syncListings(tenantId, connectionId, null, conn, 'paused');
       await this.enrichFinance(tenantId, connectionId, null, conn, since, false);
+      await this.backfillAddresses(tenantId, connectionId, conn);
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
     } catch (err) {
       const message = err instanceof MlApiError ? `Mercado Livre respondeu: ${err.message}` : 'Erro inesperado na atualização';

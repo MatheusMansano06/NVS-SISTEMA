@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buyerFreightFromCosts, buyerShippingCost, logisticBucket, partialRefund, sellerCoupon, shipmentFreight } from './ml-finance.js';
+import { buyerFreightFromCosts, buyerShippingCost, logisticBucket, partialRefund, sellerCoupon, shipmentFreight, shipmentAddress } from './ml-finance.js';
 
 describe('logisticBucket (regra NVS-WMS)', () => {
   it.each([
@@ -68,5 +68,14 @@ describe('cupom e devolução', () => {
     const p = [{ transaction_amount_refunded: 30 }];
     expect(partialRefund('paid', p)).toBe(30);
     expect(partialRefund('cancelled', p)).toBe(0);
+  });
+});
+
+describe('shipmentAddress', () => {
+  it('UF de "BR-SP", cidade e CEP', () => {
+    expect(
+      shipmentAddress({ receiver_address: { zip_code: '04351030', city: { name: 'São Paulo' }, state: { id: 'BR-SP' } } }),
+    ).toEqual({ uf: 'SP', city: 'São Paulo', zip: '04351030' });
+    expect(shipmentAddress({})).toEqual({ uf: null, city: null, zip: null });
   });
 });

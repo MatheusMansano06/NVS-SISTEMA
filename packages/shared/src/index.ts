@@ -7,3 +7,4 @@ export * from './permissions.js';
 export * from './schemas.js';
 export * from './skus.js';
 export * from './listings.js';
+export * from './sales-analytics.js';

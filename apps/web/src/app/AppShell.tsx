@@ -11,7 +11,7 @@ const NAV: { label: string; icon: IconName; path?: string }[] = [
   { label: 'Dashboard', icon: 'dashboard', path: '/' },
   { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro' },
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
-  { label: 'Vendas', icon: 'cart' },
+  { label: 'Vendas', icon: 'cart', path: '/vendas' },
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
   { label: 'Integrações', icon: 'plug' },
 ];

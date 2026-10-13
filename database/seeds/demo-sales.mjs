@@ -30,6 +30,12 @@ const PRODUCTS = [
   ['CORRENTE-428H', 'Corrente Reforçada 428H 118L', 74.9, 39],
   ['PROTETOR-MOTOR', 'Protetor de Motor e Carenagem CB 300', 259.9, 132],
 ];
+// destinos e formas de pagamento (pesos aproximados de uma loja do Sudeste)
+const DESTS = [['SP', 'São Paulo'], ['MG', 'Belo Horizonte'], ['RJ', 'Rio de Janeiro'], ['PR', 'Curitiba'], ['RS', 'Porto Alegre'],
+  ['BA', 'Salvador'], ['SC', 'Joinville'], ['PE', 'Recife'], ['GO', 'Goiânia'], ['CE', 'Fortaleza'], ['PA', 'Belém'], ['DF', 'Brasília']];
+const DEST_WEIGHTS = [30, 12, 10, 8, 6, 6, 5, 4, 4, 3, 2, 3];
+const PAYS = ['account_money', 'credit_card', 'bank_transfer', 'debit_card', 'ticket'];
+const PAY_WEIGHTS = [35, 32, 25, 5, 3];
 // popularidade relativa (os primeiros vendem mais)
 const WEIGHTS = PRODUCTS.map((_, i) => 1 / (1 + i * 0.35));
 
@@ -113,14 +119,22 @@ try {
       const status = rand() < 0.93 ? 'paid' : rand() < 0.7 ? 'cancelled' : 'returned';
       const id = crypto.randomUUID();
       const bucket = rand() < 0.45 ? 'full' : rand() < 0.6 ? 'places_coleta' : rand() < 0.8 ? 'flex' : 'me1';
-      orderRows.push([id, tenantId, accounts[rand() < 0.78 ? 0 : 1], `DEMO-${++seq}`, status, at.toISOString(), gross, fee, shipping, money(cost), units, bucket]);
+      const dest = DESTS[pickWeighted(DEST_WEIGHTS)];
+      const pay = PAYS[pickWeighted(PAY_WEIGHTS)];
+      orderRows.push([id, tenantId, accounts[rand() < 0.78 ? 0 : 1], `DEMO-${++seq}`, status, at.toISOString(), gross, fee, shipping, money(cost), units, bucket,
+        pay, dest[0], dest[1], `${String(10000 + Math.floor(rand() * 89999))}${String(Math.floor(rand() * 999)).padStart(3, '0')}`, `CLIENTE${1000 + Math.floor(rand() * 9000)}`]);
       for (const it of items) itemRows.push([tenantId, id, ...it]);
     }
     if (!orderRows.length) continue;
 
-    const ov = orderRows.map((_, i) => `($${i * 12 + 1},$${i * 12 + 2},$${i * 12 + 3},'mercado_livre',$${i * 12 + 4},$${i * 12 + 5},$${i * 12 + 6},$${i * 12 + 7},$${i * 12 + 8},$${i * 12 + 9},$${i * 12 + 10},$${i * 12 + 11},'demo',true,$${i * 12 + 12},now())`);
+    const N = 17;
+    const ov = orderRows.map((_, i) => {
+      const p = (k) => `$${i * N + k}`;
+      return `(${p(1)},${p(2)},${p(3)},'mercado_livre',${p(4)},${p(5)},${p(6)},${p(7)},${p(8)},${p(9)},${p(10)},${p(11)},'demo',true,${p(12)},now(),${p(13)},${p(14)},${p(15)},${p(16)},${p(17)},now())`;
+    });
     await client.query(
-      `INSERT INTO orders (id, tenant_id, account_id, marketplace, external_id, status, ordered_at, gross_amount, marketplace_fee, shipping_cost, product_cost, units, source, cost_known, logistic_bucket, finance_enriched_at) VALUES ${ov.join(',')}`,
+      `INSERT INTO orders (id, tenant_id, account_id, marketplace, external_id, status, ordered_at, gross_amount, marketplace_fee, shipping_cost, product_cost, units, source, cost_known, logistic_bucket, finance_enriched_at,
+                          payment_type, ship_state, ship_city, ship_zip, buyer_nickname, address_checked_at) VALUES ${ov.join(',')}`,
       orderRows.flat(),
     );
     const iv = itemRows.map((_, i) => `($${i * 8 + 1},$${i * 8 + 2},$${i * 8 + 3},$${i * 8 + 4},$${i * 8 + 5},$${i * 8 + 6},$${i * 8 + 7},$${i * 8 + 8})`);

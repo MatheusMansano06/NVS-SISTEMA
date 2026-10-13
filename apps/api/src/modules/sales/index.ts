@@ -8,3 +8,6 @@ export { skuRoutes } from './presentation/sku-routes.js';
 export { FinanceService } from './application/finance-service.js';
 export { financeRoutes } from './presentation/finance-routes.js';
 export { TIMEZONE } from './domain/period.js';
+export { SalesAnalyticsService } from './application/sales-analytics-service.js';
+export { PgSalesAnalyticsRepository } from './infrastructure/pg-sales-analytics-repository.js';
+export { salesAnalyticsRoutes } from './presentation/sales-analytics-routes.js';

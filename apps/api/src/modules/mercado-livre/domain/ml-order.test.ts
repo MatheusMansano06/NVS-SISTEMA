@@ -25,8 +25,24 @@ describe('mapMlOrder', () => {
       buyerShipping: 0,
       refundPartial: 0,
       listingType: null,
+      buyerNickname: null,
+      packId: null,
+      paymentType: null,
+      installments: null,
       items: [{ sku: 'KIT-CG160', title: 'Kit Relação CG 160', quantity: 2, unitPrice: 119.9, listingId: 'MLB123' }],
     });
+  });
+  it('comprador, carrinho e forma de pagamento (pagamento aprovado)', () => {
+    const o = mapMlOrder({
+      ...base,
+      buyer: { nickname: 'JOAO123' },
+      pack_id: 2000009,
+      payments: [
+        { status: 'rejected', payment_type: 'credit_card' },
+        { status: 'approved', payment_type: 'bank_transfer', installments: 1 },
+      ],
+    })!;
+    expect(o).toMatchObject({ buyerNickname: 'JOAO123', packId: '2000009', paymentType: 'bank_transfer', installments: 1 });
   });
   it('sem SKU do vendedor usa o código do anúncio', () => {
     const o = { ...base, order_items: [{ ...base.order_items[0]!, item: { id: 'MLB9', title: 'X', seller_sku: null } }] };

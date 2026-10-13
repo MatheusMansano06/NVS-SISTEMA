@@ -21,6 +21,9 @@ import {
   SkuCostService,
   FinanceService,
   financeRoutes,
+  PgSalesAnalyticsRepository,
+  SalesAnalyticsService,
+  salesAnalyticsRoutes,
   salesRoutes,
   skuRoutes,
 } from './modules/sales/index.js';
@@ -131,6 +134,7 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
   const skuCosts = new SkuCostService(database, new PgSkuRepository(), sharedCache);
   await app.register(skuRoutes(skuCosts), { prefix: '/api/v1' });
   await app.register(financeRoutes(new FinanceService(database, sharedCache)), { prefix: '/api/v1' });
+  await app.register(salesAnalyticsRoutes(new SalesAnalyticsService(database, new PgSalesAnalyticsRepository())), { prefix: '/api/v1' });
 
   const mlConfigured = Boolean(
     env.ML_CLIENT_ID && env.ML_CLIENT_SECRET && env.ML_REDIRECT_URI && env.TOKEN_ENCRYPTION_KEY,

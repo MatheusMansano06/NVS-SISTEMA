@@ -6,6 +6,8 @@ export type LogisticBucket = 'full' | 'flex' | 'places_coleta' | 'me1' | 'outros
 
 export interface MlPayment {
   status?: string | null;
+  payment_type?: string | null;
+  installments?: number | null;
   shipping_cost?: number | null;
   transaction_amount_refunded?: number | null;
 }
@@ -16,6 +18,22 @@ export interface MlShipment {
   shipping_option?: { cost?: number | null; list_cost?: number | null } | null;
   receiver_cost?: number | null;
   receiver_shipping_cost?: number | null;
+  receiver_address?: {
+    zip_code?: string | null;
+    city?: { name?: string | null } | null;
+    state?: { id?: string | null; name?: string | null } | null;
+  } | null;
+}
+
+/** Destino do envio: UF (de "BR-SP"), cidade e CEP. */
+export function shipmentAddress(s: MlShipment): { uf: string | null; city: string | null; zip: string | null } {
+  const a = s.receiver_address;
+  const uf = a?.state?.id?.replace(/^BR-/, '').toUpperCase() ?? null;
+  return {
+    uf: uf && /^[A-Z]{2}$/.test(uf) ? uf : null,
+    city: a?.city?.name ?? null,
+    zip: a?.zip_code ?? null,
+  };
 }
 
 export interface MlShipmentCosts {

@@ -1,4 +1,5 @@
 .modal { border: 0; padding: 0; background: transparent; max-width: min(460px, calc(100vw - 32px)); width: 100%; overflow: visible; }
+.modal-wide { max-width: min(680px, calc(100vw - 32px)); }
 .modal::backdrop { background: rgba(11,28,77,.28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .modal[open] { animation: modal-in .35s cubic-bezier(.2,1.2,.4,1); }
 @keyframes modal-in { from { opacity: 0; transform: translateY(16px) scale(.97); } }

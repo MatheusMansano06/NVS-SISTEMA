@@ -28,6 +28,10 @@ import {
   HttpMlApi,
   MlIntegrationService,
   PgMlRepository,
+  PgListingRepository,
+  ListingService,
+  PromotionService,
+  listingRoutes,
   mercadoLivreRoutes,
   type MlApi,
 } from './modules/mercado-livre/index.js';
@@ -130,16 +134,19 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
   const mlConfigured = Boolean(
     env.ML_CLIENT_ID && env.ML_CLIENT_SECRET && env.ML_REDIRECT_URI && env.TOKEN_ENCRYPTION_KEY,
   );
+  const mlClient: MlApi | null = mlConfigured
+    ? (mlApi ??
+      new HttpMlApi({
+        clientId: env.ML_CLIENT_ID!,
+        clientSecret: env.ML_CLIENT_SECRET!,
+        redirectUri: env.ML_REDIRECT_URI!,
+      }))
+    : null;
   const ml = mlConfigured
     ? new MlIntegrationService(
         database,
         new PgMlRepository(database),
-        mlApi ??
-          new HttpMlApi({
-            clientId: env.ML_CLIENT_ID!,
-            clientSecret: env.ML_CLIENT_SECRET!,
-            redirectUri: env.ML_REDIRECT_URI!,
-          }),
+        mlClient!,
         new TokenCipher(env.TOKEN_ENCRYPTION_KEY!),
         new SalesIngestion(),
         events,
@@ -149,6 +156,13 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     : null;
   app.decorate('ml', ml);
   await app.register(mercadoLivreRoutes(ml), { prefix: '/api/v1' });
+  await app.register(
+    listingRoutes(
+      ml && mlClient ? new ListingService(database, new PgListingRepository(), ml, mlClient) : null,
+      ml && mlClient ? new PromotionService(database, new PgListingRepository(), ml, mlClient, sharedCache) : null,
+    ),
+    { prefix: '/api/v1' },
+  );
   const onboarding = new OnboardingService(database, new PgOnboardingRepository(), events);
   await app.register(onboardingRoutes(onboarding), { prefix: '/api/v1' });
   await app.register(identityRoutes(identity, {

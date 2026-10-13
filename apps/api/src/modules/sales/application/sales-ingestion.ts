@@ -30,6 +30,15 @@ export interface IncomingListing {
   availableQuantity: number | null;
   status: string;
   subStatus: string[];
+  soldQuantity: number | null;
+  listingTypeId: string | null;
+  categoryId: string | null;
+  freeShipping: boolean;
+  logisticType: string | null;
+  catalogListing: boolean;
+  picturesCount: number | null;
+  dimensions: string | null;
+  listedAt: string | null;
 }
 
 /**
@@ -135,16 +144,26 @@ export class SalesIngestion {
     for (const l of listings) {
       await db.query(
         `INSERT INTO listings (tenant_id, account_id, marketplace, external_id, title, picture_url, permalink,
-                               price, available_quantity, status, sub_status, sku, variation_skus, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
+                               price, available_quantity, status, sub_status, sku, variation_skus,
+                               sold_quantity, listing_type_id, category_id, free_shipping, logistic_type,
+                               catalog_listing, pictures_count, dimensions, listed_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                 $14, $15, $16, $17, $18, $19, $20, $21, $22, now())
          ON CONFLICT (tenant_id, marketplace, external_id) DO UPDATE
            SET title = EXCLUDED.title, picture_url = COALESCE(EXCLUDED.picture_url, listings.picture_url),
                permalink = EXCLUDED.permalink, price = EXCLUDED.price,
                available_quantity = EXCLUDED.available_quantity, status = EXCLUDED.status,
                sub_status = EXCLUDED.sub_status, account_id = EXCLUDED.account_id,
-               sku = EXCLUDED.sku, variation_skus = EXCLUDED.variation_skus, updated_at = now()`,
+               sku = EXCLUDED.sku, variation_skus = EXCLUDED.variation_skus,
+               sold_quantity = EXCLUDED.sold_quantity, listing_type_id = EXCLUDED.listing_type_id,
+               category_id = EXCLUDED.category_id, free_shipping = EXCLUDED.free_shipping,
+               logistic_type = EXCLUDED.logistic_type, catalog_listing = EXCLUDED.catalog_listing,
+               pictures_count = EXCLUDED.pictures_count, dimensions = EXCLUDED.dimensions,
+               listed_at = EXCLUDED.listed_at, updated_at = now()`,
         [tenantId, accountId, marketplace, l.externalId, l.title, l.pictureUrl, l.permalink, l.price,
-         l.availableQuantity, l.status, l.subStatus, l.sku, l.variationSkus],
+         l.availableQuantity, l.status, l.subStatus, l.sku, l.variationSkus,
+         l.soldQuantity, l.listingTypeId, l.categoryId, l.freeShipping, l.logisticType,
+         l.catalogListing, l.picturesCount, l.dimensions, l.listedAt],
       );
     }
   }

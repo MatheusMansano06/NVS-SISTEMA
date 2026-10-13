@@ -12,7 +12,7 @@ const NAV: { label: string; icon: IconName; path?: string }[] = [
   { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro' },
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
   { label: 'Vendas', icon: 'cart' },
-  { label: 'Anúncios', icon: 'megaphone' },
+  { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
   { label: 'Integrações', icon: 'plug' },
 ];
 
@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={item.path}
                   className="nav-item"
                   title={item.label}
-                  aria-current={item.path === path ? 'page' : undefined}
+                  aria-current={item.path && (item.path === path || (item.path !== '/' && path.startsWith(item.path))) ? 'page' : undefined}
                   aria-disabled={item.path ? undefined : true}
                   onClick={(e) => {
                     e.preventDefault();

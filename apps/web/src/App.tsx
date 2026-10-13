@@ -6,6 +6,8 @@ import { Dashboard } from './modules/dashboard/Dashboard';
 import { OnboardingPage } from './modules/onboarding/OnboardingPage';
 import { onboardingApi } from './modules/onboarding/onboarding-api';
 import { SkuPage } from './modules/skus/SkuPage';
+import { ListingsPage } from './modules/listings/ListingsPage';
+import { PromotionsPage } from './modules/listings/PromotionsPage';
 import { FinancePage } from './modules/finance/FinancePage';
 import { usePath } from './app/router';
 
@@ -22,6 +24,8 @@ function Boot() {
 function Pages() {
   const path = usePath();
   if (path.startsWith('/skus')) return <SkuPage />;
+  if (path.startsWith('/anuncios/promocoes')) return <PromotionsPage />;
+  if (path.startsWith('/anuncios')) return <ListingsPage />;
   if (path.startsWith('/financeiro')) return <FinancePage />;
   return <Dashboard />;
 }

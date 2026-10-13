@@ -41,6 +41,7 @@ function fakeMl(sellerId: number) {
     shipping: { id: 7_000 + i },
   }));
   let refreshSeq = 0;
+  const enrolled = new Set<string>();
   // anúncios: MLB0..4 vendidos (ativos, com foto); MLB9001..3 pausados (P1 e P2 sem estoque)
   const catalog = new Map<string, MlItem>();
   for (let i = 0; i < 5; i++) {
@@ -57,6 +58,35 @@ function fakeMl(sellerId: number) {
   catalog.set('MLB9002', { id: 'MLB9002', title: 'Pausado sem estoque 2', status: 'paused', sub_status: [], available_quantity: 0, price: 60 });
   catalog.set('MLB9003', { id: 'MLB9003', title: 'Pausado com estoque', status: 'paused', sub_status: [], available_quantity: 7, price: 70 });
   const api: MlApi = {
+    async updateItem() {
+      throw new Error('não usado');
+    },
+    async listingFees() {
+      return [];
+    },
+    async freeShippingCost() {
+      return null;
+    },
+    async promotions() {
+      return [
+        { id: 'P-DEAL', type: 'DEAL', name: 'Black Friday', status: 'started', start_date: null, finish_date: null },
+        { id: 'P-OLD', type: 'DEAL', name: 'Encerrada', status: 'finished' },
+      ];
+    },
+    async promotionCandidates(_t, promotionId, _type, after) {
+      expect(promotionId).toBe('P-DEAL');
+      // 2 páginas para exercitar o search_after; MLB0 já inscrito some da lista
+      const all = ['MLB0', 'MLB1', 'MLB2'].filter((id) => !enrolled.has(id));
+      const page = after ? all.slice(2) : all.slice(0, 2);
+      return {
+        results: page.map((id) => ({ id, original_price: 100, suggested_discounted_price: 90, min_discounted_price: 80, max_discounted_price: 95 })),
+        searchAfter: after ? null : 'p2',
+      };
+    },
+    async enrollPromotion(_t, itemId, body) {
+      expect(body).toEqual({ promotion_id: 'P-DEAL', promotion_type: 'DEAL', deal_price: 88 });
+      enrolled.add(itemId);
+    },
     authorizationUrl: (state, challenge) => `https://auth.fake/authorization?state=${state}&code_challenge=${challenge}`,
     async exchangeCode(code, verifier) {
       calls.exchange++;
@@ -245,6 +275,37 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
       today = (await app.inject({ method: 'GET', url: '/api/v1/dashboard/summary?period=today&fresh=1', cookies })).json().kpis.revenue;
     }
     expect(today).toBeGreaterThanOrEqual(555);
+
+    // ---- Central de Promoção: só campanhas abertas; candidatos enriquecidos pelo banco local
+    const promos = (await app.inject({ method: 'GET', url: '/api/v1/listings/promotions', cookies })).json();
+    expect(promos.items.map((p: { id: string }) => p.id)).toEqual(['P-DEAL']);
+    const promo = promos.items[0];
+    expect(promo).toMatchObject({ requiresPrice: true, account: 'LOJA TESTE ML' });
+    const candUrl = `/api/v1/listings/promotions/${promo.connectionId}/P-DEAL/candidates?type=DEAL`;
+    const cands = (await app.inject({ method: 'GET', url: candUrl, cookies })).json();
+    expect(cands.total).toBe(3);
+    expect(cands.items[0]).toMatchObject({ id: 'MLB0', sku: 'SKU-0', title: 'Peça 0', minPrice: 80, suggestedPrice: 90 });
+    const sem = await app.inject({
+      method: 'POST',
+      url: `/api/v1/listings/promotions/${promo.connectionId}/P-DEAL/items/MLB0`,
+      cookies,
+      payload: { promotionType: 'DEAL' },
+    });
+    expect(sem.statusCode).toBe(400); // campanha com preço exige preço de oferta
+    const ok = await app.inject({
+      method: 'POST',
+      url: `/api/v1/listings/promotions/${promo.connectionId}/P-DEAL/items/MLB0`,
+      cookies,
+      payload: { promotionType: 'DEAL', dealPrice: 88 },
+    });
+    expect(ok.statusCode).toBe(200);
+    // inscrever invalida o cache: a lista já vem sem o anúncio
+    const after = (await app.inject({ method: 'GET', url: candUrl, cookies })).json();
+    expect(after.items.map((c: { id: string }) => c.id)).toEqual(['MLB1', 'MLB2']);
+    // outra empresa não usa a conexão desta
+    const other = await account();
+    const cross = await app.inject({ method: 'GET', url: candUrl, cookies: other });
+    expect(cross.statusCode).toBe(404);
   });
 
   it('recusa state reutilizado, código inválido, negação e conta já usada por outra empresa', async () => {

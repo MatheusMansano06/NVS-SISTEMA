@@ -131,13 +131,17 @@ try {
     orderCount += orderRows.length;
   }
   // catálogo: os 12 primeiros ativos; os demais pausados (4 sem estoque), sem fotos (demo)
+  const LOGISTICS = ['fulfillment', 'cross_docking', 'self_service', 'xd_drop_off'];
   for (const [i, p] of PRODUCTS.entries()) {
     const paused = i >= 12;
     const outOfStock = paused && i < 16;
     await client.query(
-      `INSERT INTO listings (tenant_id, account_id, marketplace, external_id, title, price, available_quantity, status, sub_status, source)
-       VALUES ($1, $2, 'mercado_livre', $3, $4, $5, $6, $7, $8, 'demo')`,
-      [tenantId, accounts[i % 2], `MLB${3000000000 + i}`, p[1], p[2], outOfStock ? 0 : 6, paused ? 'paused' : 'active', outOfStock ? ['out_of_stock'] : []],
+      `INSERT INTO listings (tenant_id, account_id, marketplace, external_id, title, price, available_quantity, status, sub_status, source,
+                             sku, sold_quantity, listing_type_id, free_shipping, logistic_type, pictures_count, dimensions, listed_at)
+       VALUES ($1, $2, 'mercado_livre', $3, $4, $5, $6, $7, $8, 'demo', $9, $10, $11, $12, $13, $14, $15, now() - ($16 || ' days')::interval)`,
+      [tenantId, accounts[i % 2], `MLB${3000000000 + i}`, p[1], p[2], outOfStock ? 0 : 6 + i * 3, paused ? 'paused' : 'active', outOfStock ? ['out_of_stock'] : [],
+       p[0], Math.round(900 / (1 + i * 0.6)), i % 3 === 0 ? 'gold_pro' : 'gold_special', p[2] >= 79, LOGISTICS[i % LOGISTICS.length],
+       1 + (i * 5) % 9, `${20 + i}x${10 + (i % 7)}x${8 + (i % 5)},${150 + i * 40}`, String(60 + i * 97)],
     );
   }
 

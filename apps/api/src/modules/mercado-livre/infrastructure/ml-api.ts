@@ -34,6 +34,49 @@ export interface MlApi {
   shipmentCosts(token: string, shipmentId: string): Promise<MlShipmentCosts | null>;
   /** Descontos do pedido (cupons); null se indisponível. */
   discounts(token: string, orderId: string): Promise<MlDiscounts | null>;
+  /** Altera campos do anúncio (preço, estoque, status). Erros do ML viram MlApiError. */
+  updateItem(token: string, itemId: string, body: Record<string, unknown>): Promise<MlItem>;
+  /** Tarifa de venda por tipo de anúncio para um preço/categoria. */
+  listingFees(token: string, price: number, categoryId: string | null): Promise<MlListingFee[]>;
+  /** Custo de frete grátis bancado pelo vendedor (tabela do ML); null se indisponível. */
+  freeShippingCost(token: string, sellerId: string, itemId: string): Promise<number | null>;
+  /** Campanhas da Central de Promoções do vendedor. */
+  promotions(token: string, sellerId: string): Promise<MlPromotion[]>;
+  /** Anúncios elegíveis e ainda fora da campanha (status=candidate), paginados por `searchAfter`. */
+  promotionCandidates(
+    token: string,
+    promotionId: string,
+    type: string,
+    searchAfter: string | null,
+  ): Promise<{ results: MlPromotionItem[]; searchAfter: string | null }>;
+  /** Inscreve o anúncio na campanha (escreve no ML). */
+  enrollPromotion(token: string, itemId: string, body: { promotion_id: string; promotion_type: string; deal_price?: number }): Promise<void>;
+}
+
+export interface MlPromotion {
+  id: string;
+  type: string;
+  name?: string | null;
+  status?: string | null;
+  start_date?: string | null;
+  finish_date?: string | null;
+}
+
+export interface MlPromotionItem {
+  id: string;
+  original_price?: number | null;
+  price?: number | null;
+  suggested_discounted_price?: number | null;
+  min_discounted_price?: number | null;
+  max_discounted_price?: number | null;
+  meli_percentage?: number | null;
+  seller_percentage?: number | null;
+}
+
+export interface MlListingFee {
+  listing_type_id: string;
+  sale_fee_amount: number;
+  sale_fee_details?: { percentage_fee?: number; fixed_fee?: number } | null;
 }
 
 export class MlApiError extends Error {
@@ -128,7 +171,7 @@ export class HttpMlApi implements MlApi {
     const qs = new URLSearchParams({
       ids: ids.slice(0, 20).join(','),
       attributes:
-        'id,title,status,sub_status,price,available_quantity,permalink,secure_thumbnail,thumbnail,pictures,seller_custom_field,attributes,variations',
+        'id,title,status,sub_status,price,available_quantity,permalink,secure_thumbnail,thumbnail,pictures,seller_custom_field,attributes,variations,sold_quantity,listing_type_id,category_id,date_created,catalog_listing,shipping',
       include_attributes: 'all',
     });
     const r = await this.get<{ code: number; body: MlItem }[]>(`/items?${qs}`, token);
@@ -146,6 +189,64 @@ export class HttpMlApi implements MlApi {
 
   discounts(token: string, orderId: string) {
     return this.optional(() => this.get<MlDiscounts>(`/orders/${encodeURIComponent(orderId)}/discounts`, token));
+  }
+
+  updateItem(token: string, itemId: string, body: Record<string, unknown>) {
+    return this.request<MlItem>(
+      `/items/${encodeURIComponent(itemId)}`,
+      {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      false,
+    );
+  }
+
+  listingFees(token: string, price: number, categoryId: string | null) {
+    const qs = new URLSearchParams({ price: String(price) });
+    if (categoryId) qs.set('category_id', categoryId);
+    return this.get<MlListingFee[]>(`/sites/MLB/listing_prices?${qs}`, token);
+  }
+
+  async freeShippingCost(token: string, sellerId: string, itemId: string) {
+    const r = await this.optional(() =>
+      this.get<{ coverage?: { all_country?: { list_cost?: number } } }>(
+        `/users/${encodeURIComponent(sellerId)}/shipping_options/free?item_id=${encodeURIComponent(itemId)}&verbose=true`,
+        token,
+      ),
+    );
+    return r?.coverage?.all_country?.list_cost ?? null;
+  }
+
+  async promotions(token: string, sellerId: string) {
+    const r = await this.get<{ results?: MlPromotion[] }>(
+      `/seller-promotions/users/${encodeURIComponent(sellerId)}?app_version=v2`,
+      token,
+    );
+    return r.results ?? [];
+  }
+
+  async promotionCandidates(token: string, promotionId: string, type: string, searchAfter: string | null) {
+    const qs = new URLSearchParams({ promotion_type: type, app_version: 'v2', status: 'candidate', limit: '50' });
+    if (searchAfter) qs.set('search_after', searchAfter);
+    const r = await this.get<{ results?: MlPromotionItem[]; paging?: { searchAfter?: string | null } }>(
+      `/seller-promotions/promotions/${encodeURIComponent(promotionId)}/items?${qs}`,
+      token,
+    );
+    return { results: r.results ?? [], searchAfter: r.paging?.searchAfter ?? null };
+  }
+
+  async enrollPromotion(token: string, itemId: string, body: { promotion_id: string; promotion_type: string; deal_price?: number }) {
+    await this.request<unknown>(
+      `/seller-promotions/items/${encodeURIComponent(itemId)}?app_version=v2`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      false,
+    );
   }
 
   /** 404/403 = recurso indisponível para este pedido (não é erro da sincronização). */

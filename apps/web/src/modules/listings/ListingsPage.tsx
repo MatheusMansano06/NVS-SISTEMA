@@ -1,0 +1,188 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ListingDto, ListingListDto, ListingTab } from '@nvs/shared';
+import { AppShell } from '../../app/AppShell';
+import { navigate } from '../../app/router';
+import { Modal } from '../../shared/ui/Modal';
+import { Pagination } from '../../shared/ui/Pagination';
+import { useAuth } from '../auth/AuthContext';
+import { ListingCard } from './ListingCard';
+import { ListingPricingModal } from './ListingPricingModal';
+import { ListingSalesModal } from './ListingSalesModal';
+import { HowTo, ListingsNav } from './ListingsNav';
+import { listingsApi } from './listings-api';
+import '../skus/skus.css';
+import './listings.css';
+
+const TABS: { id: ListingTab; label: string }[] = [
+  { id: 'active', label: 'Ativos' },
+  { id: 'paused', label: 'Pausados' },
+  { id: 'closed', label: 'Finalizados' },
+];
+
+const STEPS = [
+  { title: 'Encontre o anúncio', text: 'Use as abas (Ativos, Pausados, Finalizados) e a busca por título, SKU ou código MLB.' },
+  { title: 'Confira a margem', text: 'O selo MC mostra quanto sobra por venda: verde ≥15%, amarelo 8–15%, vermelho abaixo. Sem custo, cadastre no chip “custo”.' },
+  { title: 'Ajuste na hora', text: 'Edite o estoque no próprio card, mude preço em “Preço e margem” e pause ou reative — tudo vai direto para o Mercado Livre.' },
+];
+
+/** Anúncios do Mercado Livre em cartões: lê do banco local (rápido) e só fala com o ML ao alterar. */
+export function ListingsPage() {
+  const { session } = useAuth();
+  const canManage = session?.user.role !== 'viewer';
+  const [tab, setTab] = useState<ListingTab>('active');
+  const [q, setQ] = useState('');
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(24);
+  const [data, setData] = useState<ListingListDto | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [pricing, setPricing] = useState<ListingDto | null>(null);
+  const [sales, setSales] = useState<ListingDto | null>(null);
+  const ctrl = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setQuery(q.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  const load = useCallback(async () => {
+    ctrl.current?.abort();
+    const c = new AbortController();
+    ctrl.current = c;
+    setLoading(true);
+    setError('');
+    try {
+      setData(await listingsApi.list({ status: tab, q: query || undefined, offset: (page - 1) * pageSize, limit: pageSize }, c.signal));
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') setError('Não foi possível carregar os anúncios.');
+    } finally {
+      if (ctrl.current === c) setLoading(false);
+    }
+  }, [tab, query, page, pageSize]);
+
+  useEffect(() => void load(), [load]);
+  useEffect(() => setPage(1), [tab, query, pageSize]);
+
+  const notify = useCallback((kind: 'ok' | 'error', text: string) => {
+    setMsg({ kind, text });
+    window.setTimeout(() => setMsg((m) => (m?.text === text ? null : m)), 5000);
+  }, []);
+
+  // ajuste local imediato; mudança de status tira o cartão da aba atual
+  const patch = useCallback((id: string, change: Partial<ListingDto>) => {
+    setData((d) => {
+      if (!d) return d;
+      if (change.status && change.status !== tab) {
+        const from = d.counts[tab];
+        const to = d.counts[change.status as ListingTab] ?? 0;
+        return {
+          ...d,
+          items: d.items.filter((i) => i.id !== id),
+          total: d.total - 1,
+          counts: { ...d.counts, [tab]: from - 1, [change.status]: to + 1 },
+        };
+      }
+      return { ...d, items: d.items.map((i) => (i.id === id ? { ...i, ...change } : i)) };
+    });
+  }, [tab]);
+
+  const counts = data?.counts;
+  return (
+    <AppShell>
+      <div className="skus listings">
+        <header className="skus-head">
+          <div>
+            <p className="dash-kicker">Mercado Livre</p>
+            <h1>Anúncios</h1>
+          </div>
+        </header>
+        <ListingsNav />
+        <HowTo steps={STEPS} storageKey="nvs:howto:anuncios" />
+
+        {data && !data.connected && (
+          <p className="banner banner-error">
+            Nenhuma conta do Mercado Livre conectada. <button type="button" className="link" onClick={() => navigate('/')}>Conectar no painel</button>
+          </p>
+        )}
+        {msg && <p className={`banner banner-${msg.kind}`} role="status">{msg.text}</p>}
+
+        <div className="skus-toolbar">
+          <label className="search">
+            <span className="sr-only">Buscar</span>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <input placeholder="Buscar por título, SKU ou MLB" value={q} onChange={(e) => setQ(e.target.value)} />
+          </label>
+          <div className="seg" role="radiogroup" aria-label="Situação do anúncio">
+            {TABS.map((t) => (
+              <button key={t.id} type="button" role="radio" aria-checked={tab === t.id} onClick={() => setTab(t.id)}>
+                {t.label}
+                {counts && <span>{counts[t.id]}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && (
+          <p className="banner banner-error" role="alert">
+            {error} <button type="button" className="link" onClick={() => void load()}>Tentar de novo</button>
+          </p>
+        )}
+
+        {!loading && data && data.items.length === 0 ? (
+          <div className="skus-empty">
+            <strong>Nenhum anúncio encontrado</strong>
+            <p>{query ? 'Tente outra busca.' : 'Sincronize o Mercado Livre para trazer seus anúncios.'}</p>
+          </div>
+        ) : (
+          <div className="lgrid" aria-busy={loading}>
+            {(data?.items ?? []).map((item) => (
+              <ListingCard
+                key={item.id}
+                item={item}
+                canManage={canManage}
+                onChanged={(change) => patch(item.id, change)}
+                onPricing={() => setPricing(item)}
+                onSales={() => setSales(item)}
+                onMsg={notify}
+              />
+            ))}
+            {loading && !data && Array.from({ length: 6 }, (_, i) => <div key={i} className="lcard lcard-skeleton" aria-hidden="true" />)}
+          </div>
+        )}
+
+        {data && data.total > 0 && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={data.total}
+            sizes={[12, 24, 48]}
+            onPage={(p) => {
+              setPage(p);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onPageSize={setPageSize}
+            label="anúncios"
+          />
+        )}
+      </div>
+
+      <Modal open={pricing !== null} onClose={() => setPricing(null)} label="Preço e margem" wide>
+        {pricing && (
+          <ListingPricingModal
+            item={pricing}
+            canManage={canManage}
+            onSaved={() => {
+              void load();
+              notify('ok', 'Anúncio atualizado.');
+            }}
+          />
+        )}
+      </Modal>
+      <Modal open={sales !== null} onClose={() => setSales(null)} label="Vendas do anúncio" wide>
+        {sales && <ListingSalesModal item={sales} />}
+      </Modal>
+    </AppShell>
+  );
+}

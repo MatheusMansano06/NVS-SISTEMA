@@ -76,6 +76,12 @@ export interface MlItem {
   thumbnail?: string | null;
   pictures?: { secure_url?: string | null; url?: string | null }[] | null;
   seller_custom_field?: string | null;
+  sold_quantity?: number | null;
+  listing_type_id?: string | null;
+  category_id?: string | null;
+  date_created?: string | null;
+  catalog_listing?: boolean | null;
+  shipping?: { free_shipping?: boolean | null; logistic_type?: string | null; dimensions?: string | null } | null;
   attributes?: { id: string; value_name?: string | null }[] | null;
   variations?: {
     seller_custom_field?: string | null;
@@ -99,6 +105,15 @@ export function mapMlItem(i: MlItem): IncomingListing {
     availableQuantity: i.available_quantity ?? null,
     status: i.status,
     subStatus: i.sub_status ?? [],
+    soldQuantity: i.sold_quantity ?? null,
+    listingTypeId: i.listing_type_id ?? null,
+    categoryId: i.category_id ?? null,
+    freeShipping: i.shipping?.free_shipping ?? false,
+    logisticType: i.shipping?.logistic_type ?? null,
+    catalogListing: i.catalog_listing ?? false,
+    picturesCount: i.pictures?.length ?? null,
+    dimensions: i.shipping?.dimensions ?? null,
+    listedAt: i.date_created ?? null,
     sku: attrSku(i.attributes) || i.seller_custom_field?.trim() || null,
     variationSkus: [
       ...new Set(

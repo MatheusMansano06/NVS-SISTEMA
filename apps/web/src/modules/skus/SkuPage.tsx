@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SkuFilter, SkuListDto, SkuRowDto } from '@nvs/shared';
 import { AppShell } from '../../app/AppShell';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { pct } from '../../shared/format';
 import { Button } from '../../shared/ui/Button';
 import { Icon } from '../../shared/ui/Icon';
@@ -84,6 +86,7 @@ export function SkuPage() {
   const counts = meta?.counts;
   const filled = counts && counts.all ? counts.done / counts.all : 0;
 
+  const tour = useGuidedTour('skus', TOURS.skus, !loading && items.length > 0);
   return (
     <AppShell>
       <div className="skus">
@@ -172,6 +175,7 @@ export function SkuPage() {
       <Modal open={importing} onClose={() => setImporting(false)} label="Importar planilha">
         <ImportModal onDone={() => void load()} />
       </Modal>
+      {tour.element}
     </AppShell>
   );
 }

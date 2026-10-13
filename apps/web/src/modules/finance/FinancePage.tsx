@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LOGISTIC_LABELS, marginBand, type FinanceSummaryDto, type MlStatusDto } from '@nvs/shared';
 import { AppShell } from '../../app/AppShell';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { navigate } from '../../app/router';
 import { int, money, pct } from '../../shared/format';
 import { Icon } from '../../shared/ui/Icon';
@@ -69,6 +71,7 @@ export function FinancePage() {
   const c = data?.cards;
   const band = c?.mcPct != null ? marginBand(c.mcPct) : null;
 
+  const tour = useGuidedTour('financeiro', TOURS.financeiro, Boolean(data) && !loading);
   return (
     <AppShell>
       <div className="fin-page" data-loading={loading || undefined}>
@@ -264,6 +267,7 @@ export function FinancePage() {
           </>
         ) : null}
       </div>
+      {tour.element}
     </AppShell>
   );
 }

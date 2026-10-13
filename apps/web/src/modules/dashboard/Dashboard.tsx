@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { PERIOD_LABELS } from '@nvs/shared';
 import { AppShell } from '../../app/AppShell';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { useAuth } from '../auth/AuthContext';
 import { int, money, pct } from '../../shared/format';
 import { Button } from '../../shared/ui/Button';
@@ -57,6 +59,7 @@ export function Dashboard() {
   const k = data?.kpis;
   const p = data?.previous;
 
+  const tour = useGuidedTour('dashboard', TOURS.dashboard, Boolean(data) && !loading);
   return (
     <AppShell>
       <div className="dash" data-hidden={hidden || undefined} data-loading={loading || undefined}>
@@ -178,6 +181,7 @@ export function Dashboard() {
           </>
         ) : null}
       </div>
+      {tour.element}
     </AppShell>
   );
 }

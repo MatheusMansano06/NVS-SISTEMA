@@ -5,6 +5,7 @@ import { DeleteAccountForm } from '../modules/account/DeleteAccountForm';
 import { Icon, type IconName } from '../shared/ui/Icon';
 import { Modal } from '../shared/ui/Modal';
 import { navigate, usePath } from './router';
+import { TOUR_EVENT } from '../shared/tour/Tour';
 import './shell.css';
 
 const NAV: { label: string; icon: IconName; path?: string }[] = [
@@ -74,6 +75,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="sidebar-user">
           {userMenu && (
             <div className="user-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => { setUserMenu(false); window.dispatchEvent(new Event(TOUR_EVENT)); }}>
+                <Icon name="info" size={18} /> Rever tour desta tela
+              </button>
               <button type="button" role="menuitem" onClick={() => { setUserMenu(false); setChangingPassword(true); }}>
                 <Icon name="key" size={18} /> Alterar senha
               </button>

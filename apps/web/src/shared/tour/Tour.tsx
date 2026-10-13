@@ -20,6 +20,8 @@ interface Rect {
 }
 
 const PAD = 8;
+/** Evento global para abrir o tour da tela atual. */
+export const TOUR_EVENT = 'nvs:tour';
 const BUBBLE_W = 380;
 
 /**
@@ -38,6 +40,13 @@ export function useGuidedTour(id: string, steps: TourStep[], ready: boolean) {
       if (!s.has(id)) setOpen(true);
     });
   }, [id, ready]);
+
+  // "Rever tour desta tela" no menu do usuário
+  useEffect(() => {
+    const open = () => setOpen(true);
+    window.addEventListener(TOUR_EVENT, open);
+    return () => window.removeEventListener(TOUR_EVENT, open);
+  }, []);
 
   const close = useCallback(
     (status: 'done' | 'skipped') => {
@@ -73,22 +82,29 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: (s: 'done
     const el = step.target ? document.querySelector<HTMLElement>(step.target) : null;
     if (!el) return setRect(null);
     const r = el.getBoundingClientRect();
-    setRect({ top: r.top - PAD, left: r.left - PAD, width: r.width + PAD * 2, height: r.height + PAD * 2 });
+    // destaque recortado à área visível (alvos maiores que a tela, como uma lista longa)
+    const top = Math.max(8, r.top - PAD);
+    const bottom = Math.min(window.innerHeight - 8, r.bottom + PAD);
+    const left = Math.max(8, r.left - PAD);
+    const right = Math.min(window.innerWidth - 8, r.right + PAD);
+    if (bottom - top < 24) return setRect(null);
+    setRect({ top, left, width: right - left, height: bottom - top });
   }, [step.target]);
 
   useLayoutEffect(() => {
     const el = step.target ? document.querySelector<HTMLElement>(step.target) : null;
     if (el) {
-      document.body.style.overflow = '';
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      const t = window.setTimeout(() => {
-        measure();
-        document.body.style.overflow = 'hidden';
-      }, 380);
-      measure();
-      return () => window.clearTimeout(t);
+      // rolagem instantânea (a página está travada para o usuário, não para o tour) e medida no próximo quadro
+      const tall = el.getBoundingClientRect().height > window.innerHeight * 0.55;
+      el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'instant' as ScrollBehavior });
     }
     measure();
+    const raf = requestAnimationFrame(measure);
+    const t = window.setTimeout(measure, 60); // aba em segundo plano não desenha quadros
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
   }, [step.target, measure]);
 
   useEffect(() => {
@@ -118,9 +134,9 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: (s: 'done
         }}
       >
         <div className="onb tour-onb">
-          <header className="onb-top">
-            <img src="/nvs-logo.webp" alt="NVS Tech" className="onb-logo" width="120" height="48" />
+          <header className="onb-top tour-full-top">
             <span className="tour-full-count">{last ? 'Tudo pronto' : `${steps.length - 2} dicas rápidas`}</span>
+            <button type="button" className="tour-exit tour-exit-static" onClick={() => onClose('skipped')}>Sair do tour ✕</button>
           </header>
           <main className="onb-stage" key={i}>
             <Gertrudez message={`${step.title}\n${step.text}`} mood={last && i > 0 ? 'party' : 'talk'}>
@@ -144,15 +160,21 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: (s: 'done
   const vh = window.innerHeight;
   const width = Math.min(BUBBLE_W, vw - 32);
   let style: React.CSSProperties = { width, left: (vw - width) / 2, top: Math.max(16, vh / 2 - 140) };
-  let side: 'below' | 'above' | 'center' = 'center';
+  let side: 'below' | 'above' | 'center' | 'float' = 'center';
+  const BUBBLE_H = 280;
   if (rect) {
     const left = Math.min(Math.max(16, rect.left + rect.width / 2 - width / 2), vw - width - 16);
-    if (rect.top + rect.height + 260 < vh) {
+    const spaceBelow = vh - (rect.top + rect.height);
+    if (spaceBelow >= BUBBLE_H + 14) {
       style = { width, left, top: rect.top + rect.height + 14 };
       side = 'below';
-    } else {
+    } else if (rect.top >= BUBBLE_H + 14) {
       style = { width, left, bottom: vh - rect.top + 14 };
       side = 'above';
+    } else {
+      // o alvo ocupa a tela: o balão flutua no canto inferior direito, por cima
+      style = { width, right: 16, bottom: 16 };
+      side = 'float';
     }
   }
 
@@ -174,6 +196,7 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: (s: 'done
       ) : (
         <div className="tour-dim" aria-hidden="true" />
       )}
+      <button type="button" className="tour-exit" onClick={() => onClose('skipped')}>Sair do tour ✕</button>
       <div className="tour-bubble" data-side={side} style={style}>
         <div className="tour-head">
           <img className="tour-gz" src="/gertrudez.webp" alt="" aria-hidden="true" />

@@ -55,7 +55,7 @@ export const TOURS = {
     { target: '.skpis', title: 'Resumo', text: 'Vendas, unidades, receita e lucro. Se faltar custo de algum SKU, o lucro avisa em vez de mostrar um número errado.' },
     { target: '.scharts', title: 'Como e para onde vende', text: 'Formas de pagamento, modalidade de envio e os estados que mais compram. Passe o mouse para destacar cada fatia.' },
     { target: '.difal', title: 'DIFAL', text: 'O valor oficial vem da sua fatura do ML (Faturamento → Impostos). Ao lado, a estimativa pelas vendas mostra de onde ele vem: “Ver por estado” abre o detalhe e “Configurar” ajusta origem e alíquotas.' },
-    { target: '.sorders', title: 'Venda a venda', text: 'Comprador, pedido, carrinho, CEP, pagamento e a conta completa de cada venda. Busque por cliente, pedido, CEP ou SKU e filtre pela forma de pagamento.' },
+    { target: '.sorders > li:first-child', title: 'Venda a venda', text: 'Comprador, pedido, carrinho, CEP, pagamento e a conta completa de cada venda. Busque por cliente, pedido, CEP ou SKU e filtre pela forma de pagamento.' },
     { title: 'Pronto! 🎉', text: 'Dica: olhe os estados que mais compram e o lucro por mês — é onde aparecem as melhores decisões de preço e de estoque.' },
   ],
   precificador: [
@@ -72,5 +72,52 @@ export const TOURS = {
     { target: '.pcols', title: 'Clássico × Premium', text: 'A conta completa de cada tipo. Premium cobra mais tarifa, mas dá parcela sem juros e mais exposição. Daqui você troca o tipo do anúncio, salva a simulação ou aplica o preço.' },
     { target: '.pricing .skus-head .seg', title: 'Simulações salvas', text: 'Tudo que você salvar fica aqui, por empresa, para comparar depois e ver se o preço já foi aplicado.' },
     { title: 'Agora é com você! 🎉', text: 'Dica: simule com a margem que você quer e compare os dois tipos antes de aplicar.' },
+  ],
+  dashboard: [
+    {
+      title: 'Este é o seu Dashboard 👋',
+      text:
+        'É o resumo do dia a dia da loja: quanto vendeu, quanto lucrou e como está a margem, comparando com o período anterior.\n' +
+        'Serve para bater o olho e saber se o dia (ou o mês) está indo bem — e onde agir.\n' +
+        'Os números se atualizam sozinhos com as vendas do Mercado Livre.',
+    },
+    { target: '.filters', title: 'Período e conta', text: 'Escolha hoje, ontem, 7 ou 30 dias, este mês ou o passado. Se tiver mais de uma conta, filtre por ela. O botão de atualizar busca os números mais recentes.' },
+    { target: '.kpis', title: 'Os números principais', text: 'Faturamento, lucro, margem e pedidos. A setinha compara com o período anterior: verde subiu, vermelho caiu.' },
+    { target: '.minis', title: 'Outros indicadores', text: 'Ticket médio e outros números de apoio. Se aparecer aviso de custo faltando, o lucro está incompleto — cadastre em “Cadastro de SKUs”.' },
+    { target: '.chart-panel', title: 'Evolução das vendas', text: 'O gráfico mostra a receita ao longo do período (por hora quando é um dia só). Passe o mouse para ver cada ponto.' },
+    { target: '.dash-duo', title: 'Mais vendidos e pausados', text: 'À esquerda os 5 produtos que mais venderam. À direita os anúncios pausados — principalmente os sem estoque, que estão deixando de vender.' },
+    { title: 'Tudo certo! 🎉', text: 'Dica: compare sempre com o período anterior. Para entender de onde vem cada número, use a Análise Financeira e a aba Vendas.' },
+  ],
+  financeiro: [
+    {
+      title: 'Análise Financeira',
+      text:
+        'Aqui está a conta completa das suas vendas: quanto entrou, quanto foi de tarifa, frete, imposto e custo, e quanto sobrou.\n' +
+        'Serve para saber a margem de verdade e achar o que está comendo o seu lucro.\n' +
+        'Você pode filtrar por período, conta e olhar venda por venda.',
+    },
+    { target: '.mkt-tabs', title: 'Marketplace', text: 'Escolha de qual marketplace quer ver a análise.' },
+    { target: '.fin-filters', title: 'Período e conta', text: 'Use os atalhos (7, 30 dias…) ou escolha as datas. Se tiver mais de uma conta, filtre por ela.' },
+    { target: '.fin-hero', title: 'Vendas aprovadas', text: 'O total vendido no período, com cancelamentos, devoluções parciais e o faturamento logo abaixo.' },
+    { target: '.fin-mc', title: 'Margem de contribuição', text: 'O que sobra depois de todos os custos da venda. A cor mostra a faixa (saudável, atenção, risco) e o gráfico a evolução.' },
+    { target: '.donut', title: 'Para onde vai o dinheiro', text: 'Quanto de cada venda vai para custo, imposto, tarifa, frete e quanto fica de margem. Passe o mouse em cada fatia.' },
+    { target: '.logistics', title: 'Por modalidade de frete', text: 'Vendas por tipo de envio (Full, Flex, Coleta…). Ajuda a ver qual logística dá mais resultado.' },
+    { target: '.ftable', title: 'Venda a venda', text: 'Cada venda com a conta completa. Filtre, ordene e copie o número do pedido para conferir no ML.' },
+    { title: 'Pronto! 🎉', text: 'Dica: se a margem estiver baixa, veja na composição se o vilão é tarifa, frete ou custo — e ajuste no Precificador.' },
+  ],
+  skus: [
+    {
+      title: 'Cadastro de SKUs',
+      text:
+        'Aqui você informa quanto cada produto custa para você.\n' +
+        'Serve para o sistema calcular lucro e margem de verdade — sem custo, o lucro fica incompleto em todas as telas.\n' +
+        'Dá para preencher um a um aqui ou importar uma planilha de uma vez.',
+    },
+    { target: '.skus-actions', title: 'Planilha', text: 'Exporte a lista para preencher no Excel e importe de volta. Antes de gravar, eu mostro uma prévia do que vai mudar.' },
+    { target: '.fill', title: 'Quanto falta', text: 'A barra mostra quantos SKUs já têm custo. Comece pelos mais vendidos: eles pesam mais no lucro.' },
+    { target: '.taxrate', title: 'Imposto da empresa', text: 'A alíquota única de imposto vale para todas as vendas. Mudou de regime ou alíquota? Atualize aqui.' },
+    { target: '.skus .skus-toolbar', title: 'Busca e filtros', text: 'Busque por SKU ou título e filtre por “Sem custo”, “Com custo” ou todos.' },
+    { target: '.sku-list .sku-row:first-child .sku-cost', title: 'Digite o custo', text: 'Escreva o custo unitário e saia do campo (ou Enter): salva sozinho. O primeiro custo vale para todo o histórico; mudanças depois valem a partir do dia em que forem feitas.' },
+    { title: 'É isso! 🎉', text: 'Assim que você preenche, o Dashboard, a Análise Financeira e os Anúncios já mostram o lucro certo.' },
   ],
 } satisfies Record<string, TourStep[]>;

@@ -35,9 +35,19 @@
 @media (prefers-reduced-motion: reduce) { .tour-spot { animation: none; } }
 
 /* ============ Abertura/encerramento em tela cheia (mesma cena da trilha) ============ */
-.tour-full { background: radial-gradient(1200px 700px at 70% 10%, #eaf0ff, transparent 60%), rgba(247, 248, 251, .97); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); animation: tour-fade .3s both; overflow: auto; }
+.tour-full { background: rgba(240, 243, 250, .55); -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1); animation: tour-fade .3s both; overflow: auto; }
+.tour-full .onb { background: transparent; }
+.tour-full-top { justify-content: flex-end; gap: 10px; }
 .tour-onb { min-height: 100dvh; }
 .tour-full-count { padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.75); box-shadow: 0 0 0 1px rgba(207,212,224,.6); font-size: .82rem; font-weight: 600; color: var(--navy); }
 .tour-full-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .tour-full-actions .btn { width: auto; padding: 0 28px; height: 52px; font-size: 1rem; }
 .tour-full-actions .link { color: var(--gray-500); }
+
+.tour-exit {
+  position: absolute; top: 16px; right: 16px; z-index: 2; border: 0; cursor: pointer; padding: 8px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.92); color: var(--navy); font: inherit; font-size: .82rem; font-weight: 650;
+  box-shadow: 0 6px 18px -8px rgba(11,28,77,.5);
+}
+.tour-exit:hover { background: #fff; }
+.tour-exit-static { position: static; }

@@ -21,7 +21,8 @@ if (appRole && !/^[a-z_][a-z0-9_]*$/.test(appRole)) {
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString: url });
+const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 15_000 });
+console.log('Migrations: conectando ao banco…');
 await client.connect();
 try {
   await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -43,15 +44,25 @@ try {
       console.log(`… ${file} (pendente)`);
       continue;
     }
-    await client.query('BEGIN');
-    try {
-      await client.query(sql);
-      await client.query('INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)', [file, checksum]);
-      await client.query('COMMIT');
-      console.log(`▶ aplicada ${file}`);
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
+    console.log(`… aplicando ${file}`);
+    // ALTER TABLE espera o lock da tabela; com a versão anterior ainda no ar (notificações, sync) isso
+    // pode demorar. Em vez de travar o deploy (e enfileirar as consultas da app atrás dele), desiste
+    // rápido e tenta de novo. Esgotou: sai com erro e o deploy falha sem derrubar a versão no ar.
+    for (let attempt = 1; ; attempt++) {
+      await client.query('BEGIN');
+      try {
+        await client.query("SET LOCAL lock_timeout = '5s'");
+        await client.query(sql);
+        await client.query('INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)', [file, checksum]);
+        await client.query('COMMIT');
+        console.log(`▶ aplicada ${file}`);
+        break;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        if (err.code !== '55P03' || attempt >= 12) throw err; // 55P03 = lock_not_available
+        console.log(`  tabela ocupada, nova tentativa (${attempt}/12)`);
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
     }
   }
   if (command === 'up' && appRole && appPassword) {

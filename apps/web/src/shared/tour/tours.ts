@@ -133,15 +133,15 @@ export const TOURS = {
     { target: '.radar-list .radar-card:first-child', title: 'Cada alerta', text: 'Frete antes e agora (com o gráfico dos últimos 30 dias), a margem por venda antes e depois e o impacto no mês. Os botões levam direto para conferir medidas, ajustar o preço ou ativar o Flex.' },
     { title: 'Dica de ouro 🎉', text: 'Quando o frete dispara do nada, a causa mais comum é medida ou peso errado no anúncio. Comece conferindo as medidas.' },
   ],
-  operadores: [
+  equipe: [
     {
-      title: 'Operadores da expedição',
+      title: 'Sua equipe',
       text:
-        'Aqui você cadastra quem trabalha na Operação (separação, conferência, etiquetas).\n' +
-        'Eles não precisam de e-mail nem senha: no computador da Operação, tocam no próprio nome e digitam um PIN de 4 números.',
+        'Aqui o MASTER cadastra quem usa o sistema.\n' +
+        'Cada pessoa entra tocando no próprio nome e digitando um PIN de 4 números — na Análise, na Operação ou nas duas.',
     },
-    { target: '.op-add', title: 'Cadastrar', text: 'Digite o nome e clique em Cadastrar. Todo operador novo começa com o PIN 1234 e cria o próprio PIN no primeiro acesso.' },
-    { target: '.op-list', title: 'A equipe', text: 'Veja quem já criou o PIN e o último acesso. Esqueceu o PIN ou errou 5 vezes? “Resetar PIN” volta para 1234. Saiu da empresa? “Desativar”.' },
-    { title: 'Ligar um computador na Operação 🎉', text: 'Saia da conta e, ao entrar de novo, escolha “Operação”. Aquele computador passa a mostrar só a tela dos operadores.' },
+    { target: '.op-add', title: 'Cadastrar', text: 'Nome, função (Análise, Operação ou as duas) e se é MASTER. Todo mundo começa com o PIN 1234 e troca se quiser.' },
+    { target: '.op-list', title: 'A equipe', text: 'Mude a função, torne MASTER, resete o PIN de quem esqueceu (ou errou 5 vezes) e desative quem saiu. Sempre fica pelo menos um MASTER.' },
+    { title: 'Na Operação também 🎉', text: 'MASTER que entra na Operação tem o botão “Equipe” lá em cima para cadastrar sem precisar vir na Análise.' },
   ],
 } satisfies Record<string, TourStep[]>;

@@ -6,9 +6,11 @@ import { Icon, type IconName } from '../shared/ui/Icon';
 import { Modal } from '../shared/ui/Modal';
 import { navigate, usePath } from './router';
 import { TOUR_EVENT } from '../shared/tour/Tour';
+import { usePerson } from '../modules/operation/PersonContext';
+import { PinChange } from '../modules/operation/PinChange';
 import './shell.css';
 
-const NAV: { label: string; icon: IconName; path?: string }[] = [
+const NAV: { label: string; icon: IconName; path?: string; master?: boolean }[] = [
   { label: 'Dashboard', icon: 'dashboard', path: '/' },
   { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro' },
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
@@ -16,7 +18,7 @@ const NAV: { label: string; icon: IconName; path?: string }[] = [
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
   { label: 'Precificador', icon: 'tag', path: '/precificador' },
   { label: 'Radar de Frete', icon: 'radar', path: '/radar-frete' },
-  { label: 'Operadores', icon: 'users', path: '/operadores' },
+  { label: 'Equipe', icon: 'users', path: '/equipe', master: true },
   { label: 'Integrações', icon: 'plug' },
 ];
 
@@ -30,6 +32,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState('');
 
   const email = session?.user.email ?? '';
+  const person = usePerson();
+  const [changingPin, setChangingPin] = useState(false);
+  const who = person?.person.person.name ?? email.split('@')[0] ?? '';
   const path = usePath();
 
   return (
@@ -50,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav>
           <ul>
-            {NAV.map((item) => (
+            {NAV.filter((item) => !item.master || person?.person.person.master).map((item) => (
               <li key={item.label}>
                 <a
                   href={item.path}
@@ -80,11 +85,21 @@ export function AppShell({ children }: { children: ReactNode }) {
               <button type="button" role="menuitem" onClick={() => { setUserMenu(false); window.dispatchEvent(new Event(TOUR_EVENT)); }}>
                 <Icon name="info" size={18} /> Rever tour desta tela
               </button>
+              {person && (
+                <>
+                  <button type="button" role="menuitem" onClick={() => { setUserMenu(false); setChangingPin(true); }}>
+                    <Icon name="key" size={18} /> Trocar meu PIN
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setUserMenu(false); person.switchPerson(); }}>
+                    <Icon name="users" size={18} /> Trocar de pessoa
+                  </button>
+                </>
+              )}
               <button type="button" role="menuitem" onClick={() => { setUserMenu(false); setChangingPassword(true); }}>
-                <Icon name="key" size={18} /> Alterar senha
+                <Icon name="key" size={18} /> Alterar senha da empresa
               </button>
               <button type="button" role="menuitem" onClick={() => void logout()}>
-                <Icon name="logout" size={18} /> Sair
+                <Icon name="logout" size={18} /> Sair da conta da empresa
               </button>
               {session?.user.role === 'owner' && (
                 <button type="button" role="menuitem" className="danger" onClick={() => { setUserMenu(false); setDeleting(true); }}>
@@ -94,9 +109,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
           <button type="button" className="user-card" onClick={() => setUserMenu((v) => !v)} aria-expanded={userMenu}>
-            <span className="user-avatar" aria-hidden="true">{email.charAt(0).toUpperCase()}</span>
+            <span className="user-avatar" aria-hidden="true">{who.charAt(0).toUpperCase()}</span>
             <span className="user-info">
-              <strong>{email.split('@')[0]}</strong>
+              <strong>{who}</strong>
               <small>{session?.tenant.name}</small>
             </span>
             <Icon name="chevron" size={16} />
@@ -123,6 +138,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
         />
       </Modal>
+      {person && (
+        <Modal open={changingPin} onClose={() => setChangingPin(false)} label="Trocar meu PIN">
+          {changingPin && (
+            <PinChange
+              person={person.person}
+              onCancel={() => setChangingPin(false)}
+              onDone={(p) => {
+                person.update(p);
+                setChangingPin(false);
+                setNotice('PIN alterado.');
+                window.setTimeout(() => setNotice(''), 4000);
+              }}
+            />
+          )}
+        </Modal>
+      )}
       <Modal open={deleting} onClose={() => setDeleting(false)} label="Excluir empresa">
         <DeleteAccountForm onCancel={() => setDeleting(false)} />
       </Modal>

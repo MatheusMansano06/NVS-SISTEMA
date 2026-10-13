@@ -7,9 +7,11 @@ import {
   loginSchema,
   registerAccountSchema,
   type SessionDto,
+  type TeamMemberInput,
   type UserDto,
 } from '@nvs/shared';
 import { z } from 'zod';
+import type { Queryable } from '../../../shared/infrastructure/database.js';
 import { ValidationError } from '../../../shared/kernel/errors.js';
 import type { Tenant } from '../../tenancy/index.js';
 import type { User } from '../domain/user.js';
@@ -47,7 +49,14 @@ const pageSchema = z.object({
 
 export function identityRoutes(
   service: IdentityService,
-  opts: { secureCookies: boolean; authRateLimit: number },
+  opts: {
+    secureCookies: boolean;
+    authRateLimit: number;
+    /** Equipe informada no cadastro da conta (criada na mesma transação). */
+    onRegisterTeam?: (db: Queryable, ids: { tenantId: string; userId: string }, team: TeamMemberInput[]) => Promise<void>;
+    /** Cookies extras que caem junto com a sessão da empresa (ex.: pessoa da equipe). */
+    logoutCookies?: string[];
+  },
 ) {
   return async (app: FastifyInstance) => {
     const strictLimit = { config: { rateLimit: { max: opts.authRateLimit, timeWindow: '1 minute' } } };
@@ -69,7 +78,9 @@ export function identityRoutes(
     };
 
     app.post('/auth/register', strictLimit, async (req, reply) => {
-      await service.registerAccount(parse(registerAccountSchema, req.body));
+      const input = parse(registerAccountSchema, req.body);
+      const team = input.team;
+      await service.registerAccount(input, team && opts.onRegisterTeam ? (db, ids) => opts.onRegisterTeam!(db, ids, team) : undefined);
       return reply.code(201).send({ ok: true });
     });
 
@@ -82,6 +93,7 @@ export function identityRoutes(
 
     app.post('/auth/logout', async (_req, reply) => {
       reply.clearCookie(SESSION_COOKIE, { path: '/' });
+      for (const c of opts.logoutCookies ?? []) reply.clearCookie(c, { path: '/' });
       return reply.code(204).send();
     });
 

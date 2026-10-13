@@ -81,3 +81,44 @@
   .pin-keys { grid-template-columns: repeat(3, 70px); }
   .pin-keys button { height: 70px; }
 }
+
+/* ============ Equipe ============ */
+.mode-inner { display: grid; justify-items: center; gap: 14px; text-align: center; }
+.mode-inner h1 { margin: 6px 0 4px; }
+.team-setup { display: grid; gap: 14px; width: min(720px, 94vw); }
+.team-setup h1 { text-align: left !important; }
+.team-setup > p { margin: 0; color: var(--gray-500); }
+.team-setup .btn { justify-self: start; width: auto; padding: 0 28px; }
+.team-rows { display: grid; gap: 10px; }
+.team-row { display: grid; grid-template-columns: 1fr 170px auto auto; gap: 8px; align-items: end; }
+.team-row label { display: grid; gap: 4px; }
+.team-row small { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--gray-500); }
+.team-row input:not([type=checkbox]), .team-row select, .op-area-select {
+  height: 42px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--gray-300); background: #fff; font: inherit; color: var(--navy); min-width: 0;
+}
+.op-area-select { height: 34px; border-radius: 12px; font-size: .82rem; }
+.team-master { display: flex !important; align-items: center; gap: 6px; height: 42px; font-weight: 700; font-size: .82rem; color: var(--navy); white-space: nowrap; }
+.team-master input { width: 18px; height: 18px; accent-color: var(--blue); }
+.icon-x { width: 36px; height: 42px; border: 0; background: none; font-size: 1.4rem; color: var(--gray-500); cursor: pointer; }
+.icon-x:hover { color: #c0392b; }
+.team-add { justify-self: start; font-weight: 700; }
+.register-team { border: 0; padding: 0; margin: 4px 0 8px; display: grid; gap: 8px; min-width: 0; }
+.register-team legend { font-weight: 750; color: var(--navy); padding: 0; margin-bottom: 4px; }
+.register-team .hint { margin: 0; font-size: .82rem; color: var(--gray-500); }
+.register-team .team-row { grid-template-columns: 1fr auto auto; padding-bottom: 10px; border-bottom: 1px dashed var(--gray-100); }
+.register-team .team-name { grid-column: 1 / -1; }
+.op-area { flex: 0 0 200px !important; min-width: 0 !important; }
+.op-area select { border: 0; background: none; font: inherit; width: 100%; color: var(--navy); outline: none; }
+.op-add .team-master { height: 42px; }
+.tag-master { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--yellow-soft); color: #7a5600; font-size: .66rem; font-weight: 800; letter-spacing: .04em; vertical-align: middle; }
+.op-list strong small { color: var(--gray-500); font-weight: 500; }
+.op-actions { flex-wrap: wrap; align-items: center; }
+.pin-offer { display: grid; justify-items: center; gap: 6px; }
+.pin-offer .ledit-hint { margin: 0; text-align: center; }
+.team-modal-title { margin: 0 0 12px; color: var(--navy); }
+.team-manager { display: grid; gap: 12px; }
+.boot-error { margin: 40px auto; max-width: 480px; }
+@media (max-width: 640px) {
+  .team-row, .register-team .team-row { grid-template-columns: 1fr auto; }
+  .team-row .team-area { grid-column: 1 / 2; }
+}

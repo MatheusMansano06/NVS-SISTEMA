@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isValidCnpj, onlyDigits } from './cnpj.js';
 import { ROLES } from './permissions.js';
+import { teamSetupSchema } from './operation.js';
 
 export const emailSchema = z.string().trim().toLowerCase().email('E-mail inválido').max(254);
 
@@ -26,6 +27,8 @@ export const registerAccountSchema = z.object({
   email: emailSchema,
   phone: phoneSchema,
   cnpj: cnpjSchema,
+  /** Equipe que entra por nome + PIN (Análise/Operação). Opcional: dá para cadastrar no 1º acesso. */
+  team: teamSetupSchema.optional(),
 });
 export type RegisterAccountInput = z.infer<typeof registerAccountSchema>;
 

@@ -49,12 +49,12 @@ import {
 import { TokenCipher } from './shared/infrastructure/token-cipher.js';
 import { serveWeb } from './shared/infrastructure/web-static.js';
 import { healthRoutes } from './modules/health/presentation/routes.js';
-import { OperatorService, PgOperatorRepository, operationRoutes } from './modules/operation/index.js';
+import { OperatorService, PERSON_COOKIE, PgOperatorRepository, operationRoutes } from './modules/operation/index.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'station' | 'operator' };
-    user: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'station' | 'operator' };
+    payload: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'person'; mode?: 'analise' | 'operacao' };
+    user: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'person'; mode?: 'analise' | 'operacao' };
   }
 }
 declare module 'fastify' {
@@ -192,8 +192,9 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
     { prefix: '/api/v1' },
   );
   await app.register(pricingRoutes(ml && mlClient ? new PricingService(database, ml, mlClient, new PgCategoryCache(database), mlLookups!) : null), { prefix: '/api/v1' });
+  const operators = new OperatorService(database, new PgOperatorRepository());
   await app.register(
-    operationRoutes(new OperatorService(database, new PgOperatorRepository()), {
+    operationRoutes(operators, {
       secureCookies: env.NODE_ENV === 'production',
       tenantName: async (id) => (await database.query<{ name: string }>('SELECT name FROM tenants WHERE id = $1', [id])).rows[0]?.name ?? '',
     }),
@@ -204,6 +205,8 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
   await app.register(identityRoutes(identity, {
       secureCookies: env.NODE_ENV === 'production',
       authRateLimit: env.AUTH_RATE_LIMIT_MAX,
+      onRegisterTeam: (db, ids, team) => operators.setup(ids.tenantId, ids.userId, team, db),
+      logoutCookies: [PERSON_COOKIE],
     }), {
     prefix: '/api/v1',
   });

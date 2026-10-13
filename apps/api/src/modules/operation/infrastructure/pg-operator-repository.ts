@@ -5,6 +5,8 @@ export interface OperatorRow {
   name: string;
   pin_hash: string;
   must_change_pin: boolean;
+  area: 'analise' | 'operacao' | 'ambos';
+  is_master: boolean;
   is_active: boolean;
   failed_attempts: number;
   locked_until: Date | null;
@@ -26,20 +28,39 @@ export class PgOperatorRepository {
     return rows[0] ?? null;
   }
 
-  async create(db: Queryable, tenantId: string, name: string, pinHash: string, userId: string): Promise<OperatorRow> {
+  async create(
+    db: Queryable,
+    tenantId: string,
+    m: { name: string; area: string; master: boolean },
+    pinHash: string,
+    userId: string | null,
+  ): Promise<OperatorRow> {
     const { rows } = await db.query<OperatorRow>(
-      'INSERT INTO operators (tenant_id, name, pin_hash, created_by) VALUES ($1, $2, $3, $4) RETURNING *',
-      [tenantId, name, pinHash, userId],
+      `INSERT INTO operators (tenant_id, name, area, is_master, pin_hash, must_change_pin, created_by)
+       VALUES ($1, $2, $3, $4, $5, true, $6) RETURNING *`,
+      [tenantId, m.name, m.area, m.master, pinHash, userId],
     );
     return rows[0]!;
   }
 
-  async update(db: Queryable, id: string, p: { name?: string; active?: boolean }): Promise<OperatorRow | null> {
+  async update(
+    db: Queryable,
+    id: string,
+    p: { name?: string; area?: string; master?: boolean; active?: boolean },
+  ): Promise<OperatorRow | null> {
     const { rows } = await db.query<OperatorRow>(
-      `UPDATE operators SET name = coalesce($2, name), is_active = coalesce($3, is_active) WHERE id = $1 RETURNING *`,
-      [id, p.name ?? null, p.active ?? null],
+      `UPDATE operators SET name = coalesce($2, name), area = coalesce($3, area), is_master = coalesce($4, is_master),
+              is_active = coalesce($5, is_active)
+        WHERE id = $1 RETURNING *`,
+      [id, p.name ?? null, p.area ?? null, p.master ?? null, p.active ?? null],
     );
     return rows[0] ?? null;
+  }
+
+  /** MASTERs ativos (para não deixar a empresa sem ninguém que cadastre a equipe). */
+  async activeMasters(db: Queryable): Promise<number> {
+    const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM operators WHERE is_active AND is_master');
+    return rows[0]!.n;
   }
 
   async setPin(db: Queryable, id: string, pinHash: string, mustChange: boolean): Promise<void> {

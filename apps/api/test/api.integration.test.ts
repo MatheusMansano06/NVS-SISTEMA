@@ -162,7 +162,9 @@ describe.skipIf(!TEST_DB)('API (integração)', () => {
   it('logout limpa a sessão', async () => {
     const res = await app.inject({ method: 'POST', url: '/api/v1/auth/logout' });
     expect(res.statusCode).toBe(204);
-    expect(res.headers['set-cookie']).toMatch(/nvs_session=;/);
+    const set = [res.headers['set-cookie']].flat().join('\n');
+    expect(set).toMatch(/nvs_session=;/);
+    expect(set).toMatch(/nvs_person=;/); // a pessoa da equipe cai junto
   });
 
   it('onboarding: começa em welcome, exige plataforma, retoma e conclui', async () => {

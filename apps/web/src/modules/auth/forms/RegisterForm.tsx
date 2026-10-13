@@ -1,18 +1,26 @@
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
+import type { TeamMemberInput } from '@nvs/shared';
 import { registerAccountSchema } from '@nvs/shared';
 import { Button } from '../../../shared/ui/Button';
 import { Field } from '../../../shared/ui/Field';
 import { maskCnpj, maskPhone } from '../../../shared/masks';
 import { authApi } from '../auth-api';
 import { useForm } from '../useForm';
+import { TeamRows, emptyMember, teamProblem } from '../../operation/TeamRows';
+import '../../operation/operation.css';
 
 export function RegisterForm({ onBack, onCreated }: { onBack: () => void; onCreated: (email: string) => void }) {
   const f = useForm({ email: '', phone: '', cnpj: '' });
+  const [team, setTeam] = useState<TeamMemberInput[]>([emptyMember(true)]);
+  const [teamError, setTeamError] = useState('');
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const data = f.validate(registerAccountSchema, f.values);
-    if (!data) return;
+    const filled = team.filter((m) => m.name.trim()).map((m) => ({ ...m, name: m.name.trim() }));
+    const problem = teamProblem(filled);
+    setTeamError(problem ?? '');
+    const data = f.validate(registerAccountSchema, { ...f.values, team: filled });
+    if (!data || problem) return;
     void f.run(async () => {
       await authApi.register(data);
       onCreated(data.email);
@@ -22,7 +30,7 @@ export function RegisterForm({ onBack, onCreated }: { onBack: () => void; onCrea
   return (
     <form onSubmit={submit} noValidate aria-labelledby="register-title">
       <h2 id="register-title">Criar sua conta</h2>
-      <p className="lead">São só três informações. Você define sua senha no primeiro acesso.</p>
+      <p className="lead">Os dados da empresa e quem vai usar o sistema. Você define a senha da empresa no primeiro acesso.</p>
 
       {f.formError && <p className="banner banner-error" role="alert">{f.formError}</p>}
 
@@ -57,6 +65,16 @@ export function RegisterForm({ onBack, onCreated }: { onBack: () => void; onCrea
         hint="O CNPJ será sua senha provisória."
         onValueChange={(v) => f.set('cnpj')(maskCnpj(v))}
       />
+
+      <fieldset className="register-team">
+        <legend>Sua equipe</legend>
+        <p className="hint">
+          Cada pessoa entra pelo nome + PIN de 4 números (começa com <b>1234</b>). Função: Análise, Operação ou as duas.
+          O <b>MASTER</b> cadastra mais gente depois.
+        </p>
+        <TeamRows rows={team} onChange={setTeam} />
+        {teamError && <p className="field-error" role="alert">{teamError}</p>}
+      </fieldset>
 
       <Button type="submit" loading={f.busy}>
         {f.busy ? 'Criando…' : 'Criar conta'}

@@ -16,7 +16,7 @@ import {
   ValidationError,
 } from '../../../shared/kernel/errors.js';
 import type { EventBus } from '../../../shared/kernel/event-bus.js';
-import type { Database } from '../../../shared/infrastructure/database.js';
+import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { hashPassword, verifyPassword } from '../../../shared/infrastructure/password.js';
 import type { Tenant, TenantDirectory } from '../../tenancy/index.js';
 import type { User } from '../domain/user.js';
@@ -42,7 +42,11 @@ export class IdentityService {
    * Cria empresa + usuário owner. A senha provisória é o CNPJ (dígitos) e o usuário é
    * obrigado a trocá-la no primeiro acesso.
    */
-  async registerAccount(input: RegisterAccountInput): Promise<void> {
+  async registerAccount(
+    input: RegisterAccountInput,
+    /** Roda na mesma transação (ex.: criar a equipe informada no cadastro). */
+    extra?: (db: Queryable, ids: { tenantId: string; userId: string }) => Promise<void>,
+  ): Promise<void> {
     const tenantId = randomUUID();
     const userId = randomUUID();
     const passwordHash = await hashPassword(input.cnpj);
@@ -67,6 +71,7 @@ export class IdentityService {
           tenantId,
           userId,
         ]);
+        if (extra) await extra(db, { tenantId, userId });
       });
     } catch (err) {
       if (isUniqueViolation(err)) {

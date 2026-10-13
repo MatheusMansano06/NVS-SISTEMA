@@ -96,10 +96,40 @@ export function ProcessingView({ onDone }: { onDone: (batchId: string, marketpla
   );
 }
 
-/** Impressora Zebra: chave do agente (o mesmo ZebraAgent do NVS-WMS) e quem está conectado. */
+/** Script do agente já configurado (Windows: CRLF e só ASCII). */
+function startBat(site: string, key: string, machine: string) {
+  return [
+    '@echo off',
+    'setlocal',
+    'title NVS Zebra Agent - OPERACAO',
+    'cd /d "%~dp0"',
+    'rem Gerado pelo NVS Tech (Supervisao Full > Processamento). Nao compartilhe: contem a chave da empresa.',
+    `set BACKEND_URL=${site}/api`,
+    `set MACHINE_ID=${key}.${machine}`,
+    'rem Opcional: nome exato da impressora (ex.: ZDesigner ZD421-203dpi ZPL)',
+    'set PRINTER_NAME=',
+    'set RECONNECT_BASE=2',
+    'set RECONNECT_MAX=60',
+    `echo  NVS Zebra Agent - maquina ${machine}`,
+    'echo  Deixe esta janela aberta enquanto a operacao imprime etiquetas.',
+    'if not exist ZebraAgent-WP.exe (',
+    '  echo [ERRO] ZebraAgent-WP.exe nao esta nesta pasta. Baixe no NVS Tech e coloque junto deste arquivo.',
+    '  pause',
+    '  exit /b 1',
+    ')',
+    'ZebraAgent-WP.exe',
+    'echo Agente encerrado.',
+    'pause',
+    'endlocal',
+    '',
+  ].join('\r\n');
+}
+
+/** Impressora Zebra: download do agente (o mesmo ZebraAgent do NVS-WMS), chave da empresa e quem está conectado. */
 function AgentSetup() {
   const [status, setStatus] = useState<WmsAgentStatusDto | null>(null);
   const [key, setKey] = useState('');
+  const [machine, setMachine] = useState('CAIXA1');
   const [error, setError] = useState('');
   const load = () => fullApi.agent().then(setStatus).catch(() => undefined);
   useEffect(() => {
@@ -108,6 +138,27 @@ function AgentSetup() {
     return () => window.clearInterval(t);
   }, []);
   const site = window.location.origin;
+  const cleanMachine = machine.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30) || 'CAIXA1';
+
+  function downloadBat() {
+    const blob = new Blob([startBat(site, key, cleanMachine)], { type: 'application/octet-stream' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `iniciar_operacao_${cleanMachine}.bat`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  async function generate() {
+    if (status?.keys.length && !window.confirm('Gerar uma chave nova? Os computadores com a chave atual param de imprimir até receberem o .bat novo.')) return;
+    setError('');
+    try {
+      setKey((await fullApi.agentKey()).key);
+      void load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível gerar.');
+    }
+  }
 
   return (
     <section className="full-box full-tool">
@@ -116,8 +167,8 @@ function AgentSetup() {
         <div>
           <h2>Impressora de etiquetas (Zebra)</h2>
           <p>
-            As etiquetas saem sozinhas quando o operador termina de bipar um item. No computador com a Zebra roda o <b>ZebraAgent</b> — o mesmo
-            do NVS-WMS — configurado com o endereço do sistema e a chave da empresa.
+            As etiquetas saem sozinhas quando o operador termina de bipar um item. Para isso, o computador ligado na Zebra precisa estar com o{' '}
+            <b>agente</b> aberto. Configure uma vez por computador:
           </p>
         </div>
       </header>
@@ -132,33 +183,42 @@ function AgentSetup() {
           <span className="full-agent">○ Nenhum agente conectado agora</span>
         )}
       </div>
-      {key ? (
-        <div className="full-key">
-          <p><b>Copie agora</b> — a chave não aparece de novo. No arquivo de configuração do agente:</p>
-          <pre>{`BACKEND_URL=${site}/api\nMACHINE_ID=${key}.CAIXA1`}</pre>
-          <p className="full-empty">Troque CAIXA1 pelo nome do computador (um por máquina). Gerar outra chave desliga as anteriores.</p>
-        </div>
-      ) : (
-        <p className="full-empty">
-          {status?.keys.length ? `Chave em uso: ${status.keys[0]!.hint}${status.keys[0]!.lastSeenAt ? ` · último contato ${new Date(status.keys[0]!.lastSeenAt).toLocaleString('pt-BR')}` : ''}.` : 'Nenhuma chave gerada ainda.'}
-        </p>
-      )}
+      <ol className="full-steps">
+        <li>
+          <b>Baixe o agente</b> (Windows, não precisa instalar nada):{' '}
+          <a className="act act-strong" href="/downloads/ZebraAgent-WP.exe" download>⬇ ZebraAgent-WP.exe</a>
+          <small>Se o Windows avisar “aplicativo não reconhecido”, clique em “Mais informações” → “Executar assim mesmo”.</small>
+        </li>
+        <li>
+          <b>Gere o arquivo de início deste computador</b> (já vem com o endereço do sistema e a chave da empresa):
+          {key ? (
+            <span className="full-inline full-machine">
+              <input value={machine} maxLength={30} onChange={(e) => setMachine(e.target.value)} aria-label="Nome do computador" placeholder="Nome do computador" />
+              <button type="button" className="act act-strong" onClick={downloadBat}>⬇ iniciar_operacao_{cleanMachine}.bat</button>
+            </span>
+          ) : (
+            <button type="button" className="act act-strong" onClick={() => void generate()}>
+              {status?.keys.length ? 'Gerar nova chave' : 'Gerar chave do agente'}
+            </button>
+          )}
+          <small>
+            {key
+              ? 'Um nome diferente para cada computador (CAIXA1, CAIXA2…). Baixe um .bat por computador agora: a chave não aparece de novo.'
+              : status?.keys.length
+                ? `Já existe uma chave (${status.keys[0]!.hint}${status.keys[0]!.lastSeenAt ? `, último contato ${new Date(status.keys[0]!.lastSeenAt).toLocaleString('pt-BR')}` : ''}). Gerar outra desliga os computadores configurados com a anterior.`
+                : 'A chave identifica a sua empresa: não compartilhe o .bat.'}
+          </small>
+        </li>
+        <li>
+          <b>Coloque os dois arquivos na mesma pasta</b> (ex.: <code>C:\NVS-ZebraAgent</code>) e dê dois cliques no <code>.bat</code>. Deixe a janela
+          aberta: quando conectar, o computador aparece em verde aqui em cima.
+        </li>
+        <li>
+          Impressão travou? Feche o agente e rode como administrador o{' '}
+          <a className="link" href="/downloads/limpar_fila_impressao.bat" download>limpar_fila_impressao.bat</a>.
+        </li>
+      </ol>
       {error && <p className="banner banner-error">{error}</p>}
-      <button
-        type="button"
-        className="act act-strong full-keybtn"
-        onClick={async () => {
-          if (status?.keys.length && !window.confirm('Gerar uma chave nova? Os agentes com a chave atual param de imprimir até receberem a nova.')) return;
-          try {
-            setKey((await fullApi.agentKey()).key);
-            void load();
-          } catch (err) {
-            setError(err instanceof ApiError ? err.message : 'Não foi possível gerar.');
-          }
-        }}
-      >
-        {status?.keys.length ? 'Gerar nova chave' : 'Gerar chave do agente'}
-      </button>
     </section>
   );
 }

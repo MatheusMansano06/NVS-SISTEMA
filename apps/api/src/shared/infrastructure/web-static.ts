@@ -19,6 +19,8 @@ export async function serveWeb(app: FastifyInstance, dir: string | undefined): P
         'cache-control',
         path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
       );
+      // agente da impressora Zebra e scripts: sempre como arquivo para salvar
+      if (path.includes('/downloads/')) res.header('content-disposition', `attachment; filename="${path.split('/').pop()}"`);
     },
   });
   // SPA: qualquer GET que não seja da API cai no index.html

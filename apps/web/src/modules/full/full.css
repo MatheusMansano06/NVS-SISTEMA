@@ -264,3 +264,13 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .full-inline .act { flex: none; }
 .full-modal label, .full-modal > * { min-width: 0; }
 .full-codes-edit { max-height: 180px; overflow: auto; }
+
+/* passo a passo do agente */
+.full-steps { margin: 0; padding-left: 20px; display: grid; gap: 14px; color: var(--navy); font-size: .88rem; line-height: 1.5; }
+.full-steps li { display: block; }
+.full-steps li > a.act, .full-steps li > button, .full-steps li > .full-machine { display: flex; width: fit-content; margin: 8px 0 4px; }
+.full-steps small { display: block; color: var(--gray-500); font-size: .76rem; }
+.full-steps code { padding: 1px 6px; border-radius: 6px; background: var(--gray-50); font-size: .8rem; }
+.full-steps a.act { text-decoration: none; }
+.full-steps li > .full-machine { width: 100%; }
+.full-machine input { height: 38px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--gray-300); font: inherit; max-width: 180px; }

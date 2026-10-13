@@ -16,7 +16,7 @@ export const setListingStatusSchema = z.object({ status: z.enum(['active', 'paus
 
 /** Margem unitária estimada de um anúncio (null = faltam dados para calcular). */
 export interface ListingMarginDto {
-  /** Tarifa de venda por unidade. */
+  /** Tarifa de venda por unidade (já descontado o bônus do ML, quando houver). */
   fee: number | null;
   /** Frete pago pelo vendedor por unidade. */
   freight: number | null;
@@ -40,6 +40,11 @@ export interface ListingDto {
   status: string;
   subStatus: string[];
   price: number | null;
+  /** Preço cheio (riscado) quando o anúncio está com desconto. */
+  originalPrice: number | null;
+  /** R$ por venda que o ML devolve da tarifa na campanha ativa; nome da campanha. */
+  feeBonus: number | null;
+  promoName: string | null;
   stock: number | null;
   sold: number | null;
   /** Tipo do anúncio: 'Clássico' | 'Premium' | 'Grátis' | null. */

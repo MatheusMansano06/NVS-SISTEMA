@@ -86,7 +86,11 @@ export function ListingPricingModal({ item, canManage, onSaved }: Props) {
 
   const rows: [string, string, 'minus' | 'plus' | 'total'][] = [
     ['Preço de venda', priceNum ? money(priceNum) : '—', 'plus'],
-    [`Tarifa${sim?.feePct ? ` (${sim.feePct.toLocaleString('pt-BR')}%)` : ''}`, fee === null ? '—' : `− ${money(fee)}`, 'minus'],
+    [
+      `Tarifa${sim?.feePct ? ` (${sim.feePct.toLocaleString('pt-BR')}%)` : ''}${item.feeBonus ? ` já com bônus de ${money(item.feeBonus)}` : ''}`,
+      fee === null ? '—' : `− ${money(fee)}`,
+      'minus',
+    ],
     ['Frete pago por você', freight === null ? '—' : `− ${money(freight)}`, 'minus'],
     ['Custo do produto', costNum === null ? '—' : `− ${money(costNum)}`, 'minus'],
     [`Imposto (${taxPct.toLocaleString('pt-BR')}%)`, priceNum ? `− ${money(tax)}` : '—', 'minus'],
@@ -127,6 +131,12 @@ export function ListingPricingModal({ item, canManage, onSaved }: Props) {
         <TypeCompare item={item} price={priceNum} cost={costNum} canManage={canManage} onChanged={onSaved} />
       )}
 
+      {item.originalPrice !== null && (
+        <p className="lprice-note">
+          Em promoção{item.promoName ? ` (${item.promoName})` : ''}: preço cheio {money(item.originalPrice)}. A margem é calculada no preço com
+          desconto{item.feeBonus ? `, somando o bônus de ${money(item.feeBonus)} que o ML devolve por venda` : ''}.
+        </p>
+      )}
       {est && <p className="lprice-note">Tarifa e frete estimados pela média das vendas dos últimos 90 dias.</p>}
       {item.catalog && <p className="banner banner-error">Anúncio de catálogo: o preço não pode ser alterado por aqui.</p>}
       {error && <p className="banner banner-error" role="alert">{error}</p>}

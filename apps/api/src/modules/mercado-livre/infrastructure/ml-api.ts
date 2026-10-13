@@ -1,4 +1,4 @@
-import type { MlItem, MlOrder } from '../domain/ml-order.js';
+import type { MlItem, MlItemPromotion, MlOrder } from '../domain/ml-order.js';
 import type { MlDiscounts, MlShipment, MlShipmentCosts } from '../domain/ml-finance.js';
 
 export interface MlTokens {
@@ -59,6 +59,8 @@ export interface MlApi {
   createItem(token: string, body: Record<string, unknown>): Promise<{ id: string; permalink?: string | null }>;
   /** Categorias sugeridas para um termo (domain_discovery). */
   searchCategories(token: string, q: string): Promise<{ category_id: string; category_name: string; domain_name?: string | null }[]>;
+  /** Promoções em que o anúncio está (para o bônus de tarifa). */
+  itemPromotions(token: string, itemId: string): Promise<MlItemPromotion[]>;
   /** Campanhas da Central de Promoções do vendedor. */
   promotions(token: string, sellerId: string): Promise<MlPromotion[]>;
   /** Anúncios elegíveis e ainda fora da campanha (status=candidate), paginados por `searchAfter`. */
@@ -220,7 +222,7 @@ export class HttpMlApi implements MlApi {
     const qs = new URLSearchParams({
       ids: ids.slice(0, 20).join(','),
       attributes:
-        'id,title,status,sub_status,price,available_quantity,permalink,secure_thumbnail,thumbnail,pictures,seller_custom_field,attributes,variations,sold_quantity,listing_type_id,category_id,date_created,catalog_listing,shipping',
+        'id,title,status,sub_status,price,available_quantity,permalink,secure_thumbnail,thumbnail,pictures,seller_custom_field,attributes,variations,sold_quantity,listing_type_id,category_id,date_created,catalog_listing,shipping,original_price',
       include_attributes: 'all',
     });
     const r = await this.get<{ code: number; body: MlItem }[]>(`/items?${qs}`, token);
@@ -308,6 +310,17 @@ export class HttpMlApi implements MlApi {
 
   async setQuantityPrices(token: string, itemId: string, prices: unknown[]) {
     await this.send('POST', `/items/${encodeURIComponent(itemId)}/prices/standard/quantity`, token, { prices });
+  }
+
+  async itemPromotions(token: string, itemId: string) {
+    const r = await this.optional(() =>
+      this.get<MlItemPromotion[] | { results?: MlItemPromotion[] }>(
+        `/seller-promotions/items/${encodeURIComponent(itemId)}?app_version=v2`,
+        token,
+      ),
+    );
+    if (!r) return [];
+    return Array.isArray(r) ? r : (r.results ?? []);
   }
 
   async changeListingType(token: string, itemId: string, type: string) {

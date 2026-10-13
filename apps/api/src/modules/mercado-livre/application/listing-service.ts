@@ -15,6 +15,8 @@ import { PgListingRepository, toNumber, type ListingRow } from '../infrastructur
 import type { MlIntegrationService } from './ml-integration-service.js';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Tarifa líquida do bônus que o ML banca na campanha (nunca negativa). */
+const netFee = (fee: number | null, bonus: number) => (fee === null ? null : round2(Math.max(0, fee - bonus)));
 
 class Blocked extends AppError {
   constructor(message: string) {
@@ -35,7 +37,9 @@ export class ListingService {
     const price = toNumber(r.price);
     // 1º: tarifa/frete salvos para o preço atual; 2º: média das vendas dos últimos 90 dias
     const saved = r.pricing_price !== null && price !== null && Math.abs(Number(r.pricing_price) - price) < 0.005;
-    const fee = saved ? toNumber(r.fee_amount) : toNumber(r.avg_fee);
+    const bonus = toNumber(r.fee_bonus) ?? 0;
+    // a tarifa da tabela do ML não traz o bônus da campanha; a média das vendas já vem líquida
+    const fee = saved ? netFee(toNumber(r.fee_amount), bonus) : toNumber(r.avg_fee);
     const freight = saved ? toNumber(r.freight_cost) : toNumber(r.avg_freight);
     const hasSales = fee !== null && freight !== null;
     return {
@@ -47,6 +51,9 @@ export class ListingService {
       status: r.status,
       subStatus: r.sub_status,
       price,
+      originalPrice: toNumber(r.original_price),
+      feeBonus: toNumber(r.fee_bonus),
+      promoName: r.promo_name,
       stock: r.available_quantity,
       sold: r.sold_quantity,
       type: typeLabel(r.listing_type_id),
@@ -183,7 +190,7 @@ export class ListingService {
     // já consultado para este preço: responde do banco, sem chamar o marketplace
     if (!refresh && isCurrent && row0.pricing_price !== null && current !== null && Math.abs(Number(row0.pricing_price) - current) < 0.005) {
       const taxPct = await this.db.withTenant(tenantId, (db) => this.repo.taxPct(db));
-      const fee = toNumber(row0.fee_amount);
+      const fee = netFee(toNumber(row0.fee_amount), toNumber(row0.fee_bonus) ?? 0);
       const freight = toNumber(row0.freight_cost);
       return {
         price: current,
@@ -205,10 +212,11 @@ export class ListingService {
     ]);
     const f = fees.find((x) => x.listing_type_id === row.listing_type_id);
     const cost = toNumber(row.custo_unit);
+    const bonus = toNumber(row.fee_bonus) ?? 0;
     const options = (['gold_special', 'gold_pro'] as const).flatMap((type) => {
       const o = fees.find((x) => x.listing_type_id === type);
       if (!o) return [];
-      const oFee = round2(o.sale_fee_amount);
+      const oFee = netFee(round2(o.sale_fee_amount), bonus)!;
       const oFreight = freightCost === null ? null : round2(freightCost);
       return [{
         type,
@@ -218,12 +226,14 @@ export class ListingService {
         margin: unitMargin({ price: target, fee: oFee, freight: oFreight, cost, taxPct, source: 'live' }),
       }];
     });
-    const fee = f ? round2(f.sale_fee_amount) : null;
+    // salva a tarifa bruta (tabela do ML); o bônus é aplicado na leitura
+    const grossFee = f ? round2(f.sale_fee_amount) : null;
+    const fee = netFee(grossFee, bonus);
     const freight = freightCost === null ? null : round2(freightCost);
     // só o preço vigente fica salvo (simulações de outro preço não sobrescrevem o banco)
     if (isCurrent) {
       await this.db.withTenant(tenantId, (db) =>
-        this.repo.savePricing(db, id, { price: target, fee, feePct: f?.sale_fee_details?.percentage_fee ?? null, freight }),
+        this.repo.savePricing(db, id, { price: target, fee: grossFee, feePct: f?.sale_fee_details?.percentage_fee ?? null, freight }),
       );
     }
     return {

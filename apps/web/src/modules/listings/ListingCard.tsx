@@ -148,7 +148,13 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
 
         <div className="lcard-price">
           <div>
-            <small>Preço</small>
+            <small>{item.originalPrice !== null ? 'Preço com desconto' : 'Preço'}</small>
+            {item.originalPrice !== null && item.price !== null && (
+              <span className="lcard-was" title={item.promoName ?? undefined}>
+                <s>{money(item.originalPrice)}</s>
+                <span className="tag tag-off">−{Math.round((1 - item.price / item.originalPrice) * 100)}%</span>
+              </span>
+            )}
             <b>{item.price === null ? '—' : money(item.price)}</b>
           </div>
           <div className="lcard-mc" data-tone={tone(m.pct)} title={m.source === 'sales' ? 'Estimativa com a média das vendas dos últimos 90 dias' : undefined}>
@@ -167,6 +173,14 @@ export function ListingCard({ item, canManage, onChanged, onPricing, onSales, on
             <button type="button" className="chip chip-warn" onClick={onPricing}>Sem custo — cadastrar</button>
           ) : (
             <button type="button" className="chip" onClick={onPricing}>custo <b>{money(item.cost)}</b></button>
+          )}
+          {item.feeBonus !== null && item.feeBonus > 0 && (
+            <span
+              className="chip chip-bonus"
+              title={`${item.promoName ? `Campanha “${item.promoName}”: ` : ''}o ML banca parte do desconto e devolve esse valor da tarifa a cada venda.`}
+            >
+              bônus ML <b>+{money(item.feeBonus)}</b>/venda
+            </span>
           )}
           {m.source === 'sales' && m.amount !== null && <span className="lcard-est">margem estimada pelas vendas</span>}
           {m.amount === null && item.cost !== null && <span className="lcard-est">abra “Preço e margem” para calcular</span>}

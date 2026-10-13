@@ -31,6 +31,9 @@ export interface ListingRow {
   freight_cost: string | null;
   pricing_price: string | null;
   pricing_at: Date | null;
+  original_price: string | null;
+  fee_bonus: string | null;
+  promo_name: string | null;
 }
 
 /** Colunas da aba + tarifa/frete médios por unidade (pedidos de 1 item deste anúncio, 90 dias). */
@@ -39,7 +42,8 @@ const SELECT = `
          l.status, l.sub_status, l.price, l.available_quantity, l.sold_quantity, l.listing_type_id,
          l.free_shipping, l.logistic_type, l.catalog_listing, l.category_id, l.pictures_count,
          l.dimensions, l.listed_at, sc.custo_unit, h.avg_fee, h.avg_freight,
-         l.fee_amount, l.fee_pct, l.freight_cost, l.pricing_price, l.pricing_at
+         l.fee_amount, l.fee_pct, l.freight_cost, l.pricing_price, l.pricing_at,
+         l.original_price, l.fee_bonus, l.promo_name
     FROM listings l
     JOIN marketplace_accounts a ON a.id = l.account_id
     LEFT JOIN sku_costs sc ON sc.sku = l.sku

@@ -58,7 +58,7 @@ function fakeMl(sellerId: number) {
   }
   catalog.set('MLB9001', { id: 'MLB9001', title: 'Pausado sem estoque 1', status: 'paused', sub_status: ['out_of_stock'], available_quantity: 0, price: 50 });
   catalog.set('MLB9002', { id: 'MLB9002', title: 'Pausado sem estoque 2', status: 'paused', sub_status: [], available_quantity: 0, price: 60 });
-  catalog.set('MLB9003', { id: 'MLB9003', title: 'Pausado com estoque', status: 'paused', sub_status: [], available_quantity: 7, price: 70 });
+  catalog.set('MLB9003', { id: 'MLB9003', title: 'Pausado com estoque', status: 'paused', sub_status: [], available_quantity: 7, price: 70, original_price: 100 });
   const api: MlApi = {
     async updateItem(_t, id, body) {
       const it = catalog.get(id)!;
@@ -114,6 +114,14 @@ function fakeMl(sellerId: number) {
       }
     },
     async changeListingType() {},
+    async itemPromotions(_t, id) {
+      return id === 'MLB9003'
+        ? [
+            { name: 'Antiga', status: 'finished', meli_percentage: 50 },
+            { name: 'Aumente suas vendas', status: 'started', meli_percentage: 10, original_price: 100 },
+          ]
+        : [];
+    },
     async createItem(_t, body) {
       calls.created = body;
       catalog.set('MLBDUP', { id: 'MLBDUP', title: String(body.title), status: 'active', available_quantity: 1 });
@@ -314,6 +322,13 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
       today = (await app.inject({ method: 'GET', url: '/api/v1/dashboard/summary?period=today&fresh=1', cookies })).json().kpis.revenue;
     }
     expect(today).toBeGreaterThanOrEqual(555);
+
+    // ---- Preço riscado e bônus de tarifa vêm da sincronização (salvos no banco)
+    // (MLB9003 foi reativado pela notificação acima e reimportado com a promoção)
+    const active = (await app.inject({ method: 'GET', url: '/api/v1/listings?status=active&q=MLB9003', cookies })).json();
+    expect(active.items[0]).toMatchObject({ id: 'MLB9003', price: 70, originalPrice: 100, feeBonus: 10, promoName: 'Aumente suas vendas' });
+    const semPromo = (await app.inject({ method: 'GET', url: '/api/v1/listings?status=paused&q=MLB9001', cookies })).json();
+    expect(semPromo.items[0]).toMatchObject({ originalPrice: null, feeBonus: null });
 
     // ---- Central de Promoção: só campanhas abertas; candidatos enriquecidos pelo banco local
     const promos = (await app.inject({ method: 'GET', url: '/api/v1/listings/promotions', cookies })).json();

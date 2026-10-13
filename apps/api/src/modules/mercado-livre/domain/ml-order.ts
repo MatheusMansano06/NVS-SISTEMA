@@ -71,6 +71,7 @@ export interface MlItem {
   sub_status?: string[] | null;
   price?: number | null;
   available_quantity?: number | null;
+  original_price?: number | null;
   permalink?: string | null;
   secure_thumbnail?: string | null;
   thumbnail?: string | null;
@@ -114,6 +115,10 @@ export function mapMlItem(i: MlItem): IncomingListing {
     picturesCount: i.pictures?.length ?? null,
     dimensions: i.shipping?.dimensions ?? null,
     listedAt: i.date_created ?? null,
+    // preço cheio só quando o anúncio está mesmo com desconto
+    originalPrice: i.original_price != null && i.price != null && i.original_price > i.price + 0.005 ? i.original_price : null,
+    feeBonus: null,
+    promoName: null,
     sku: attrSku(i.attributes) || i.seller_custom_field?.trim() || null,
     variationSkus: [
       ...new Set(
@@ -123,4 +128,29 @@ export function mapMlItem(i: MlItem): IncomingListing {
       ),
     ],
   };
+}
+
+/** Promoção do anúncio (GET /seller-promotions/items/{id}). */
+export interface MlItemPromotion {
+  id?: string | null;
+  name?: string | null;
+  type?: string | null;
+  status?: string | null;
+  original_price?: number | null;
+  meli_percentage?: number | null;
+}
+
+/**
+ * Bônus de tarifa (regra do NVS-WMS): em campanhas co-financiadas o ML banca `meli_percentage`% do preço
+ * cheio; esse valor volta para o vendedor a cada venda. Só a campanha em andamento conta.
+ */
+export function feeBonusOf(promos: MlItemPromotion[], fallbackOriginal: number | null): { bonus: number; name: string | null } | null {
+  for (const p of promos) {
+    if ((p.status ?? '').toLowerCase() !== 'started') continue;
+    const base = p.original_price ?? fallbackOriginal;
+    if (p.meli_percentage && base) {
+      return { bonus: Math.round(base * p.meli_percentage) / 100, name: p.name ?? null };
+    }
+  }
+  return null;
 }

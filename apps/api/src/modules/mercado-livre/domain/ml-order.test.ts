@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapMlItem, mapMlOrder, sellerSku, type MlOrder } from './ml-order.js';
+import { feeBonusOf, mapMlItem, mapMlOrder, sellerSku, type MlOrder } from './ml-order.js';
 
 const base: MlOrder = {
   id: 2000001,
@@ -70,6 +70,9 @@ describe('mapMlItem', () => {
       picturesCount: 1,
       dimensions: null,
       listedAt: null,
+      originalPrice: null,
+      feeBonus: null,
+      promoName: null,
       sku: null,
       variationSkus: [],
     });
@@ -99,5 +102,16 @@ describe('sellerSku (regra NVS-WMS)', () => {
   });
   it('sem fotos usa a miniatura convertida para https', () => {
     expect(mapMlItem({ id: 'MLB2', title: 'X', status: 'active', thumbnail: 'http://a/b.jpg' }).pictureUrl).toBe('https://a/b.jpg');
+  });
+});
+
+describe('preço riscado e bônus de tarifa', () => {
+  it('original_price só conta quando maior que o preço atual', () => {
+    expect(mapMlItem({ id: 'MLB1', title: 'X', status: 'active', price: 80, original_price: 100 }).originalPrice).toBe(100);
+    expect(mapMlItem({ id: 'MLB1', title: 'X', status: 'active', price: 100, original_price: 100 }).originalPrice).toBeNull();
+  });
+  it('bônus = preço cheio × % bancada pelo ML, só na campanha em andamento', () => {
+    expect(feeBonusOf([{ status: 'pending', meli_percentage: 30 }, { status: 'started', meli_percentage: 4.5, name: 'X' }], 129.9)).toEqual({ bonus: 5.85, name: 'X' });
+    expect(feeBonusOf([{ status: 'started', meli_percentage: null }], 100)).toBeNull();
   });
 });

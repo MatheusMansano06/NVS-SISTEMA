@@ -5,7 +5,7 @@ import type { Database, Queryable } from '../../../shared/infrastructure/databas
 import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js';
 import type { EventBus } from '../../../shared/kernel/event-bus.js';
 import type { SalesIngestion } from '../../sales/index.js';
-import { mapMlItem, mapMlOrder, type MlOrder } from '../domain/ml-order.js';
+import { feeBonusOf, mapMlItem, mapMlOrder, type MlOrder } from '../domain/ml-order.js';
 import { sellerCoupon, shipmentFreight } from '../domain/ml-finance.js';
 import { MlApiError, ORDERS_PAGE_SIZE, type MlApi } from '../infrastructure/ml-api.js';
 import type { ConnectionRow, PgMlRepository } from '../infrastructure/pg-ml-repository.js';
@@ -305,8 +305,19 @@ export class MlIntegrationService {
     for (let i = 0; i < ids.length; i += 20) {
       const { token } = await this.accessToken(tenantId, connectionId);
       const items = await this.api.items(token, ids.slice(i, i + 20));
+      const listings = items.map(mapMlItem);
+      // bônus de tarifa: só para quem está em promoção (1 chamada por anúncio com desconto)
+      for (const l of listings) {
+        if (l.originalPrice === null) continue;
+        const promos = await this.api.itemPromotions(token, l.externalId).catch(() => []);
+        const b = feeBonusOf(promos, l.originalPrice);
+        if (b) {
+          l.feeBonus = b.bonus;
+          l.promoName = b.name;
+        }
+      }
       await this.db.withTenant(tenantId, (db) =>
-        this.sales.upsertListings(db, tenantId, conn.account_id, 'mercado_livre', items.map(mapMlItem)),
+        this.sales.upsertListings(db, tenantId, conn.account_id, 'mercado_livre', listings),
       );
       await onProgress?.(Math.min(1, (i + 20) / ids.length));
     }

@@ -116,6 +116,9 @@ export function listingRoutes(
       fx().status(req.user.tenantId, parse(z.object({ refresh: z.enum(['1']).optional() }), req.query).refresh === '1'),
     );
     app.get('/flex/opportunities', read, async (req) => fx().opportunities(req.user.tenantId));
+    app.get('/flex/dashboard', read, async (req) =>
+      fx().dashboard(req.user.tenantId, Number(parse(z.object({ days: z.enum(['30', '90', '180']).default('30') }), req.query).days)),
+    );
 
     // ---- Radar de Frete
     const rd = () => {

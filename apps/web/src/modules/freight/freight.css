@@ -41,3 +41,31 @@
   .opp-list li { grid-template-columns: auto 48px minmax(0, 1fr); }
   .opp-num { grid-column: span 1; }
 }
+
+/* ============ Painel Flex ============ */
+.radar-list-cost { display: block; color: var(--gray-500); font-size: .72rem; margin-top: 2px; }
+.fpanel-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.fpanel-head .ledit-hint { margin: 0; flex: 1; min-width: 240px; }
+.fpanel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.fpanel-box { padding: 18px 20px; border-radius: 26px 26px 26px 10px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); display: grid; gap: 12px; align-content: start; }
+.fpanel-box h2 { margin: 0; font-size: 1rem; color: var(--navy); }
+.fpanel-empty { margin: 0; color: var(--gray-500); font-size: .85rem; }
+.fpanel-bars { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; height: 190px; align-items: end; }
+.fpanel-bar { display: grid; grid-template-rows: 1fr auto auto; height: 100%; justify-items: center; gap: 4px; }
+.fpanel-col { align-self: end; width: min(42px, 100%); min-height: 4px; border-radius: 10px 10px 4px 4px; background: var(--blue-soft); display: flex; align-items: flex-end; overflow: hidden; }
+.fpanel-col i { display: block; width: 100%; background: var(--yellow); }
+.fpanel-bar b { font-size: .78rem; color: var(--navy); }
+.fpanel-bar small { font-size: .7rem; color: var(--gray-500); }
+.fpanel-legend { margin: 0; display: flex; gap: 10px; align-items: center; color: var(--gray-500); font-size: .76rem; }
+.fpanel-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--yellow); display: inline-block; }
+.fpanel-legend i[data-all] { background: var(--blue-soft); }
+.fpanel-rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: r; }
+.fpanel-rank li { display: grid; grid-template-columns: minmax(110px, 1fr) 1.2fr auto; gap: 2px 10px; align-items: center; counter-increment: r; }
+.fpanel-name { font-weight: 650; color: var(--navy); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpanel-name::before { content: counter(r) ". "; color: var(--gray-500); font-weight: 500; }
+.fpanel-track { height: 10px; border-radius: 99px; background: var(--gray-100); overflow: hidden; }
+.fpanel-track i { display: block; height: 100%; border-radius: 99px; background: var(--yellow); }
+.fpanel-rank b { color: var(--navy); font-size: .9rem; }
+.fpanel-rank small { grid-column: 1 / -1; color: var(--gray-500); font-size: .74rem; }
+.fpanel-top { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.fpanel-top li { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; }

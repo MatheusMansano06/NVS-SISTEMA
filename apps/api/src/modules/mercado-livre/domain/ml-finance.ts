@@ -41,6 +41,7 @@ export function shipmentAddress(s: MlShipment): { uf: string | null; city: strin
 }
 
 export interface MlShipmentCosts {
+  gross_amount?: number | null;
   receiver?: { save?: number | null; discounts?: { type?: string }[] | null } | null;
   senders?: { user_id?: number | null; cost?: number | null; save?: number | null }[] | null;
 }
@@ -107,7 +108,7 @@ export function shipmentFreight(p: {
   shipment: MlShipment;
   costs: MlShipmentCosts | null;
   sellerId: number;
-}): { buyer: number; seller: number; bucket: LogisticBucket; uncertain: boolean } {
+}): { buyer: number; seller: number; listCost: number; bucket: LogisticBucket; uncertain: boolean; paidKnown: boolean } {
   let buyer = buyerShippingCost(p.payments, p.shipment);
   const listCost = n(p.shipment.shipping_option?.list_cost);
   let uncertain = false;
@@ -115,12 +116,25 @@ export function shipmentFreight(p: {
     if (p.costs) buyer = buyerFreightFromCosts(p.costs, p.sellerId, p.shipment.logistic_type) ?? 0;
     else uncertain = true;
   }
+  // fora do Flex, o ML informa quanto cobra do vendedor já com o desconto de reputação (senders.cost)
+  const paid = p.shipment.logistic_type !== 'self_service' && p.costs ? sellerPaidFreight(p.costs, p.sellerId) : null;
   return {
     buyer: round2(buyer),
-    seller: round2(Math.max(0, listCost - buyer)),
+    seller: round2(paid ?? Math.max(0, listCost - buyer)),
+    listCost: round2(listCost),
     bucket: logisticBucket(p.shipment.logistic_type, p.shipment.mode),
     uncertain,
+    paidKnown: paid !== null,
   };
+}
+
+/** Frete cobrado do vendedor no envio (senders.cost), já com descontos. null se o ML não informar. */
+export function sellerPaidFreight(costs: MlShipmentCosts, sellerId: number): number | null {
+  const senders = costs.senders;
+  if (!Array.isArray(senders)) return null;
+  let sender = senders.find((s) => s?.user_id === sellerId);
+  if (!sender && senders.length === 1 && senders[0]?.user_id == null) sender = senders[0];
+  return sender && typeof sender.cost === 'number' && sender.cost >= 0 ? round2(sender.cost) : null;
 }
 
 /** Cupom bancado pelo vendedor (campanhas onde o seller paga o desconto). */

@@ -126,16 +126,18 @@ export class SalesIngestion {
   async setShipmentFinance(
     db: Queryable,
     shippingRef: string,
-    f: { buyer: number; seller: number; bucket: string; uncertain: boolean },
+    f: { buyer: number; seller: number; listCost?: number; bucket: string; uncertain: boolean; paidKnown?: boolean },
   ): Promise<string[]> {
     const { rows } = await db.query<{ id: string }>(
       `WITH pack AS (SELECT id FROM orders WHERE shipping_ref = $1),
             n AS (SELECT count(*)::numeric AS c FROM pack)
        UPDATE orders o SET buyer_shipping = round($2 / n.c, 2), shipping_cost = round($3 / n.c, 2),
-              logistic_bucket = $4, freight_uncertain = $5, finance_enriched_at = now()
+              logistic_bucket = $4, freight_uncertain = $5, finance_enriched_at = now(),
+              shipping_list_cost = CASE WHEN $6::numeric IS NULL THEN o.shipping_list_cost ELSE round($6 / n.c, 2) END,
+              freight_checked_at = CASE WHEN $7 THEN now() ELSE o.freight_checked_at END
          FROM n WHERE o.id IN (SELECT id FROM pack)
        RETURNING o.id`,
-      [shippingRef, f.buyer, f.seller, f.bucket, f.uncertain],
+      [shippingRef, f.buyer, f.seller, f.bucket, f.uncertain, f.listCost ?? null, f.paidKnown ?? false],
     );
     return rows.map((r) => r.id);
   }
@@ -153,6 +155,37 @@ export class SalesIngestion {
         WHERE shipping_ref = $1`,
       [shippingRef, a.uf, a.city, a.zip, a.lat ?? null, a.lng ?? null],
     );
+  }
+
+  /**
+   * Envios já enriquecidos (90 dias, frete grátis, fora do Flex) cujo frete ainda é o de tabela:
+   * precisam do valor cobrado de fato (senders.cost).
+   */
+  async pendingPaidFreight(db: Queryable, accountId: string, limit: number): Promise<string[]> {
+    const { rows } = await db.query<{ shipping_ref: string }>(
+      `SELECT shipping_ref FROM orders
+        WHERE account_id = $1 AND freight_checked_at IS NULL AND shipping_ref IS NOT NULL AND finance_enriched_at IS NOT NULL
+          AND coalesce(buyer_shipping, 0) = 0 AND shipping_cost > 0 AND logistic_bucket IS DISTINCT FROM 'flex'
+          AND ordered_at > now() - interval '90 days'
+        GROUP BY shipping_ref ORDER BY max(ordered_at) DESC LIMIT $2`,
+      [accountId, limit],
+    );
+    return rows.map((r) => r.shipping_ref);
+  }
+
+  /** Grava o frete cobrado de fato (rateado no pacote); a tabela antiga vira shipping_list_cost. */
+  async setPaidFreight(db: Queryable, shippingRef: string, paid: number | null, listCost: number | null): Promise<string[]> {
+    const { rows } = await db.query<{ id: string }>(
+      `WITH pack AS (SELECT id, shipping_cost FROM orders WHERE shipping_ref = $1),
+            n AS (SELECT count(*)::numeric AS c, sum(shipping_cost) AS old FROM pack)
+       UPDATE orders o SET shipping_list_cost = CASE WHEN $2::numeric IS NULL THEN NULL ELSE round(coalesce($3, n.old) / n.c, 2) END,
+              shipping_cost = CASE WHEN $2::numeric IS NULL THEN o.shipping_cost ELSE round($2 / n.c, 2) END,
+              freight_checked_at = now()
+         FROM n WHERE o.id IN (SELECT id FROM pack)
+       RETURNING o.id`,
+      [shippingRef, paid, listCost],
+    );
+    return rows.map((r) => r.id);
   }
 
   /** Envios de pedidos (mais recentes primeiro) ainda sem endereço consultado. */
@@ -221,11 +254,13 @@ export class SalesIngestion {
    */
   async refreshListingSalesStats(db: Queryable, accountId: string): Promise<void> {
     await db.query(
-      `UPDATE listings l SET sales_fee_avg = x.fee, sales_freight_avg = x.freight
+      `UPDATE listings l SET sales_fee_avg = x.fee, sales_freight_avg = x.freight, freight_paid_ratio = x.ratio
          FROM (
            SELECT l2.id,
                   sum(o.marketplace_fee) / nullif(sum(o.units), 0) AS fee,
-                  sum(o.shipping_cost) / nullif(sum(o.units), 0) AS freight
+                  sum(o.shipping_cost) / nullif(sum(o.units), 0) AS freight,
+                  least(1, sum(o.shipping_cost) FILTER (WHERE o.freight_checked_at IS NOT NULL AND o.shipping_list_cost > 0)
+                    / nullif(sum(o.shipping_list_cost) FILTER (WHERE o.freight_checked_at IS NOT NULL AND o.shipping_list_cost > 0), 0)) AS ratio
              FROM listings l2
              LEFT JOIN order_items i ON i.listing_id = l2.external_id
              LEFT JOIN orders o ON o.id = i.order_id AND o.status = 'paid' AND o.finance_enriched_at IS NOT NULL
@@ -233,7 +268,8 @@ export class SalesIngestion {
             WHERE l2.account_id = $1
             GROUP BY l2.id
          ) x
-        WHERE l.id = x.id AND (l.sales_fee_avg IS DISTINCT FROM x.fee OR l.sales_freight_avg IS DISTINCT FROM x.freight)`,
+        WHERE l.id = x.id AND (l.sales_fee_avg IS DISTINCT FROM x.fee OR l.sales_freight_avg IS DISTINCT FROM x.freight
+               OR l.freight_paid_ratio IS DISTINCT FROM round(x.ratio, 4))`,
       [accountId],
     );
   }

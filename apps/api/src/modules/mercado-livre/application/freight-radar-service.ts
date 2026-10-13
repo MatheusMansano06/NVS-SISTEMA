@@ -25,6 +25,7 @@ interface RadarRow {
   prev: string | null;
   since: string | null;
   sales_freight_avg: string | null;
+  freight_paid_ratio: string | null;
   sales_fee_avg: string | null;
   fee_amount: string | null;
   pricing_price: string | null;
@@ -105,7 +106,7 @@ export class FreightRadarService {
                 (SELECT to_char(min(h.day), 'YYYY-MM-DD') FROM listing_freight_history h
                   WHERE h.listing_id = l.listing_id AND h.day > coalesce(p.day, '-infinity'::date)) AS since,
                 ls.sales_freight_avg, ls.sales_fee_avg, ls.fee_amount, ls.pricing_price, sc.custo_unit, sold.units AS units30,
-                ls.flex_enabled, ls.logistic_type, ls.dimensions
+                ls.flex_enabled, ls.logistic_type, ls.dimensions, ls.freight_paid_ratio
            FROM latest l
            JOIN listings ls ON ls.external_id = l.listing_id AND ls.marketplace = 'mercado_livre'
            LEFT JOIN prev p ON p.listing_id = l.listing_id
@@ -138,7 +139,8 @@ export class FreightRadarService {
           [shown],
         );
         for (const i of [...alerts, ...heavy]) {
-          i.history = h.rows.filter((x) => x.listing_id === i.id).map((x) => ({ day: x.day, cost: Number(x.cost) }));
+          const k = i.currentList ? i.current / i.currentList : 1; // mesma escala do valor pago
+          i.history = h.rows.filter((x) => x.listing_id === i.id).map((x) => ({ day: x.day, cost: Math.round(Number(x.cost) * k * 100) / 100 }));
         }
       }
       return { lastReading: last.rows[0]?.day ?? null, monitored: items.length, alerts, heavy };
@@ -147,8 +149,12 @@ export class FreightRadarService {
 
   private toItem(r: RadarRow, taxPct: number): FreightRadarItemDto {
     const price = num(r.price);
-    const current = Number(r.current);
-    const prev = num(r.prev);
+    // tabela do ML × desconto que você recebe (visto nas vendas): compara pago com pago
+    const ratio = num(r.freight_paid_ratio) ?? 1;
+    const currentList = Number(r.current);
+    const current = round2(currentList * ratio);
+    const prevList = num(r.prev);
+    const prev = prevList === null ? null : round2(prevList * ratio);
     const salesAvg = num(r.sales_freight_avg);
     const reference = prev ?? (salesAvg !== null && salesAvg > 0 ? round2(salesAvg) : null);
     const fee = num(r.sales_fee_avg) ?? num(r.fee_amount);
@@ -163,6 +169,8 @@ export class FreightRadarService {
       pictureUrl: r.picture_url,
       price,
       current,
+      currentList,
+      discount: ratio < 1 ? round2(1 - ratio) : null,
       reference,
       referenceSource: prev !== null ? 'history' : reference !== null ? 'sales' : null,
       since: r.since,

@@ -44,7 +44,7 @@ describe('shipmentFreight', () => {
       costs: null,
       sellerId: 1,
     });
-    expect(r).toEqual({ buyer: 10, seller: 22.5, bucket: 'places_coleta', uncertain: false });
+    expect(r).toEqual({ buyer: 10, seller: 22.5, listCost: 32.5, bucket: 'places_coleta', uncertain: false, paidKnown: false });
   });
   it('comprador zerado sem custos do envio → frete incerto (não assume zero)', () => {
     const r = shipmentFreight({ payments: [], shipment: { shipping_option: { cost: 0, list_cost: 20 } }, costs: null, sellerId: 1 });
@@ -95,5 +95,31 @@ describe('billedDifal', () => {
       }),
     ).toBe(17400);
     expect(billedDifal({ bill_includes: { charges: [{ label: 'Cargo por venda', amount: 10 }] } })).toBe(0);
+  });
+});
+
+describe('frete pago pelo vendedor', () => {
+  const shipment = { logistic_type: 'drop_off', mode: 'me2', shipping_option: { cost: 0, list_cost: 19.45 } };
+  it('usa senders.cost (com desconto de reputação) em vez da tabela', () => {
+    const f = shipmentFreight({
+      payments: [{ status: 'approved', shipping_cost: 0 }],
+      shipment,
+      costs: { gross_amount: 19.45, receiver: { save: 0 }, senders: [{ user_id: 7, cost: 14.75, save: 4.7 }] },
+      sellerId: 7,
+    });
+    expect(f).toMatchObject({ seller: 14.75, listCost: 19.45, paidKnown: true });
+  });
+  it('sem custos do envio, mantém a tabela', () => {
+    const f = shipmentFreight({ payments: [], shipment, costs: null, sellerId: 7 });
+    expect(f).toMatchObject({ seller: 19.45, paidKnown: false });
+  });
+  it('Flex continua pela regra antiga', () => {
+    const f = shipmentFreight({
+      payments: [],
+      shipment: { ...shipment, logistic_type: 'self_service' },
+      costs: { receiver: { save: 0 }, senders: [{ user_id: 7, cost: 0, save: 0 }] },
+      sellerId: 7,
+    });
+    expect(f.paidKnown).toBe(false);
   });
 });

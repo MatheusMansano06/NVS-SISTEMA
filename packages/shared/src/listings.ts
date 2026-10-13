@@ -112,6 +112,8 @@ export interface ListingPricingDto {
   fee: number | null;
   feePct: number | null;
   freight: number | null;
+  /** Frete de tabela do ML; `freight` já é o que você paga (tabela × desconto médio das suas vendas). */
+  freightList: number | null;
   margin: ListingMarginDto;
   /** Tipo atual e a mesma conta nos dois tipos (Clássico × Premium). */
   type: string | null;
@@ -430,6 +432,10 @@ export interface FreightRadarItemDto {
   price: number | null;
   /** Frete cobrado hoje pelo ML (leitura mais recente). */
   current: number;
+  /** Frete de tabela do ML hoje; `current` é o que você paga (com o desconto médio das suas vendas). */
+  currentList: number;
+  /** Desconto no frete (0–1) observado nas suas vendas; null = sem vendas conferidas. */
+  discount: number | null;
   /** Referência: leitura anterior diferente, ou a média paga nas vendas. */
   reference: number | null;
   referenceSource: 'history' | 'sales' | null;
@@ -476,4 +482,20 @@ export interface FlexOpportunitiesDto {
   areaLabel: string | null;
   located: number;
   items: FlexOpportunityDto[];
+}
+
+/** Painel Flex: quanto das vendas pagas do período saiu por Flex e para onde. */
+export interface FlexDashboardDto {
+  days: number;
+  total: { orders: number; units: number; gross: number };
+  flex: { orders: number; units: number; gross: number };
+  /** Últimos 6 meses (inclui o atual): faturamento total × Flex. */
+  monthly: { month: string; gross: number; flexGross: number; flexOrders: number }[];
+  /** Cidades que mais compram por Flex; `share` = Flex / todas as vendas da cidade. */
+  cities: { city: string; uf: string | null; orders: number; gross: number; share: number }[];
+  /** Zonas de Flex da conta (quando configurada por zonas) com as vendas Flex dentro de cada uma. */
+  zones: { label: string; orders: number; gross: number }[];
+  /** Vendas Flex sem cidade conhecida (endereço ainda não consultado). */
+  unlocated: number;
+  topListings: { id: string; title: string; sku: string | null; pictureUrl: string | null; orders: number; gross: number }[];
 }

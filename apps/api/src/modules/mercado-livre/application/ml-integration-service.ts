@@ -6,7 +6,7 @@ import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js
 import type { EventBus } from '../../../shared/kernel/event-bus.js';
 import type { SalesIngestion } from '../../sales/index.js';
 import { feeBonusOf, mapMlItem, mapMlOrder, type MlOrder } from '../domain/ml-order.js';
-import { billedDifal, sellerCoupon, shipmentAddress, shipmentFreight } from '../domain/ml-finance.js';
+import { billedDifal, sellerCoupon, sellerPaidFreight, shipmentAddress, shipmentFreight } from '../domain/ml-finance.js';
 import { MlApiError, ORDERS_PAGE_SIZE, type MlApi } from '../infrastructure/ml-api.js';
 import type { ConnectionRow, PgMlRepository } from '../infrastructure/pg-ml-repository.js';
 
@@ -239,6 +239,7 @@ export class MlIntegrationService {
       // 4. fretes (comprador/vendedor), cupons e devoluções de todo o período importado
       await this.enrichFinance(tenantId, connectionId, runId, conn, d90, true);
       await this.backfillAddresses(tenantId, connectionId, conn, 2000);
+      await this.backfillPaidFreight(tenantId, connectionId, conn, 2000);
       await this.syncBilling(tenantId, connectionId, conn);
       await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
 
@@ -415,6 +416,30 @@ export class MlIntegrationService {
   }
 
   /**
+   * Troca o frete de tabela pelo frete cobrado de fato (senders.cost, com desconto de reputação) nas vendas
+   * dos últimos 90 dias enriquecidas antes dessa regra. Em lotes, em segundo plano.
+   */
+  async backfillPaidFreight(tenantId: string, connectionId: string, conn: ConnectionRow, limit = 300): Promise<number> {
+    const refs = await this.db.withTenant(tenantId, (db) => this.sales.pendingPaidFreight(db, conn.account_id, limit));
+    const sellerId = Number(conn.ml_user_id);
+    const queue = [...refs];
+    const worker = async () => {
+      for (let ref = queue.shift(); ref; ref = queue.shift()) {
+        const { token } = await this.accessToken(tenantId, connectionId);
+        const costs = await this.api.shipmentCosts(token, ref).catch(() => null);
+        const paid = costs ? sellerPaidFreight(costs, sellerId) : null;
+        const list = typeof costs?.gross_amount === 'number' && costs.gross_amount > 0 ? costs.gross_amount : null;
+        await this.db.withTenant(tenantId, async (db) => {
+          const ids = await this.sales.setPaidFreight(db, ref, paid, list);
+          if (paid !== null) await this.sales.recompute(db, ids);
+        });
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
+    return refs.length;
+  }
+
+  /**
    * Completa o destino (UF/cidade/CEP) de pedidos antigos, já enriquecidos antes de guardarmos o endereço.
    * Em lotes, em segundo plano, para não pesar no limite de requisições do ML.
    */
@@ -495,6 +520,7 @@ export class MlIntegrationService {
       await this.syncListings(tenantId, connectionId, null, conn, 'paused');
       await this.enrichFinance(tenantId, connectionId, null, conn, since, false);
       await this.backfillAddresses(tenantId, connectionId, conn);
+      await this.backfillPaidFreight(tenantId, connectionId, conn);
       await this.syncBilling(tenantId, connectionId, conn);
       await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
       await this.run(tenantId, runId, { status: 'done', progress: 100 });

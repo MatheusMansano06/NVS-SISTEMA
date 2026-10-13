@@ -42,7 +42,10 @@ export class ListingService {
     const bonus = toNumber(r.fee_bonus) ?? 0;
     // a tarifa da tabela do ML não traz o bônus da campanha; a média das vendas já vem líquida
     const fee = saved ? netFee(toNumber(r.fee_amount), bonus) : toNumber(r.avg_fee);
-    const freight = saved ? toNumber(r.freight_cost) : toNumber(r.avg_freight);
+    // frete salvo é o de tabela: aplica o desconto que você recebe (visto nas vendas)
+    const savedFreight = toNumber(r.freight_cost);
+    const ratio = toNumber(r.freight_paid_ratio) ?? 1;
+    const freight = saved ? (savedFreight === null ? null : round2(savedFreight * ratio)) : toNumber(r.avg_freight);
     const hasSales = fee !== null && freight !== null;
     return {
       id: r.external_id,
@@ -195,12 +198,16 @@ export class ListingService {
     const isCurrent = price === undefined || (current !== null && Math.abs(price - current) < 0.005);
     const target = price ?? current;
     if (!target || target <= 0) throw new Blocked('Anúncio sem preço para simular.');
-    const [fees, freightCost, taxPct] = await Promise.all([
+    const [fees, freightQuote, taxPct] = await Promise.all([
       this.wrap(() => this.lookups.listingFees(token, target, row.category_id, refresh)),
       row.free_shipping ? this.wrap(() => this.lookups.freeShippingCost(token, tenantId, mlUserId, id, refresh)) : Promise.resolve(0),
       this.db.withTenant(tenantId, (db) => this.repo.taxPct(db)),
     ]);
     const f = fees.find((x) => x.listing_type_id === row.listing_type_id);
+    // o ML cota o frete de tabela; você paga com o desconto de reputação visto nas suas vendas
+    const ratio = toNumber(row.freight_paid_ratio);
+    const freightList = freightQuote === null ? null : round2(freightQuote);
+    const freightCost = freightList === null ? null : freightList * (ratio ?? 1);
     const cost = toNumber(row.custo_unit);
     const bonus = toNumber(row.fee_bonus) ?? 0;
     const options = (['gold_special', 'gold_pro'] as const).flatMap((type) => {
@@ -223,7 +230,7 @@ export class ListingService {
     // só o preço vigente fica salvo (simulações de outro preço não sobrescrevem o banco)
     if (isCurrent) {
       await this.db.withTenant(tenantId, (db) =>
-        this.repo.savePricing(db, id, { price: target, fee: grossFee, feePct: f?.sale_fee_details?.percentage_fee ?? null, freight }),
+        this.repo.savePricing(db, id, { price: target, fee: grossFee, feePct: f?.sale_fee_details?.percentage_fee ?? null, freight: freightList }),
       );
     }
     return {
@@ -231,6 +238,7 @@ export class ListingService {
       fee,
       feePct: f?.sale_fee_details?.percentage_fee ?? null,
       freight,
+      freightList,
       margin: unitMargin({ price: target, fee, freight, cost, taxPct, source: 'live' }),
       type: row.listing_type_id,
       options,

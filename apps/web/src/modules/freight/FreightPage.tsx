@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type FlexOpportunitiesDto, type FreightRadarDto, type FreightRadarItemDto } from '@nvs/shared';
+import { type FlexDashboardDto, type FlexOpportunitiesDto, type FreightRadarDto, type FreightRadarItemDto } from '@nvs/shared';
 import { AppShell } from '../../app/AppShell';
 import { navigate } from '../../app/router';
 import { int, money, pct } from '../../shared/format';
@@ -26,7 +26,10 @@ const dateBr = (d: string | null) => (d ? new Date(`${d}T12:00:00`).toLocaleDate
 
 /** Radar de Frete: altas de frete cobradas pelo ML e onde o Flex vale a pena. */
 export function FreightPage() {
-  const [tab, setTab] = useState<'radar' | 'flex'>(new URLSearchParams(window.location.search).get('aba') === 'flex' ? 'flex' : 'radar');
+  const [tab, setTab] = useState<'radar' | 'flex' | 'painel'>(() => {
+    const a = new URLSearchParams(window.location.search).get('aba');
+    return a === 'flex' || a === 'painel' ? a : 'radar';
+  });
   const [radar, setRadar] = useState<FreightRadarDto | null>(null);
   const tour = useGuidedTour('radar', TOURS.radar, radar !== null);
   return (
@@ -41,11 +44,12 @@ export function FreightPage() {
             <button type="button" role="tab" aria-checked={tab === 'radar'} onClick={() => setTab('radar')}>
               Altas de frete {radar && <span>{radar.alerts.length}</span>}
             </button>
+            <button type="button" role="tab" aria-checked={tab === 'painel'} onClick={() => setTab('painel')}>Painel Flex</button>
             <button type="button" role="tab" aria-checked={tab === 'flex'} onClick={() => setTab('flex')}>Oportunidades de Flex</button>
           </div>
         </header>
         <HowTo steps={STEPS} storageKey="nvs:howto:radar" onTour={tour.start} />
-        {tab === 'radar' ? <Radar data={radar} onData={setRadar} /> : <Opportunities />}
+        {tab === 'radar' ? <Radar data={radar} onData={setRadar} /> : tab === 'painel' ? <FlexPanel /> : <Opportunities />}
       </div>
       {tour.element}
     </AppShell>
@@ -168,7 +172,7 @@ function RadarCard({ item, canManage, alert }: { item: FreightRadarItemDto; canM
         </span>
       </div>
       <div className="radar-freight">
-        <small>Frete cobrado pelo ML</small>
+        <small>Frete que você paga</small>
         <b>
           {item.reference !== null && <s>{money(item.reference)}</s>} {money(item.current)}
         </b>
@@ -176,6 +180,9 @@ function RadarCard({ item, canManage, alert }: { item: FreightRadarItemDto; canM
           {up !== null && item.reference ? `${up >= 0 ? '+' : ''}${money(up)} (${pct(up / item.reference, 0)})` : ''}
           {item.referenceSource === 'sales' ? ' vs. média paga nas vendas' : item.since ? ` desde ${dateBr(item.since)}` : ''}
         </span>
+        {item.discount !== null && (
+          <span className="radar-list-cost">tabela ML {money(item.currentList)} · seu desconto {pct(item.discount, 0)}</span>
+        )}
         <Spark points={item.history} />
       </div>
       <div className="radar-margin">
@@ -319,6 +326,142 @@ function Opportunities() {
           </li>
         ))}
       </ul>
+    </>
+  );
+}
+
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const monthLabel = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]}/${m.slice(2, 4)}`;
+
+/** Painel Flex: quanto das vendas sai por Flex e para onde. */
+function FlexPanel() {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<FlexDashboardDto | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setData(null);
+    freightApi
+      .flexDashboard(days)
+      .then(setData)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar o painel.'));
+  }, [days]);
+
+  if (error) return <p className="banner banner-error" role="alert">{error}</p>;
+  const share = data && data.total.gross ? data.flex.gross / data.total.gross : 0;
+  const maxMonth = Math.max(1, ...(data?.monthly.map((m) => m.gross) ?? []));
+  const maxCity = Math.max(1, ...(data?.cities.map((c) => c.orders) ?? []));
+  return (
+    <>
+      <div className="fpanel-head">
+        <p className="ledit-hint">Vendas pagas entregues por Flex (você mesmo entrega, no mesmo dia), comparadas com todas as vendas.</p>
+        <div className="seg seg-sm" role="tablist" aria-label="Período">
+          {[30, 90, 180].map((d) => (
+            <button key={d} type="button" role="tab" aria-checked={days === d} onClick={() => setDays(d)}>{d} dias</button>
+          ))}
+        </div>
+      </div>
+      {!data ? (
+        <div className="promo-skel" aria-hidden="true" />
+      ) : (
+        <>
+          <section className="skpis fpanel-kpis" aria-label="Resumo Flex">
+            <div data-tone="ok">
+              <small>Vendido por Flex</small>
+              <b>{money(data.flex.gross)}</b>
+              <span>{int(data.flex.orders)} pedidos · {int(data.flex.units)} un.</span>
+            </div>
+            <div>
+              <small>Participação do Flex</small>
+              <b>{pct(share, 1)}</b>
+              <span>do faturamento ({pct(data.total.orders ? data.flex.orders / data.total.orders : 0, 0)} dos pedidos)</span>
+            </div>
+            <div>
+              <small>Total de vendas</small>
+              <b>{money(data.total.gross)}</b>
+              <span>{int(data.total.orders)} pedidos</span>
+            </div>
+            <div>
+              <small>Ticket médio Flex</small>
+              <b>{data.flex.orders ? money(data.flex.gross / data.flex.orders) : '—'}</b>
+              <span>por pedido</span>
+            </div>
+          </section>
+
+          <div className="fpanel-grid">
+            <section className="fpanel-box" aria-label="Mês a mês">
+              <h2>Mês a mês</h2>
+              <div className="fpanel-bars">
+                {data.monthly.map((m) => (
+                  <div key={m.month} className="fpanel-bar" title={`${monthLabel(m.month)}: ${money(m.flexGross)} de ${money(m.gross)}`}>
+                    <span className="fpanel-col" style={{ height: `${(m.gross / maxMonth) * 100}%` }}>
+                      <i style={{ height: `${m.gross ? (m.flexGross / m.gross) * 100 : 0}%` }} />
+                    </span>
+                    <b>{m.gross ? pct(m.flexGross / m.gross, 0) : '—'}</b>
+                    <small>{monthLabel(m.month)}</small>
+                  </div>
+                ))}
+              </div>
+              <p className="fpanel-legend"><i /> Flex <i data-all /> Todas as vendas</p>
+            </section>
+
+            <section className="fpanel-box" aria-label="Cidades que mais compram por Flex">
+              <h2>Onde mais vende Flex</h2>
+              {!data.cities.length ? (
+                <p className="fpanel-empty">Sem vendas Flex com cidade conhecida no período.</p>
+              ) : (
+                <ol className="fpanel-rank">
+                  {data.cities.map((c) => (
+                    <li key={`${c.city}-${c.uf}`}>
+                      <span className="fpanel-name">{c.city}{c.uf ? ` · ${c.uf}` : ''}</span>
+                      <span className="fpanel-track"><i style={{ width: `${(c.orders / maxCity) * 100}%` }} /></span>
+                      <b>{int(c.orders)}</b>
+                      <small>{money(c.gross)} · {pct(c.share, 0)} das vendas da cidade</small>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {data.unlocated > 0 && <p className="fpanel-empty">+ {int(data.unlocated)} vendas Flex com endereço ainda em leitura.</p>}
+            </section>
+
+            {data.zones.length > 0 && (
+              <section className="fpanel-box" aria-label="Zonas de Flex">
+                <h2>Suas zonas de Flex</h2>
+                <ol className="fpanel-rank">
+                  {data.zones.map((z) => (
+                    <li key={z.label}>
+                      <span className="fpanel-name">{z.label}</span>
+                      <span className="fpanel-track"><i style={{ width: `${(z.orders / Math.max(1, data.zones[0]!.orders)) * 100}%` }} /></span>
+                      <b>{int(z.orders)}</b>
+                      <small>{money(z.gross)}</small>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
+
+            <section className="fpanel-box" aria-label="Anúncios mais vendidos no Flex">
+              <h2>Mais vendidos no Flex</h2>
+              {!data.topListings.length ? (
+                <p className="fpanel-empty">Nenhuma venda Flex no período.</p>
+              ) : (
+                <ul className="fpanel-top">
+                  {data.topListings.map((t) => (
+                    <li key={t.id}>
+                      <ProductThumb src={t.pictureUrl} alt={t.title} />
+                      <div className="radar-main">
+                        <strong>{t.sku ?? t.id}</strong>
+                        <span className="radar-title" title={t.title}>{t.title}</span>
+                      </div>
+                      <div className="opp-num"><b>{int(t.orders)}</b><span>{money(t.gross)}</span></div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </>
+      )}
     </>
   );
 }

@@ -150,6 +150,18 @@ export class PgSalesAnalyticsRepository {
     return { rows, items, total: Number(total.rows[0]!.n) };
   }
 
+  /** DIFAL cobrado nas faturas do ML por mês (AAAA-MM), das contas filtradas. */
+  async billedDifal(db: Queryable, fromMonth: string, toMonth: string, accountId?: string) {
+    const { rows } = await db.query<{ month: string; amount: string }>(
+      `SELECT to_char(period_key, 'YYYY-MM') AS month, sum(difal) AS amount
+         FROM ml_billing_periods
+        WHERE to_char(period_key, 'YYYY-MM') BETWEEN $1 AND $2 ${accountId ? 'AND account_id = $3' : ''}
+        GROUP BY 1 ORDER BY 1 DESC`,
+      accountId ? [fromMonth, toMonth, accountId] : [fromMonth, toMonth],
+    );
+    return rows.map((r) => ({ month: r.month, amount: Number(r.amount) }));
+  }
+
   async listing(db: Queryable, externalId: string) {
     const { rows } = await db.query<{ external_id: string; title: string; sku: string | null; picture_url: string | null; available_quantity: number | null; sold_quantity: number | null }>(
       `SELECT external_id, title, sku, picture_url, available_quantity, sold_quantity FROM listings WHERE external_id = $1 LIMIT 1`,

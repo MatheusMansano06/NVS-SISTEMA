@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buyerFreightFromCosts, buyerShippingCost, logisticBucket, partialRefund, sellerCoupon, shipmentFreight, shipmentAddress } from './ml-finance.js';
+import { buyerFreightFromCosts, buyerShippingCost, logisticBucket, partialRefund, sellerCoupon, shipmentFreight, shipmentAddress, billedDifal } from './ml-finance.js';
 
 describe('logisticBucket (regra NVS-WMS)', () => {
   it.each([
@@ -77,5 +77,22 @@ describe('shipmentAddress', () => {
       shipmentAddress({ receiver_address: { zip_code: '04351030', city: { name: 'São Paulo' }, state: { id: 'BR-SP' } } }),
     ).toEqual({ uf: 'SP', city: 'São Paulo', zip: '04351030' });
     expect(shipmentAddress({})).toEqual({ uf: null, city: null, zip: null });
+  });
+});
+
+describe('billedDifal', () => {
+  it('soma a linha de DIFAL da fatura e desconta estornos de DIFAL', () => {
+    expect(
+      billedDifal({
+        bill_includes: {
+          charges: [
+            { label: 'Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)', amount: 17482.36 },
+            { label: 'Cargo por venda', amount: 1000 },
+          ],
+          bonuses: [{ label: 'Bonificação ICMS-DIFAL', amount: 82.36 }],
+        },
+      }),
+    ).toBe(17400);
+    expect(billedDifal({ bill_includes: { charges: [{ label: 'Cargo por venda', amount: 10 }] } })).toBe(0);
   });
 });

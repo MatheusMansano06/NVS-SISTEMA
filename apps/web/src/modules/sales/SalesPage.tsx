@@ -163,7 +163,7 @@ export function SalesPage() {
 
         {data && data.months.length > 0 && (
           <section className="scard" aria-label="Mês a mês">
-            <header className="scard-head"><div><h2>Mês a mês</h2><p>Receita, lucro e DIFAL estimado de cada mês do período</p></div></header>
+            <header className="scard-head"><div><h2>Mês a mês</h2><p>Receita, lucro e DIFAL de cada mês (da fatura do ML quando disponível)</p></div></header>
             <ul className="smonths">
               {data.months.map((m) => (
                 <li key={m.month}>
@@ -171,7 +171,10 @@ export function SalesPage() {
                   <div className="smonths-bar" aria-hidden="true"><span style={{ width: `${(m.revenue / maxMonth) * 100}%` }} /></div>
                   <span><small>Receita</small><b>{money(m.revenue)}</b></span>
                   <span data-tone={marginTone(m.profit !== null && m.revenue ? m.profit / m.revenue : null)}><small>Lucro</small><b>{m.profit === null ? '—' : money(m.profit)}</b></span>
-                  <span><small>DIFAL</small><b>{money(m.difal)}</b></span>
+                  <span title={m.difalBilled === null ? 'Estimativa pelas vendas (fatura ainda não sincronizada)' : 'Cobrado na fatura do ML'}>
+                    <small>{m.difalBilled === null ? 'DIFAL ≈' : 'DIFAL fatura'}</small>
+                    <b>{money(m.difal)}</b>
+                  </span>
                   <span><small>Vendas</small><b>{int(m.orders)}</b></span>
                 </li>
               ))}

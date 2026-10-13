@@ -5,6 +5,11 @@ import { ApiError } from '../../shared/http';
 import { Button } from '../../shared/ui/Button';
 import { salesApi } from './sales-api';
 
+const monthShort = (m: string) => {
+  const s = new Date(`${m}-15T12:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
 /** DIFAL estimado do período: total, projeção, detalhe por estado e configuração da empresa. */
 export function DifalCard({ data, canManage, onSaved }: { data: SalesOverviewDto; canManage: boolean; onSaved: () => void }) {
   const d = data.difal;
@@ -17,7 +22,7 @@ export function DifalCard({ data, canManage, onSaved }: { data: SalesOverviewDto
     <section className="scard difal" aria-label="DIFAL estimado">
       <header className="scard-head">
         <div>
-          <h2>DIFAL estimado</h2>
+          <h2>DIFAL</h2>
           <p>
             Origem {d.settings.originUf} · {d.settings.imported ? 'produto importado (4%)' : 'produto nacional'}
           </p>
@@ -28,8 +33,17 @@ export function DifalCard({ data, canManage, onSaved }: { data: SalesOverviewDto
         </div>
       </header>
       <div className="difal-kpis">
-        <div className="difal-main">
-          <small>DIFAL das vendas localizadas</small>
+        {d.billed && (
+          <div className="difal-main">
+            <small>Cobrado pelo ML (fatura)</small>
+            <b>{money(d.billed.total)}</b>
+            <span>
+              {d.billed.months.map((m) => `${monthShort(m.month)} ${money(m.amount)}`).join(' · ')} · Faturamento → Impostos
+            </span>
+          </div>
+        )}
+        <div className={d.billed ? undefined : 'difal-main'}>
+          <small>{d.billed ? 'Estimativa pelas vendas' : 'Estimativa das vendas localizadas'}</small>
           <b>{money(d.total)}</b>
           <span>{pct(share, 1)} da base interestadual ({money(d.interstateBase)})</span>
         </div>
@@ -42,6 +56,11 @@ export function DifalCard({ data, canManage, onSaved }: { data: SalesOverviewDto
         )}
       </div>
       <p className="scard-note">
+        {d.billed
+          ? 'O valor oficial é o da fatura do ML (o período da fatura pode não bater dia a dia com o mês). A estimativa e o detalhe por estado mostram de onde ele vem. '
+          : data.listing
+            ? 'A fatura do ML é da conta inteira, então para um anúncio só mostramos a estimativa. '
+            : 'A fatura do ML deste período ainda não foi sincronizada; mostramos a estimativa. '}
         {coverage < 0.999
           ? `Destino conhecido em ${data.located.orders} de ${data.located.total} vendas — o restante vai sendo completado em segundo plano. `
           : ''}

@@ -63,12 +63,20 @@ export class SalesAnalyticsService {
       const coverage = data.kpis.orders ? located / data.kpis.orders : 1;
       const projection = difal.base > 0 && coverage < 0.999 ? round2(difal.total * (data.kpis.revenue / difal.base)) : null;
 
+      // a fatura é da conta inteira: com filtro por anúncio fica só a estimativa
+      const billedRows = q.listingId ? [] : await this.repo.billedDifal(db, range.from.slice(0, 7), range.to.slice(0, 7), q.accountId);
+      const billedBy = new Map(billedRows.map((b) => [b.month, b.amount]));
       const months = data.months.map((m) => {
         const entries = data.monthStates
           .filter((x) => x.month === m.month && isUf(x.uf))
           .map((x) => ({ uf: x.uf as UF, orders: x.orders, base: x.revenue }));
-        return { ...m, difal: computeDifal(entries, settings).total };
+        const estimated = computeDifal(entries, settings).total;
+        const billed = billedBy.get(m.month) ?? null;
+        return { ...m, difal: billed ?? estimated, difalBilled: billed, difalEstimated: estimated };
       });
+      const billed = billedRows.length
+        ? { total: round2(billedRows.reduce((a, b) => a + b.amount, 0)), months: billedRows }
+        : null;
 
       return {
         range,
@@ -88,7 +96,7 @@ export class SalesAnalyticsService {
         shipping: data.shipping,
         states,
         located: { orders: located, total: data.kpis.orders },
-        difal: { ...difal, settings, projection },
+        difal: { ...difal, settings, projection, billed },
         months,
       };
     });

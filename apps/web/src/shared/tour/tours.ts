@@ -54,7 +54,7 @@ export const TOURS = {
     { target: '.sales .sfilter, .sales .sfilter-chosen', title: 'Um anúncio específico', text: 'Busque um anúncio para ver só ele (com estoque de hoje e total vendido no ML). A lupa dos cards em Anúncios também te traz direto para cá.' },
     { target: '.skpis', title: 'Resumo', text: 'Vendas, unidades, receita e lucro. Se faltar custo de algum SKU, o lucro avisa em vez de mostrar um número errado.' },
     { target: '.scharts', title: 'Como e para onde vende', text: 'Formas de pagamento, modalidade de envio e os estados que mais compram. Passe o mouse para destacar cada fatia.' },
-    { target: '.difal', title: 'DIFAL', text: 'Imposto das vendas para outros estados. “Ver por estado” abre o detalhe; “Configurar” ajusta origem, produto importado e alíquotas.' },
+    { target: '.difal', title: 'DIFAL', text: 'O valor oficial vem da sua fatura do ML (Faturamento → Impostos). Ao lado, a estimativa pelas vendas mostra de onde ele vem: “Ver por estado” abre o detalhe e “Configurar” ajusta origem e alíquotas.' },
     { target: '.sorders', title: 'Venda a venda', text: 'Comprador, pedido, carrinho, CEP, pagamento e a conta completa de cada venda. Busque por cliente, pedido, CEP ou SKU e filtre pela forma de pagamento.' },
     { title: 'Pronto! 🎉', text: 'Dica: olhe os estados que mais compram e o lucro por mês — é onde aparecem as melhores decisões de preço e de estoque.' },
   ],

@@ -6,7 +6,7 @@ import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js
 import type { EventBus } from '../../../shared/kernel/event-bus.js';
 import type { SalesIngestion } from '../../sales/index.js';
 import { feeBonusOf, mapMlItem, mapMlOrder, type MlOrder } from '../domain/ml-order.js';
-import { sellerCoupon, shipmentAddress, shipmentFreight } from '../domain/ml-finance.js';
+import { billedDifal, sellerCoupon, shipmentAddress, shipmentFreight } from '../domain/ml-finance.js';
 import { MlApiError, ORDERS_PAGE_SIZE, type MlApi } from '../infrastructure/ml-api.js';
 import type { ConnectionRow, PgMlRepository } from '../infrastructure/pg-ml-repository.js';
 
@@ -214,6 +214,7 @@ export class MlIntegrationService {
       // 4. fretes (comprador/vendedor), cupons e devoluções de todo o período importado
       await this.enrichFinance(tenantId, connectionId, runId, conn, d90, true);
       await this.backfillAddresses(tenantId, connectionId, conn, 2000);
+      await this.syncBilling(tenantId, connectionId, conn);
 
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
       this.events.publish({ type: 'marketplace.synced', tenantId, payload: { connectionId } });
@@ -407,6 +408,46 @@ export class MlIntegrationService {
     return refs.length;
   }
 
+  /**
+   * Fatura mensal do ML (cobranças, bonificações e o ICMS-DIFAL cobrado). Mês fechado é lido uma vez;
+   * o mês em aberto, no máximo 1 vez por dia (recomendação do ML: a informação é estática no dia).
+   * Falha aqui não derruba a sincronização (a conta pode não ter permissão de faturamento).
+   */
+  async syncBilling(tenantId: string, connectionId: string, conn: ConnectionRow): Promise<number> {
+    try {
+      const { token } = await this.accessToken(tenantId, connectionId);
+      const periods = await this.api.billingPeriods(token);
+      const known = await this.db.withTenant(tenantId, (db) => this.repo.billingFetched(db, conn.account_id));
+      let fetched = 0;
+      for (const p of periods) {
+        const k = known.get(p.key);
+        const closed = (p.period_status ?? '').toUpperCase() === 'CLOSED';
+        const fresh = k && (k.status === 'CLOSED' ? true : !closed && Date.now() - k.fetchedAt.getTime() < 20 * 3_600_000);
+        if (fresh) continue;
+        const s = await this.api.billingSummary(token, p.key);
+        await this.db.withTenant(tenantId, (db) =>
+          this.repo.saveBilling(db, {
+            tenantId,
+            accountId: conn.account_id,
+            key: p.key,
+            dateFrom: s.period?.date_from ?? p.period?.date_from ?? null,
+            dateTo: s.period?.date_to ?? p.period?.date_to ?? null,
+            status: p.period_status ?? null,
+            total: s.bill_includes?.total_amount ?? p.amount ?? null,
+            difal: billedDifal(s),
+            charges: s.bill_includes?.charges ?? [],
+            bonuses: s.bill_includes?.bonuses ?? [],
+          }),
+        );
+        fetched++;
+      }
+      return fetched;
+    } catch (err) {
+      this.log.error({ err, tenantId }, 'Mercado Livre: faturamento indisponível');
+      return 0;
+    }
+  }
+
   // ================= Atualização automática (de hora em hora)
   /**
    * Atualização incremental: pedidos dos últimos 3 dias, anúncios pausados/fotos e fretes.
@@ -426,6 +467,7 @@ export class MlIntegrationService {
       await this.syncListings(tenantId, connectionId, null, conn, 'paused');
       await this.enrichFinance(tenantId, connectionId, null, conn, since, false);
       await this.backfillAddresses(tenantId, connectionId, conn);
+      await this.syncBilling(tenantId, connectionId, conn);
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
     } catch (err) {
       const message = err instanceof MlApiError ? `Mercado Livre respondeu: ${err.message}` : 'Erro inesperado na atualização';

@@ -30,7 +30,7 @@ function randomCnpj(): string {
 
 /** API falsa do Mercado Livre: 120 pedidos nos últimos 90 dias (1 a cada 18h). */
 function fakeMl(sellerId: number) {
-  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null, catCalls: 0, lastFreight: '' };
+  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null, catCalls: 0, lastFreight: '', billing: 0 };
   const now = Date.now();
   const orders: MlOrder[] = Array.from({ length: 120 }, (_, i) => ({
     id: 9_000_000 + i,
@@ -117,6 +117,23 @@ function fakeMl(sellerId: number) {
       }
     },
     async changeListingType() {},
+    async billingPeriods() {
+      const m = new Date().toISOString().slice(0, 7);
+      return [{ key: `${m}-01`, period_status: 'OPEN', amount: 900 }];
+    },
+    async billingSummary() {
+      calls.billing++;
+      return {
+        bill_includes: {
+          total_amount: 900,
+          charges: [
+            { label: 'Cargo por venda', amount: 800, type: 'CV' },
+            { label: 'Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)', amount: 74.3, type: 'DIFAL' },
+          ],
+          bonuses: [{ label: 'Estorno ICMS-DIFAL', amount: 4.3 }],
+        },
+      };
+    },
     async siteCategories() {
       calls.catCalls++;
       return [{ id: 'MLB1747', name: 'Acessórios para Veículos' }, { id: 'MLB1000', name: 'Eletrônicos' }];
@@ -454,6 +471,14 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect(fake.calls.lastFreight).toBe('12x25x30,600');
     const cheap = (await app.inject({ method: 'GET', url: '/api/v1/pricing/freight?price=50&type=gold_special&height=12&width=25&length=30&weight=600', cookies })).json();
     expect(cheap).toEqual({ freight: 0, freeShipping: false, source: 'none' });
+
+    // ---- DIFAL da fatura do ML: sincronizado no banco e usado na aba Vendas (1x/dia no mês aberto)
+    expect(fake.calls.billing).toBe(1); // a sincronização completa leu a fatura
+    const ov = (await app.inject({ method: 'GET', url: '/api/v1/sales/overview?period=this_month', cookies })).json();
+    expect(ov.difal.billed).toMatchObject({ total: 70 });
+    expect(ov.months[0]).toMatchObject({ difalBilled: 70, difal: 70 });
+    const byListing = (await app.inject({ method: 'GET', url: '/api/v1/sales/overview?period=this_month&listingId=MLB1', cookies })).json();
+    expect(byListing.difal.billed).toBeNull(); // fatura é da conta, não do anúncio
 
     // outra empresa não usa a conexão desta
     const other = await account();

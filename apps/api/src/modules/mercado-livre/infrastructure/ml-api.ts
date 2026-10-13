@@ -71,6 +71,10 @@ export interface MlApi {
     sellerId: string,
     q: { dimensions: string; price: number; type: string; freeShipping: boolean; categoryId?: string | null },
   ): Promise<number | null>;
+  /** Períodos (meses) de faturamento do ML, mais recentes primeiro. */
+  billingPeriods(token: string): Promise<MlBillingPeriod[]>;
+  /** Resumo da fatura do período: cobranças, bonificações e impostos. */
+  billingSummary(token: string, key: string): Promise<MlBillingSummary>;
   /** Promoções em que o anúncio está (para o bônus de tarifa). */
   itemPromotions(token: string, itemId: string): Promise<MlItemPromotion[]>;
   /** Campanhas da Central de Promoções do vendedor. */
@@ -84,6 +88,24 @@ export interface MlApi {
   ): Promise<{ results: MlPromotionItem[]; searchAfter: string | null }>;
   /** Inscreve o anúncio na campanha (escreve no ML). */
   enrollPromotion(token: string, itemId: string, body: { promotion_id: string; promotion_type: string; deal_price?: number }): Promise<void>;
+}
+
+export interface MlBillingPeriod {
+  key: string;
+  amount?: number | null;
+  period?: { date_from?: string | null; date_to?: string | null } | null;
+  period_status?: string | null;
+}
+
+export interface MlBillingLine {
+  label?: string | null;
+  amount?: number | null;
+  type?: string | null;
+}
+
+export interface MlBillingSummary {
+  period?: { date_from?: string | null; date_to?: string | null; key?: string | null } | null;
+  bill_includes?: { total_amount?: number | null; charges?: MlBillingLine[] | null; bonuses?: MlBillingLine[] | null } | null;
 }
 
 export interface MlCategory {
@@ -329,6 +351,18 @@ export class HttpMlApi implements MlApi {
 
   async setQuantityPrices(token: string, itemId: string, prices: unknown[]) {
     await this.send('POST', `/items/${encodeURIComponent(itemId)}/prices/standard/quantity`, token, { prices });
+  }
+
+  async billingPeriods(token: string) {
+    const r = await this.get<{ results?: MlBillingPeriod[] }>(
+      '/billing/integration/monthly/periods?group=ML&document_type=BILL&offset=0&limit=12',
+      token,
+    );
+    return r.results ?? [];
+  }
+
+  billingSummary(token: string, key: string) {
+    return this.get<MlBillingSummary>(`/billing/integration/periods/key/${encodeURIComponent(key)}/summary/details?group=ML`, token);
   }
 
   async siteCategories(token: string) {

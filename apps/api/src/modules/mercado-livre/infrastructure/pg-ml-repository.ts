@@ -200,4 +200,27 @@ export class PgMlRepository {
     );
     return rows.map((r) => r.tenant_id);
   }
+
+  // ---------- faturamento (fatura mensal do ML)
+  async billingFetched(db: Queryable, accountId: string): Promise<Map<string, { status: string | null; fetchedAt: Date }>> {
+    const { rows } = await db.query<{ key: string; status: string | null; fetched_at: Date }>(
+      `SELECT to_char(period_key, 'YYYY-MM-DD') AS key, status, fetched_at FROM ml_billing_periods WHERE account_id = $1`,
+      [accountId],
+    );
+    return new Map(rows.map((r) => [r.key, { status: r.status, fetchedAt: r.fetched_at }]));
+  }
+
+  async saveBilling(
+    db: Queryable,
+    p: { tenantId: string; accountId: string; key: string; dateFrom: string | null; dateTo: string | null; status: string | null; total: number | null; difal: number; charges: unknown; bonuses: unknown },
+  ): Promise<void> {
+    await db.query(
+      `INSERT INTO ml_billing_periods (tenant_id, account_id, period_key, date_from, date_to, status, total_amount, difal, charges, bonuses, fetched_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+       ON CONFLICT (tenant_id, account_id, period_key) DO UPDATE SET date_from = EXCLUDED.date_from, date_to = EXCLUDED.date_to,
+         status = EXCLUDED.status, total_amount = EXCLUDED.total_amount, difal = EXCLUDED.difal, charges = EXCLUDED.charges,
+         bonuses = EXCLUDED.bonuses, fetched_at = now()`,
+      [p.tenantId, p.accountId, p.key, p.dateFrom, p.dateTo, p.status, p.total, p.difal, JSON.stringify(p.charges ?? []), JSON.stringify(p.bonuses ?? [])],
+    );
+  }
 }

@@ -134,3 +134,13 @@ export function partialRefund(status: string, payments: MlPayment[] | null | und
   if (status === 'cancelled') return 0;
   return round2((payments ?? []).reduce((s, p) => s + n(p.transaction_amount_refunded), 0));
 }
+
+/** Linha do ICMS-DIFAL na fatura do ML ("Cobrança do diferencial de alíquota interestadual (ICMS-DIFAL)"). */
+const DIFAL_LABEL = /difal|diferencial de al[ií]quota/i;
+
+/** DIFAL cobrado no período = soma das cobranças de DIFAL − estornos de DIFAL nas bonificações. */
+export function billedDifal(s: { bill_includes?: { charges?: { label?: string | null; amount?: number | null }[] | null; bonuses?: { label?: string | null; amount?: number | null }[] | null } | null }): number {
+  const sum = (lines: { label?: string | null; amount?: number | null }[] | null | undefined) =>
+    (lines ?? []).filter((l) => DIFAL_LABEL.test(l.label ?? '')).reduce((a, l) => a + Math.abs(n(l.amount)), 0);
+  return round2(Math.max(0, sum(s.bill_includes?.charges) - sum(s.bill_includes?.bonuses)));
+}

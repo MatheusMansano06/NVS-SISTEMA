@@ -137,8 +137,17 @@ export interface SalesOverviewDto {
   states: { uf: UF; orders: number; revenue: number }[];
   /** Pedidos pagos com UF conhecida / total (o histórico vai sendo completado em segundo plano). */
   located: { orders: number; total: number };
-  difal: DifalResultDto & { settings: DifalSettingsDto; projection: number | null };
-  months: { month: string; orders: number; revenue: number; profit: number | null; difal: number }[];
+  difal: DifalResultDto & {
+    settings: DifalSettingsDto;
+    projection: number | null;
+    /**
+     * DIFAL cobrado pelo ML nas faturas dos meses do período (Faturamento → Impostos). null = nenhuma fatura
+     * sincronizada ainda (ou filtro por anúncio: a fatura é da conta, não do anúncio).
+     */
+    billed: { total: number; months: { month: string; amount: number }[] } | null;
+  };
+  /** `difal` = cobrado na fatura daquele mês quando houver; senão a estimativa (`difalEstimated`). */
+  months: { month: string; orders: number; revenue: number; profit: number | null; difal: number; difalBilled: number | null; difalEstimated: number }[];
 }
 
 export interface SaleOrderDto {

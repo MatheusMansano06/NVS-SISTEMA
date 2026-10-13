@@ -21,7 +21,7 @@ if (appRole && !/^[a-z_][a-z0-9_]*$/.test(appRole)) {
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 15_000 });
+const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 15_000, application_name: 'nvs-migrate' });
 console.log('Migrations: conectando ao banco…');
 await client.connect();
 try {
@@ -45,6 +45,15 @@ try {
       continue;
     }
     console.log(`… aplicando ${file}`);
+    // Uma tentativa anterior desta mesma migration pode ter ficado órfã no banco (container encerrado
+    // no meio do deploy): ela segura a fila de locks da tabela e trava a aplicação. Encerra só essas.
+    const orphans = await client.query(
+      `SELECT pg_terminate_backend(pid) AS killed, pid FROM pg_stat_activity
+        WHERE pid <> pg_backend_pid() AND datname = current_database()
+          AND (application_name = 'nvs-migrate' OR left(query, 300) = left($1, 300))`,
+      [sql],
+    );
+    if (orphans.rowCount) console.log(`  encerradas ${orphans.rowCount} sessão(ões) órfã(s) desta migration`);
     // ALTER TABLE espera o lock da tabela; com a versão anterior ainda no ar (notificações, sync) isso
     // pode demorar. Em vez de travar o deploy (e enfileirar as consultas da app atrás dele), desiste
     // rápido e tenta de novo. Esgotou: sai com erro e o deploy falha sem derrubar a versão no ar.

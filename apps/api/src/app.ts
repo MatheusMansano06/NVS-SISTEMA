@@ -178,7 +178,7 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
         new SalesIngestion(),
         events,
         app.log,
-        { clientId: env.ML_CLIENT_ID!, usePkce: env.ML_USE_PKCE, ordersOffsetCap: mlOrdersOffsetCap },
+        { clientId: env.ML_CLIENT_ID!, usePkce: env.ML_USE_PKCE, ordersOffsetCap: mlOrdersOffsetCap, historyPaceMs: env.NODE_ENV === 'test' ? 0 : undefined },
       )
     : null;
   app.decorate('ml', ml);

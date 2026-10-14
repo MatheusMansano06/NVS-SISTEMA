@@ -26,10 +26,10 @@ export function SyncProgress({ onAdvance, justConnected }: { onAdvance: () => vo
         const s = await mlApi.status();
         if (!alive) return;
         setStatus(s);
-        const signature = s.connections.map((c) => `${c.sync?.status}:${c.sync?.progress}`).join('|');
+        const signature = s.connections.map((c) => `${c.sync?.status}:${c.sync?.progress}:${c.history?.monthsDone}`).join('|');
         if (lastProgress.current && signature !== lastProgress.current) onAdvance();
         lastProgress.current = signature;
-        const running = s.connections.some((c) => c.sync?.status === 'running');
+        const running = s.connections.some((c) => c.sync?.status === 'running' || c.history?.running);
         const waiting = justConnected && !s.connections.length;
         timer = window.setTimeout(tick, running || waiting ? POLL_RUNNING_MS : POLL_IDLE_MS);
       } catch {
@@ -104,6 +104,13 @@ export function SyncProgress({ onAdvance, justConnected }: { onAdvance: () => vo
                 {c.lastSyncedAt &&
                   ` · números atualizados às ${new Date(c.lastSyncedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
                 <small> · atualização automática a cada hora; vendas novas entram na hora</small>
+                {c.history && c.history.monthsDone < c.history.monthsTotal && (
+                  <small className="sync-history">
+                    {' · '}
+                    {c.history.running ? 'Guardando o histórico de vendas' : 'Histórico de vendas'}: {c.history.monthsDone} de {c.history.monthsTotal} meses
+                    {c.history.running ? ' (em segundo plano, pode usar o sistema)' : ''}
+                  </small>
+                )}
               </p>
               <button type="button" className="link" onClick={() => void retry(c)}>
                 Sincronizar agora

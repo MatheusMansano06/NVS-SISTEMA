@@ -395,6 +395,8 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect(conn).toMatchObject({ nickname: 'LOJA TESTE ML', mlUserId: String(sellerId), status: 'active' });
     expect(conn.sync).toMatchObject({ status: 'done', progress: 100, phase: 'finishing' });
     expect(conn.sync.ordersImported).toBe(120);
+    // histórico: os 12 meses anteriores aos 90 dias ficam guardados no banco (buscados uma vez, em segundo plano)
+    expect(conn.history).toEqual({ monthsDone: 12, monthsTotal: 12, running: false });
     expect(fake.calls.refresh).toBe(1); // token expirando foi renovado uma única vez
 
     // esperado pela mesma regra do sistema: "30 dias" = dias inteiros do calendário de São Paulo

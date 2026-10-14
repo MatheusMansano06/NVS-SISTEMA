@@ -42,6 +42,10 @@ const PHASE_START: Record<SyncPhase, number> = {
 };
 /** Sinal de vida da sincronização: sem ele por 3 min, a execução é dada como interrompida (servidor reiniciou). */
 const HEARTBEAT_MS = 30_000;
+/** Meses de histórico guardados além dos 90 dias (13 meses de detalhe na retenção). */
+const HISTORY_MONTHS = 12;
+/** Ritmo do histórico: pausa entre páginas, para não esbarrar no limite de requisições do ML. */
+const HISTORY_PACE_MS = 400;
 const MAX_LISTING_PAGES = 200; // até 20 mil anúncios por status (scan de 100 em 100)
 
 /**
@@ -55,6 +59,8 @@ export class MlIntegrationService {
   private inflight = new Set<Promise<void>>();
   /** Conexões com sincronização completa rodando neste processo: um segundo clique não abre outra. */
   private activeSyncs = new Set<string>();
+  /** Conexões guardando o histórico agora (segundo plano). */
+  private historyRunning = new Set<string>();
   private processingOrders = new Set<string>();
   private refreshing = new Map<string, Promise<{ token: string; conn: ConnectionRow }>>();
   // fila de notificações: o ML reenvia muito; repetidas em 30s são descartadas e a fila tem limite
@@ -70,7 +76,7 @@ export class MlIntegrationService {
     private readonly sales: SalesIngestion,
     private readonly events: EventBus,
     private readonly log: Logger,
-    private readonly opts: { clientId: string; usePkce: boolean; ordersOffsetCap?: number },
+    private readonly opts: { clientId: string; usePkce: boolean; ordersOffsetCap?: number; historyPaceMs?: number },
   ) {}
 
   // ================= OAuth
@@ -189,6 +195,11 @@ export class MlIntegrationService {
             finishedAt: run.finished_at?.toISOString() ?? null,
           },
           lastSyncedAt: synced?.toISOString() ?? null,
+          history: {
+            monthsDone: Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM ml_history_months WHERE account_id = $1', [c.account_id])).rows[0]?.n ?? 0),
+            monthsTotal: HISTORY_MONTHS,
+            running: this.historyRunning.has(c.id),
+          },
         });
       }
       return { configured: true, connections: result };
@@ -216,6 +227,9 @@ export class MlIntegrationService {
         clearInterval(beat);
         this.activeSyncs.delete(connectionId);
         this.inflight.delete(job);
+        // depois da completa, guarda o histórico mais antigo em segundo plano (não segura a barra)
+        const history = this.backfillHistory(tenantId, connectionId).finally(() => this.inflight.delete(history));
+        this.inflight.add(history);
       });
     this.inflight.add(job);
   }
@@ -280,12 +294,14 @@ export class MlIntegrationService {
   private async importRange(
     tenantId: string,
     connectionId: string,
-    runId: string,
+    runId: string | null,
     conn: ConnectionRow,
     from: Date,
     to: Date,
     phase: 'orders_recent' | 'orders_history',
-  ): Promise<void> {
+    paceMs = 0,
+  ): Promise<number> {
+    let imported = 0;
     const start = PHASE_START[phase];
     const end = SYNC_PHASE_END[phase];
     // A busca de pedidos do ML não pagina além de 10 mil resultados: período com mais pedidos que isso é
@@ -309,14 +325,54 @@ export class MlIntegrationService {
         await this.db.withTenant(tenantId, async (db) => {
           await this.sales.upsertOrders(db, tenantId, conn.account_id, 'mercado_livre', orders);
           const done = (doneMs + (wTo.getTime() - wFrom.getTime()) * winDone) / totalMs;
-          await this.repo.updateRun(db, runId, { progress: Math.round(start + (end - start) * Math.min(1, done)), addOrders: orders.length });
+          if (runId) await this.repo.updateRun(db, runId, { progress: Math.round(start + (end - start) * Math.min(1, done)), addOrders: orders.length });
         });
+        imported += orders.length;
         offset += ORDERS_PAGE_SIZE;
         if (page.results.length < ORDERS_PAGE_SIZE || offset >= page.paging.total || offset >= cap) break;
+        if (paceMs) await new Promise((res) => setTimeout(res, paceMs)); // só entre páginas
         const { token: t } = await this.accessToken(tenantId, connectionId);
         page = await this.api.searchOrders(t, conn.ml_user_id, mlDate(wFrom), mlDate(wTo), offset);
       }
       doneMs += wTo.getTime() - wFrom.getTime();
+    }
+    return imported;
+  }
+
+  /**
+   * Histórico de vendas guardado no banco, mês a mês, dos 12 meses anteriores aos 90 dias da sincronização completa.
+   * Cada mês é buscado uma vez (devagar, para não bater no limite do ML) e marcado como guardado; não é relido.
+   */
+  async backfillHistory(tenantId: string, connectionId: string): Promise<void> {
+    if (this.historyRunning.has(connectionId)) return;
+    this.historyRunning.add(connectionId);
+    try {
+      const { conn } = await this.accessToken(tenantId, connectionId);
+      const done = await this.db.withTenant(tenantId, async (db) =>
+        new Set((await db.query<{ m: string }>(`SELECT to_char(month, 'YYYY-MM-DD') AS m FROM ml_history_months WHERE account_id = $1`, [conn.account_id])).rows.map((x) => x.m)),
+      );
+      const limit = new Date(Date.now() - 90 * DAY); // daqui para frente a sincronização completa já cobre
+      for (let i = 0; i < HISTORY_MONTHS; i++) {
+        const first = new Date(Date.UTC(limit.getUTCFullYear(), limit.getUTCMonth() - i, 1));
+        const key = first.toISOString().slice(0, 10);
+        if (done.has(key)) continue;
+        const next = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 1));
+        const to = new Date(Math.min(next.getTime() - 1, limit.getTime()));
+        const n = await this.importRange(tenantId, connectionId, null, conn, first, to, 'orders_history', this.opts.historyPaceMs ?? HISTORY_PACE_MS);
+        // os dias que depois saem dos 90 dias já foram importados enquanto estavam dentro deles: o mês fica guardado
+        await this.db.withTenant(tenantId, (db) =>
+          db.query(
+            `INSERT INTO ml_history_months (tenant_id, account_id, month, orders) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (tenant_id, account_id, month) DO UPDATE SET orders = EXCLUDED.orders, done_at = now()`,
+            [tenantId, conn.account_id, key, n],
+          ),
+        );
+      }
+      await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
+    } catch (err) {
+      this.log.error({ err, tenantId }, 'Mercado Livre: histórico de vendas parou (continua na próxima sincronização)');
+    } finally {
+      this.historyRunning.delete(connectionId);
     }
   }
 
@@ -565,7 +621,14 @@ export class MlIntegrationService {
       await this.syncListings(tenantId, connectionId, null, conn, 'paused');
       await this.enrichFinance(tenantId, connectionId, null, conn, since, false);
       // e completa aos poucos o que ainda faltar de frete/cupom nos últimos 90 dias
-      await this.enrichFinance(tenantId, connectionId, null, conn, new Date(now.getTime() - 90 * DAY), false, undefined, 2_000);
+      await this.enrichFinance(tenantId, connectionId, null, conn, new Date(now.getTime() - (90 + 31 * HISTORY_MONTHS) * DAY), false, undefined, 2_000);
+      // histórico interrompido (reinício do servidor): retoma em segundo plano — só busca os meses que faltam
+      const months = await this.db.withTenant(tenantId, async (db) =>
+        Number((await db.query<{ n: string }>('SELECT count(*) AS n FROM ml_history_months WHERE account_id = $1', [conn.account_id])).rows[0]?.n ?? 0));
+      if (months < HISTORY_MONTHS && (await this.db.withTenant(tenantId, (db) => this.repo.latestRun(db, connectionId)))?.status === 'done') {
+        const history = this.backfillHistory(tenantId, connectionId).finally(() => this.inflight.delete(history));
+        this.inflight.add(history);
+      }
       await this.backfillAddresses(tenantId, connectionId, conn);
       await this.backfillPaidFreight(tenantId, connectionId, conn);
       await this.syncBilling(tenantId, connectionId, conn);

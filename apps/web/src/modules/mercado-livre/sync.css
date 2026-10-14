@@ -40,3 +40,4 @@
   .sync > .btn { width: 100%; }
   .sync-avatar { width: 42px; height: 42px; }
 }
+.sync-history { color: var(--blue); font-weight: 600; }

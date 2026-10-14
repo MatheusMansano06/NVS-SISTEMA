@@ -41,6 +41,8 @@ export interface MlConnectionDto {
   sync: SyncRunDto | null;
   /** Última atualização concluída (completa ou automática de hora em hora). */
   lastSyncedAt: string | null;
+  /** Histórico de vendas guardado no banco, mês a mês (busca em segundo plano depois da sincronização completa). */
+  history: { monthsDone: number; monthsTotal: number; running: boolean };
 }
 
 /** Os números se atualizam de hora em hora; pedidos e anúncios chegam na hora (notificações). */

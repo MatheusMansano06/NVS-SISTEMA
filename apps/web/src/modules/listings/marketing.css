@@ -35,15 +35,18 @@
 
 .mkt-panel { padding: 18px 20px; border-radius: 22px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); display: grid; gap: 10px; }
 .mkt-panel h2 { margin: 0; font-size: 1rem; color: var(--navy); }
-.mkt-off { background: var(--gray-50, #f6f7f9); }
+.mkt-card-off { background: var(--gray-50, #f6f7f9); box-shadow: 0 0 0 1px var(--gray-100); }
+.mkt-off-msg { margin: 0; padding: 12px 14px; border-radius: 14px; background: #fff; color: var(--gray-500); font-size: .84rem; line-height: 1.4; }
 .mkt-muted { margin: 0; color: var(--gray-500); font-size: .84rem; }
 .mkt-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .mkt-chips li { padding: 6px 12px; border-radius: 99px; background: var(--blue-soft); color: var(--navy); font-size: .82rem; font-weight: 600; }
 .mkt-chips li b { margin-left: 4px; color: var(--blue); }
-.mkt-off .mkt-chips li { background: #fff; box-shadow: 0 0 0 1px var(--gray-100); }
 
 .mkt-modal-title { margin: 0 0 4px; color: var(--navy); font-size: 1.1rem; }
-.mkt-list { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 8px; }
+.mkt-list {
+  list-style: none; margin: 14px 0; padding: 0 4px 0 0; display: grid; gap: 8px;
+  max-height: min(58dvh, 560px); overflow-y: auto; overscroll-behavior: contain;
+}
 .mkt-list[aria-busy='true'] { opacity: .5; }
 .mkt-list li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px; background: var(--gray-50, #f6f7f9); }
 .mkt-list-title { flex: 1; min-width: 0; display: grid; }

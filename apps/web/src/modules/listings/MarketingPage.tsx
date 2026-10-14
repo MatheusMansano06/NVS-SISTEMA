@@ -65,8 +65,8 @@ export function MarketingPage() {
   };
 
   const acc = data?.accounts.find((a) => a.connectionId === accountId) ?? null;
-  const available = acc?.tools.filter((t) => t.available) ?? [];
-  const missing = acc?.tools.filter((t) => !t.available) ?? [];
+  // ferramentas com leitura primeiro; as que o ML não fornece para a conta ficam no fim, com o aviso no próprio quadro
+  const tools = acc ? [...acc.tools].sort((a, b) => Number(b.available) - Number(a.available)) : [];
 
   return (
     <AppShell>
@@ -105,7 +105,7 @@ export function MarketingPage() {
 
             {acc.analyzed > 0 && (
               <div className="mkt-grid">
-                {available.map((t) => (
+                {tools.map((t) => (
                   <ToolCard key={t.tool} stat={t} onOpen={(using) => setOpen({ tool: t.tool, using })} />
                 ))}
               </div>
@@ -125,18 +125,6 @@ export function MarketingPage() {
               <p className="mkt-muted">Para inscrever anúncios nessas campanhas, use a Central de Promoção.</p>
             </section>
 
-            {acc.analyzed > 0 && missing.length > 0 && (
-              <section className="mkt-panel mkt-off" aria-label="Ferramentas sem leitura">
-                <h2>Sem leitura nesta conta</h2>
-                <p className="mkt-muted">
-                  O Mercado Livre não informou estas ferramentas para esta conta. Cada conta tem ferramentas diferentes: elas podem não estar
-                  liberadas, ou o ML não as disponibiliza pela integração.
-                </p>
-                <ul className="mkt-chips">
-                  {missing.map((t) => <li key={t.tool}>{MARKETING_TOOL_INFO[t.tool].label}</li>)}
-                </ul>
-              </section>
-            )}
           </>
         )}
       </div>
@@ -169,6 +157,17 @@ function ToolCard({ stat, onOpen }: { stat: MarketingToolStat; onOpen: (using: b
   const info = MARKETING_TOOL_INFO[stat.tool];
   const total = stat.using + stat.notUsing;
   const share = total ? stat.using / total : 0;
+  if (!stat.available) {
+    return (
+      <article className="mkt-card mkt-card-off" data-tool={stat.tool}>
+        <header>
+          <h3>{info.label}</h3>
+          <p>{info.hint}</p>
+        </header>
+        <p className="mkt-off-msg">O Mercado Livre não fornece essa informação para esta conta pela integração.</p>
+      </article>
+    );
+  }
   return (
     <article className="mkt-card" data-tool={stat.tool}>
       <header>

@@ -26,6 +26,8 @@ const CAMPAIGNS_TTL = 600;
 /** Se o ML não responde clips/anúncios patrocinados nas primeiras leituras, para de perguntar neste ciclo. */
 const PROBE_LIMIT = 5;
 
+/** Quantidade alta o bastante para cair na maior faixa de atacado cadastrada. */
+const WHOLESALE_PROBE_QTY = 1000;
 const ACTIVE_PROMO = new Set(['started', 'pending', 'active']);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -207,6 +209,19 @@ export class MarketingService {
       const promos = await get<Json>(`/seller-promotions/items/${encodeURIComponent(id)}?app_version=v2`);
       const list: Json[] = Array.isArray(promos) ? promos : (promos?.results ?? []);
       const prices = await get<Json>(`/items/${encodeURIComponent(id)}/prices`);
+      // atacado (B2B): a lista de preços nem sempre traz as faixas; o preço para empresa comprando muito revela
+      const b2b = async (quantity: number) =>
+        (
+          await get<Json>(
+            `/items/${encodeURIComponent(id)}/sale_price?context=channel_marketplace,user_type_business&quantity=${quantity}`,
+          )
+        )?.amount as number | undefined;
+      let wholesale: boolean | null = prices ? hasWholesale(prices) : null;
+      if (!wholesale) {
+        const one = await b2b(1);
+        const many = typeof one === 'number' ? ((await b2b(WHOLESALE_PROBE_QTY)) ?? (await b2b(10))) : undefined;
+        if (typeof one === 'number' && typeof many === 'number') wholesale = many < one - 0.01;
+      }
       const item = await get<Json>(`/items/${encodeURIComponent(id)}?attributes=id,video_id`);
       let clips: boolean | null = null;
       if (misses.clips < PROBE_LIMIT) {
@@ -218,7 +233,7 @@ export class MarketingService {
         item_id: id,
         promos_active: [...new Set(list.filter((p) => ACTIVE_PROMO.has(String(p.status ?? '').toLowerCase())).map((p) => String(p.type)))],
         promos_candidate: [...new Set(list.filter((p) => String(p.status ?? '').toLowerCase() === 'candidate').map((p) => String(p.type)))],
-        wholesale: prices ? hasWholesale(prices) : null,
+        wholesale,
         clips,
         video: item ? Boolean(item.video_id) : null,
         ads: ads ? (ads.get(id) ?? 'none') : null,

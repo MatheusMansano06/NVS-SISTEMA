@@ -174,9 +174,12 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
         ) : (
           <div className="pk-body">
             <div className="pk-item">
-              <span className="pk-kicker">⚡ Separar agora</span>
-              <h2>{item.sku}</h2>
-              <p>{item.description}</p>
+              <ProductThumb src={item.pictureUrl} alt={item.description} size={84} />
+              <div>
+                <span className="pk-kicker">⚡ Separar agora</span>
+                <h2>{item.sku}</h2>
+                <p>{item.description}</p>
+              </div>
               <span className="pk-status" data-item={item.status}>{WMS_ITEM_STATUS_LABELS[item.status]}</span>
             </div>
 

@@ -565,7 +565,8 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .pk-bar i { display: block; height: 100%; background: var(--blue); transition: width .3s; }
 .pk-warn { margin: 12px 18px 0; padding: 10px 12px; border-radius: 12px; background: var(--yellow-soft); color: var(--warn-ink); font-size: .8rem; font-weight: 650; }
 .pk-body { display: grid; gap: 14px; padding: 20px; }
-.pk-item { position: relative; padding-right: 92px; }
+.pk-item { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; padding-top: 22px; }
+.pk-item > div { min-width: 0; }
 .pk-kicker { font-size: .62rem; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; color: var(--blue); }
 .pk-item h2 { margin: 4px 0 0; font-size: 1.6rem; font-weight: 900; line-height: 1.1; color: var(--navy); overflow-wrap: anywhere; }
 .pk-item p { margin: 4px 0 0; color: var(--gray-500); font-size: .86rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

@@ -145,116 +145,107 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
   const pickable = (i: WmsItemDto) => !['complete', 'partial', 'out_of_stock'].includes(i.status);
   const left = detail.items.filter(pickable).length;
 
-  return (
-    <div className="fp" data-flash={flash ?? undefined}>
-      <header className="fp-head">
-        <button type="button" className="fp-back" onClick={onBack} aria-label="Voltar">‹</button>
-        <div className="fp-title">
-          <small>Lista</small>
-          <b>{list.code}</b>
-          <span>{list.operatorName ? `com ${list.operatorName}` : 'livre'} · {left} {left === 1 ? 'item falta' : 'itens faltam'}</span>
-        </div>
-        <div className="fp-progress">
-          <p><b>{pct}%</b><span>{int(list.itemsPicked)} de {int(list.itemsTotal)} unidades separadas</span></p>
-          <span className="full-track" data-tone={pct === 100 ? 'ok' : 'blue'}><i style={{ width: `${pct}%` }} /></span>
-        </div>
-      </header>
-      {othersList && <p className="banner banner-warn">Esta lista está com {list.operatorName}. Ao bipar, o sistema oferece transferir o item para você.</p>}
+  const skusDone = detail.items.length - left;
+  // itens já resolvidos (os últimos primeiro), como o "Acabaram de passar" do NVS-WMS
+  const recent = detail.items.filter((i) => !pickable(i)).slice(-5).reverse();
 
-      <div className="fp-grid">
+  return (
+    <div className="pk" data-flash={flash ?? undefined} onClick={() => !dialog && inputRef.current?.focus()}>
+      <section className="pk-card">
+        <header className="pk-head">
+          <button type="button" className="pk-link" onClick={onBack}>‹ Voltar</button>
+          <div className="pk-list">
+            <b><span className="pk-mp" data-mp={list.marketplace} aria-hidden="true">{list.marketplace === 'shopee' ? 'S' : 'ML'}</span>{list.code}</b>
+            <small>{int(list.itemsPicked)}/{int(list.itemsTotal)} un · {skusDone}/{detail.items.length} sku</small>
+          </div>
+          <button type="button" className="pk-link" onClick={(e) => { e.stopPropagation(); setDialog({ kind: 'items' }); }}>Itens ☰</button>
+        </header>
+        <span className="pk-bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>
+
+        {othersList && <p className="pk-warn">Esta lista está com {list.operatorName}. Ao bipar, o sistema oferece transferir o item para você.</p>}
+
         {!item ? (
-          <section className="fp-card fp-done">
+          <div className="pk-done">
             <span aria-hidden="true">🎉</span>
             <h2>Lista concluída!</h2>
             <p>{detail.items.filter((i) => i.shortageQty > 0).length ? 'Os itens com falta foram para o Relatório de Faltas.' : 'Tudo separado e etiquetado.'}</p>
-            <button type="button" className="btn btn-primary fp-done-btn" onClick={onBack}>Voltar ao painel</button>
-          </section>
+            <button type="button" className="pk-btn pk-primary" onClick={onBack}>Voltar ao painel</button>
+          </div>
         ) : (
-          <section className="fp-card">
-            <div className="fp-prod">
-              <ProductThumb src={item.pictureUrl} alt={item.description} size={128} />
-              <div>
-                <span className="full-badge" data-item={item.status}>{WMS_ITEM_STATUS_LABELS[item.status]}</span>
-                <h2>{item.sku}</h2>
-                <p>{item.description}</p>
-                <div className="fp-codes">
-                  <span>{list.marketplace === 'shopee' ? 'Shopee SKU ID' : 'Código ML'} <b>{item.mlCode ?? '—'}</b></span>
-                  {item.ean && <span>EAN <b>{item.ean}</b></span>}
-                </div>
-              </div>
-              <div className="fp-count" aria-live="polite">
-                <b>{item.qtyPicked}</b>
-                <span>de {item.qtyRequired}<small>unidades separadas</small></span>
-              </div>
+          <div className="pk-body">
+            <div className="pk-item">
+              <span className="pk-kicker">⚡ Separar agora</span>
+              <h2>{item.sku}</h2>
+              <p>{item.description}</p>
+              <span className="pk-status" data-item={item.status}>{WMS_ITEM_STATUS_LABELS[item.status]}</span>
             </div>
 
-            <div className="fp-step">
-              <span className="fp-n">1</span>
-              <div>
-                <strong>Como você vai bipar?</strong>
-                <div className="seg fp-mode" role="tablist" aria-label="Modo de bipagem">
-                  <button type="button" role="tab" aria-checked={mode === 'box'} onClick={() => setMode('box')}>📦 Caixa fechada<small>bipa 1 vez e diz quantas</small></button>
-                  <button type="button" role="tab" aria-checked={mode === 'unit'} onClick={() => setMode('unit')}>🔹 Peça por peça<small>bipa cada unidade</small></button>
-                </div>
-              </div>
+            <div className="pk-mode" role="tablist" aria-label="Modo de bipagem">
+              <button type="button" role="tab" aria-checked={mode === 'unit'} data-mode="unit" onMouseDown={(e) => e.preventDefault()} onClick={() => setMode('unit')}>
+                <i aria-hidden="true">1</i> Bipe unitário
+              </button>
+              <button type="button" role="tab" aria-checked={mode === 'box'} data-mode="box" onMouseDown={(e) => e.preventDefault()} onClick={() => setMode('box')}>
+                <i aria-hidden="true">📦</i> Caixa
+              </button>
             </div>
 
-            <div className="fp-step">
-              <span className="fp-n">2</span>
-              <div>
-                <strong>Bipe o código de barras do produto</strong>
-                <input
-                  ref={inputRef}
-                  className="fp-scan"
-                  value={code}
-                  disabled={busy}
-                  autoComplete="off"
-                  placeholder="Bipe aqui…"
-                  aria-label="Código de barras"
-                  onChange={(e) => setCode(e.target.value)}
-                  // keyup: o leitor manda Enter no fim; abrir o diálogo no keydown deixava o resto da tecla cair nele
-                  onKeyUp={(e) => e.key === 'Enter' && onScan()}
-                />
-              </div>
-            </div>
-            {msg && <p className="fp-msg">{msg}</p>}
-            <PrintStatus job={job} zplUrl={fullApi.zplUrl(listId, job?.sku ?? item.sku)} onRetry={() => job && void fullApi.print(listId, job.sku).then((j) => watch(j.sku, j))} />
+            <input
+              ref={inputRef}
+              className="pk-scan"
+              value={code}
+              disabled={busy}
+              autoComplete="off"
+              placeholder="BIPE O CÓDIGO DE BARRAS AQUI…"
+              aria-label="Código de barras"
+              onChange={(e) => setCode(e.target.value)}
+              // keyup: o leitor manda Enter no fim; abrir o diálogo no keydown deixava o resto da tecla cair nele
+              onKeyUp={(e) => e.key === 'Enter' && onScan()}
+            />
+            {mode === 'box' && <p className="pk-hint">1 bipe = 1 caixa: em seguida você informa quantas unidades tem.</p>}
 
-            <div className="fp-actions" aria-label="Outras ações">
-              <button type="button" disabled={busy || item.qtyPicked === 0} onClick={() => void fullApi.undo(listId, item.sku).then(load).catch((e) => setMsg(errMsg(e)))}>
-                <i aria-hidden="true">↶</i><b>Desfazer 1</b><small>bipou a mais</small>
+            <div className="pk-count" aria-live="polite" data-full={item.qtyPicked >= item.qtyRequired || undefined}>
+              <p><b>{item.qtyPicked}</b><span>/ {item.qtyRequired} un</span></p>
+              <span className="pk-bar"><i style={{ width: `${Math.min(100, (item.qtyPicked / Math.max(1, item.qtyRequired)) * 100)}%` }} /></span>
+            </div>
+
+            {msg && <p className="pk-msg">{msg}</p>}
+
+            <div className="pk-actions">
+              <button type="button" className="pk-btn pk-danger" onClick={() => setDialog({ kind: 'oos' })}>✕ Sem estoque (relatório)</button>
+              <button type="button" className="pk-btn pk-outline" disabled={busy || item.qtyPicked === 0} onClick={() => void fullApi.undo(listId, item.sku).then(load).catch((e) => setMsg(errMsg(e)))}>
+                ↶ Desfazer último bipe
               </button>
-              <button type="button" onClick={() => setDialog({ kind: 'shortage' })}>
-                <i aria-hidden="true">−</i><b>Achei menos</b><small>registra a falta</small>
-              </button>
-              <button type="button" className="fp-danger" onClick={() => setDialog({ kind: 'oos' })}>
-                <i aria-hidden="true">∅</i><b>Sem estoque</b><small>não tem nenhum</small>
-              </button>
-              <button type="button" onClick={() => setDialog({ kind: 'reprint' })}>
-                <i aria-hidden="true">🖨</i><b>Etiquetas</b><small>imprimir de novo</small>
-              </button>
-              <button type="button" title="Só para produtos marcados no Master Data como sem código físico" onClick={() => void run(() => fullApi.manualPick(listId, item.sku, mode))}>
-                <i aria-hidden="true">✋</i><b>Sem código</b><small>produto sem etiqueta</small>
+              <button type="button" className="pk-link pk-small" title="Só para produtos marcados no Master Data como sem código físico" onClick={() => void run(() => fullApi.manualPick(listId, item.sku, mode))}>
+                Produto sem código de barras? Separar sem código
               </button>
             </div>
-          </section>
+
+            <PrintZone
+              job={job}
+              ready={item.labelsReady}
+              qty={item.qtyPicked || item.qtyRequired}
+              zplUrl={fullApi.zplUrl(listId, job?.sku ?? item.sku)}
+              onPrint={() => setDialog({ kind: 'reprint' })}
+              onRetry={() => job && void fullApi.print(listId, job.sku).then((j) => watch(j.sku, j))}
+            />
+          </div>
         )}
+      </section>
 
-        <aside className="fp-items" aria-label="Itens da lista">
-          <header><strong>Itens da lista</strong><small>{detail.items.length - left} de {detail.items.length} prontos</small></header>
-          <ul>
-            {detail.items.map((i) => (
-              <li key={i.id}>
-                <button type="button" aria-current={item?.id === i.id || undefined} disabled={!pickable(i)} onClick={() => setFocus(i.sku)} data-item={i.status}>
-                  <ProductThumb src={i.pictureUrl} alt={i.description} size={40} />
-                  <span className="fp-it"><b>{i.sku}</b><small>{i.description}</small></span>
-                  <span className="fp-it-qty"><b>{i.qtyPicked}/{i.qtyRequired}</b><small>{WMS_ITEM_STATUS_LABELS[i.status]}</small></span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      </div>
+      {item && recent.length > 0 && (
+        <section className="pk-recent" aria-label="Acabaram de passar">
+          <h3>Acabaram de passar</h3>
+          {recent.map((r) => (
+            <div key={r.id}>
+              <i data-item={r.status} aria-hidden="true" />
+              <b>{r.sku}</b>
+              <span>{r.qtyPicked} un.</span>
+              {r.shortageQty > 0 && <em>{r.shortageQty} falta</em>}
+              <button type="button" className="pk-link" onClick={(e) => { e.stopPropagation(); setFocus(r.sku); }}>Abrir correção</button>
+            </div>
+          ))}
+        </section>
+      )}
 
       <Modal open={dialog !== null} onClose={() => setDialog(null)} label="Separação" wide>
         {dialog && item && (
@@ -317,22 +308,31 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
   );
 }
 
-function PrintStatus({ job, zplUrl, onRetry }: { job: WmsPrintJobDto | null; zplUrl: string; onRetry: () => void }) {
-  if (!job) return null;
-  const text =
-    job.status === 'PRINTED'
-      ? `🖨 ${job.labels} etiqueta(s) do ${job.sku} impressas${job.printerName ? ` em ${job.printerName}` : ''}`
-      : job.status === 'ERROR'
-        ? `Erro ao imprimir ${job.sku}: ${job.error ?? 'agente'}`
-        : job.status === 'PRINTING'
-          ? `Imprimindo ${job.labels} etiqueta(s) do ${job.sku}…`
-          : `${job.labels} etiqueta(s) do ${job.sku} na fila — o agente da Zebra está ligado?`;
+/** Zona de impressão (como no NVS-WMS): só aparece quando o item tem etiqueta pronta ou já foi para a fila. */
+function PrintZone(p: { job: WmsPrintJobDto | null; ready: boolean; qty: number; zplUrl: string; onPrint: () => void; onRetry: () => void }) {
+  const { job } = p;
+  if (!job && !p.ready) return null;
   return (
-    <p className="full-print" data-status={job.status}>
-      {text}
-      {job.status === 'ERROR' && <button type="button" className="link" onClick={onRetry}>Tentar de novo</button>}
-      {job.status !== 'PRINTED' && <a className="link" href={zplUrl} download>Baixar ZPL</a>}
-    </p>
+    <div className="pk-print">
+      {!job && <button type="button" className="pk-btn pk-ok" onClick={p.onPrint}>🖨 Imprimir {p.qty} etiquetas</button>}
+      {job?.status === 'PENDING' && <p data-s="queue">⟳ Na fila de impressão… o agente está ligado?</p>}
+      {job?.status === 'PRINTING' && <p data-s="printing">⟳ Enviando ao agente de impressão…</p>}
+      {job?.status === 'PRINTED' && (
+        <>
+          <p data-s="done">✓ {job.labels} etiqueta(s) impressas{job.printerName ? ` em ${job.printerName}` : ''}</p>
+          <button type="button" className="pk-btn pk-soft" onClick={p.onPrint}>⟳ Reimprimir</button>
+        </>
+      )}
+      {job?.status === 'ERROR' && (
+        <>
+          <p data-s="error">{job.error ?? 'Falha no agente de impressão. Verifique o agente no computador.'}</p>
+          <span className="pk-row">
+            <button type="button" className="pk-btn pk-danger" onClick={p.onRetry}>Tentar de novo</button>
+            <a className="pk-btn pk-soft" href={p.zplUrl} download>Baixar ZPL</a>
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 

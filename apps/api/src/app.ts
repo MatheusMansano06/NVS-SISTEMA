@@ -224,6 +224,12 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
   const returnsRepo = new PgReturnsRepository();
   const returnsSync = ml && raw ? new ReturnsSync(database, returnsRepo, ml, raw, app.log) : null;
   app.decorate('returnsSync', returnsSync);
+  // "Sincronizar agora" do Dashboard também relê as devoluções (12 meses + todas as abertas), em segundo plano
+  if (ml && returnsSync) {
+    ml.onManualSync = (tenantId) => {
+      void returnsSync.syncTenant(tenantId, { days: 365, allOpen: true }).catch((err) => app.log.error({ err, tenantId }, 'Devoluções: sincronização falhou'));
+    };
+  }
   if (ml) {
     const returnsService = new ReturnsService(database, returnsRepo, ml, raw, returnsSync);
     await app.register(returnsRoutes(returnsService), { prefix: '/api/v1' });

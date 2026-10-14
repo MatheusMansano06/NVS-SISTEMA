@@ -12,7 +12,6 @@ import { QuebradosPage } from "./modules/quebrados/QuebradosPage";
 import { RetornoFullPage } from "./modules/retirada-full/RetornoFullPage";
 import { ResumoPage } from "./modules/resumo/ResumoPage";
 import { ehEtiquetaFull, RetiradaFullModal } from "./modules/retirada-full/RetiradaFullModal";
-import { api } from "./shared/api";
 import { BarraSincronizacao } from "./shared/BarraSincronizacao";
 import type { Plataforma } from "./shared/devolucao";
 import { Icone } from "./shared/Icone";
@@ -97,20 +96,6 @@ function Central({ telas, modo }: { telas?: IdTela[]; modo: Modo }) {
   }
 
   const nav: Navegacao = { abrir, irPara, versao, statusInicial, filtroInicial };
-  const [sincronizando, setSincronizando] = useState(false);
-
-  async function sincronizarTudo() {
-    if (!window.confirm("Sincronizar tudo de novo? Relê 12 meses de devoluções do Mercado Livre e todas as reclamações abertas. Pode levar alguns minutos; a barra no topo mostra o andamento.")) return;
-    setSincronizando(true);
-    try {
-      await api.post("/mercado-livre/sincronizar?dias=365&todas_abertas=true");
-    } catch (e) {
-      window.alert((e as Error).message);
-    } finally {
-      window.setTimeout(() => setSincronizando(false), 4000);
-    }
-  }
-
   return (
     <div className="cd-app">
       <header className="skus-head cd-head">
@@ -120,11 +105,6 @@ function Central({ telas, modo }: { telas?: IdTela[]; modo: Modo }) {
         </div>
         <div className="cd-head-acoes">
           <BarraSincronizacao onTerminou={recarregar} />
-          {modo === "analise" && (
-            <button type="button" className="botao cd-sinc" onClick={sincronizarTudo} disabled={sincronizando}>
-              {sincronizando ? "Começando…" : "Sincronizar tudo"}
-            </button>
-          )}
           <button type="button" className="link cd-tour" onClick={tour.start}>Rever com a Gertrudez</button>
         </div>
       </header>

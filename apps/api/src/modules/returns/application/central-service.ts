@@ -1249,9 +1249,11 @@ export class CentralService {
     const p = this.sync?.progress.get(tenantId);
     const base = p ?? { refazendo: null, varredura: false, rodando: false, tarefa: null, tarefas: [], feitas: 0, fracao: 0, iniciada_em: null, terminada_em: null };
     const terminada = base.terminada_em ?? (base.rodando ? null : (await this.ultimaSincronizacao(tenantId))?.em ?? null);
+    // a barra mostra a hora com new Date(iso): vai com fuso (como o original), senão aparece em UTC
     return {
       ...base,
-      terminada_em: terminada,
+      iniciada_em: base.iniciada_em ? base.iniciada_em.toISOString() : null,
+      terminada_em: terminada ? new Date(terminada).toISOString() : null,
       percentual: this.sync?.progress.percent(tenantId) ?? 0,
       pendentes: Object.fromEntries(['mediacao_origem', 'mediacao_atuacao'].map((t) => [t, Number((estado[t]?.resultado as Json)?.faltam ?? 0)])),
     };

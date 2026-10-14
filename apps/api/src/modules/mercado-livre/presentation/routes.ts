@@ -62,6 +62,7 @@ export function mercadoLivreRoutes(service: MlIntegrationService | null) {
       const target = status.connections.find((c) => c.id === connectionId) ?? status.connections[0];
       if (!target) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Nenhuma conta conectada' } });
       await s.startSync(req.user.tenantId, target.id);
+      s.onManualSync?.(req.user.tenantId);
       return reply.code(202).send({ ok: true });
     });
   };

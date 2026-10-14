@@ -46,6 +46,9 @@ const MAX_LISTING_PAGES = 200; // até 20 mil anúncios por status (scan de 100 
  * automática, sincronização progressiva em etapas e notificações em tempo real.
  */
 export class MlIntegrationService {
+  /** Chamado no "Sincronizar agora" (Dashboard): outros módulos que leem do ML (devoluções) sincronizam junto. */
+  onManualSync: ((tenantId: string) => void) | null = null;
+
   private inflight = new Set<Promise<void>>();
   private processingOrders = new Set<string>();
   private refreshing = new Map<string, Promise<{ token: string; conn: ConnectionRow }>>();

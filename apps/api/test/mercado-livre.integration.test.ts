@@ -809,7 +809,10 @@ describe.skipIf(!TEST_DB)('Central de Devoluções — contrato das telas origin
     const state = new URL((await app.inject({ method: 'GET', url: '/api/v1/integrations/mercado-livre/connect', cookies: base })).json().url).searchParams.get('state')!;
     await app.inject({ method: 'GET', url: `/api/v1/integrations/mercado-livre/callback?code=codigo-bom&state=${state}` });
     await app.ml!.whenIdle();
-    await app.returnsSync!.syncTenant(tenantId, { days: 30, allOpen: true });
+    // o "Sincronizar agora" do Dashboard também traz as devoluções
+    expect((await app.inject({ method: 'POST', url: '/api/v1/integrations/mercado-livre/sync', cookies: base, payload: {} })).statusCode).toBe(202);
+    await app.ml!.whenIdle();
+    for (let t = 0; t < 100 && (app.returnsSync!.isRunning(tenantId) || !app.returnsSync!.progress.get(tenantId).terminada_em); t++) await new Promise((r) => setTimeout(r, 100));
     const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: object, c: Record<string, string> = cookies) =>
       app.inject({ method, url: `/api/v1/central${url}`, cookies: c, ...(payload ? { payload: payload as Record<string, unknown> } : {}) });
 

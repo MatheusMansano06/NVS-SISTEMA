@@ -12,6 +12,24 @@ type Json = any;
 const MAX_OFFSET = 9_900;
 const TASKS = ['mercado_livre', 'fotos_anuncios', 'logistica_venda', 'mediacao_origem', 'mediacao_atuacao', 'fatura_ml'];
 const TICK_MS = 10 * 60_000;
+/** Espera entre tentativas quando o ML responde 429 (muitas requisições): não pula a reclamação, espera e repete. */
+const BACKOFF_MS = [2_000, 4_000, 8_000, 15_000, 30_000];
+/** Pausa entre reclamações: ~5 chamadas cada, sem estourar o limite do ML. */
+const PACE_MS = 150;
+const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
+const tooMany = (err: unknown) => (err as { status?: number })?.status === 429;
+
+/** Repete a chamada enquanto o ML disser 429; qualquer outro erro sobe na hora. */
+export async function patient<T>(fn: () => Promise<T>, wait: (ms: number) => Promise<void> = sleep): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!tooMany(err) || attempt >= BACKOFF_MS.length) throw err;
+      await wait(BACKOFF_MS[attempt]!);
+    }
+  }
+}
 /** Varredura do dia (23h em São Paulo = 02h UTC): toda reclamação aberta + últimos 2 dias. */
 const SWEEP_UTC_HOUR = 2;
 
@@ -75,7 +93,7 @@ export class ReturnsSync {
       for (const c of conns) {
         const { conn } = await this.ml.accessToken(tenantId, c.id).catch(() => ({ conn: null }));
         if (!conn) continue;
-        const get: MlGet = async (path) => this.api.rawGet((await this.ml.accessToken(tenantId, c.id)).token, path);
+        const get: MlGet = (path) => patient(async () => this.api.rawGet((await this.ml.accessToken(tenantId, c.id)).token, path));
         await this.enrich(tenantId, conn.account_id, get, opts.redo);
       }
       if (opts.after) {
@@ -127,7 +145,7 @@ export class ReturnsSync {
     const since = new Date(Date.now() - opts.days * 86_400_000).toISOString().replace('Z', '+00:00');
     const out: ReturnSyncDto = { claims: 0, saved: 0, failures: 0 };
     const { conn } = await this.ml.accessToken(tenantId, connectionId);
-    const get = async <T>(path: string) => this.api.rawGet<T>((await this.ml.accessToken(tenantId, connectionId)).token, path);
+    const get = <T>(path: string) => patient(async () => this.api.rawGet<T>((await this.ml.accessToken(tenantId, connectionId)).token, path));
 
     // o ML não aceita só vendedor + data: exige um filtro "de verdade", então busca por status
     for (const status of ['opened', 'closed'] as const) {
@@ -144,6 +162,7 @@ export class ReturnsSync {
         onProgress((status === 'opened' ? 0 : 0.5) + Math.min(1, offset / Math.max(1, Math.min(total, MAX_OFFSET))) / 2);
         const records: ReturnRecord[] = [];
         for (const claim of page.data ?? []) {
+          await sleep(PACE_MS);
           try {
             const ret = await get<Json>(`/post-purchase/v2/claims/${claim.id}/returns`);
             if (!ret) continue; // reclamação sem devolução física é mediação pura (fora desta central)

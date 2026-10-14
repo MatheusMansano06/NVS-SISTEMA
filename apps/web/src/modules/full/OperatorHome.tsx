@@ -6,6 +6,9 @@ import { Modal } from '../../shared/ui/Modal';
 import { usePerson } from '../operation/PersonContext';
 import { fullApi } from './full-api';
 
+type Note = { tone: 'error' | 'warn' | 'ok'; title: string; text: string };
+const STATUS_LABEL: Record<string, string> = { pending: 'Pendente', in_progress: 'Em andamento', partial: 'Parcial', complete: 'Completo', out_of_stock: 'Sem estoque' };
+
 const isToday = (iso: string | null) => Boolean(iso) && new Date(iso!).toDateString() === new Date().toDateString();
 
 /** Painel de Operação: minhas listas, fila livre, concluídas hoje e a busca por código/SKU/título. */
@@ -14,7 +17,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   const [lists, setLists] = useState<WmsListSummaryDto[] | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<{ tone: 'error' | 'warn' | 'ok'; text: string } | null>(null);
+  const [note, setNote] = useState<Note | null>(null);
   const [choices, setChoices] = useState<{ title: string; items: WmsFindCandidateDto[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -26,8 +29,8 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
     return () => window.clearInterval(t);
   }, []);
 
-  const flash = (tone: 'error' | 'warn' | 'ok', text: string) => {
-    setNote({ tone, text });
+  const flash = (tone: Note['tone'], title: string, text: string) => {
+    setNote({ tone, title, text });
     window.setTimeout(() => setNote((n) => (n?.text === text ? null : n)), 5000);
   };
 
@@ -40,7 +43,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
         const t = await fullApi.transfer(c.itemId);
         onOpen(t.listId, c.sku);
       } catch (err) {
-        flash('error', err instanceof ApiError ? err.message : 'Não foi possível transferir.');
+        flash('error', 'Transferência não feita', err instanceof ApiError ? err.message : 'Não foi possível transferir.');
       }
       return;
     }
@@ -54,14 +57,16 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
     setBusy(true);
     try {
       const r = await fullApi.find(code);
-      if (r.action === 'multiple') setChoices({ title: `Resultados para “${code}”`, items: r.candidates });
+      if (r.action === 'multiple') setChoices({ title: 'Selecione o item', items: r.candidates });
       else if ((r.action === 'open' || r.action === 'transfer_available') && r.match) await go(r.match);
-      else if (r.action === 'already_done') flash('ok', `${r.sku} já foi separado${r.match ? ` na lista ${r.match.listCode} (${r.match.operatorName ?? '—'})` : ''}.`);
-      else if (r.action === 'in_progress_other') flash('warn', `${r.sku} está sendo separado por ${r.match?.operatorName ?? 'outra pessoa'} na lista ${r.match?.listCode}.`);
-      else if (r.action === 'not_in_lists') flash('warn', `${r.sku} não está em nenhuma lista aberta.`);
-      else flash('error', `Nada encontrado para “${code}”.`);
+      else if (r.action === 'already_done')
+        flash('ok', 'Produto já recolhido!', `${r.sku} já foi separado${r.match ? ` por ${r.match.operatorName ?? '—'} na lista ${r.match.listCode}` : ''}.`);
+      else if (r.action === 'in_progress_other')
+        flash('warn', 'Com outro operador', `${r.sku} está sendo separado por ${r.match?.operatorName ?? 'outra pessoa'} na lista ${r.match?.listCode}.`);
+      else if (r.action === 'not_in_lists') flash('error', 'Leitura sem demanda', `${r.sku} existe, mas não está em nenhuma lista aberta.`);
+      else flash('error', 'Leitura não reconhecida', `Nada encontrado para “${code}”.`);
     } catch (err) {
-      flash('error', err instanceof ApiError ? err.message : 'Erro na busca.');
+      flash('error', 'Falha na busca', err instanceof ApiError ? err.message : 'Repita a leitura.');
     } finally {
       setBusy(false);
       inputRef.current?.focus();
@@ -72,7 +77,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
     setBusy(true);
     try {
       const items = await fullApi.pending();
-      if (!items.length) flash('ok', 'Nenhum SKU pendente nas listas abertas. 🎉');
+      if (!items.length) flash('ok', 'Tudo separado', 'Nenhum SKU pendente nas listas abertas. 🎉');
       else setChoices({ title: `SKUs faltando separar (${items.length})`, items });
     } finally {
       setBusy(false);
@@ -84,7 +89,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
       await fullApi.claim(l.id);
       onOpen(l.id);
     } catch (err) {
-      flash('error', err instanceof ApiError ? err.message : 'Não foi possível pegar a lista.');
+      flash('error', 'Lista indisponível', err instanceof ApiError ? err.message : 'Não foi possível pegar a lista.');
       void load();
     }
   }
@@ -94,63 +99,98 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   const done = lists?.filter((l) => l.operatorId === me.id && l.status === 'completed' && isToday(l.completedAt)) ?? [];
 
   return (
-    <div className="full-op">
-      <section className="full-box full-op-head">
-        <p className="full-kicker">Painel de operação</p>
+    <div className="oph">
+      <section className="oph-head">
+        <p className="oph-kicker">Painel de operação</p>
         <h1>Sessões em andamento</h1>
-        <p>Pegue uma lista da fila ou bipe/busque um produto para ir direto nele.</p>
+        <p>Gerencie suas listas de trabalho: retome as suas, pegue uma da fila ou bipe um produto para ir direto nele.</p>
       </section>
-      <section className="full-op-kpis">
-        <div><small>Minhas ativas</small><b>{mine.length}</b></div>
-        <div><small>Fila livre</small><b>{free.length}</b></div>
-        <div><small>Concluídas hoje</small><b>{done.length}</b></div>
+
+      <section className="oph-tiles" aria-label="Resumo">
+        <div data-tone="blue"><small>Minhas ativas</small><b>{mine.length}</b></div>
+        <div data-tone="gray"><small>Fila livre</small><b>{free.length}</b></div>
+        <div data-tone="green"><small>Concluídas hoje</small><b>{done.length}</b></div>
       </section>
-      <section className="full-box full-op-search">
-        <label className="search">
-          <span aria-hidden="true">🔍</span>
+
+      <section className="oph-search">
+        <label>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input
             ref={inputRef}
             value={q}
             disabled={busy}
-            placeholder="EAN, SKU ou título — atalho mágico…"
+            placeholder="EAN, SKU ou título p/ atalho mágico…"
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void search()}
+            aria-label="Bipar ou buscar produto"
           />
         </label>
-        <button type="button" className="full-dark-btn" onClick={() => void showPending()} disabled={busy}>⏳ SKU faltantes</button>
+        <button type="button" className="oph-pending" onClick={() => void showPending()} disabled={busy}>
+          <span aria-hidden="true" data-spin={busy || undefined}>⏳</span> SKU faltantes
+        </button>
       </section>
-      {note && <p className={`banner banner-${note.tone}`} role="status">{note.text}</p>}
+
+      {note && (
+        <div className="oph-note" data-tone={note.tone} role="status">
+          <span aria-hidden="true">{note.tone === 'ok' ? '✓' : note.tone === 'warn' ? '🔒' : '✕'}</span>
+          <div><b>{note.title}</b><p>{note.text}</p></div>
+        </div>
+      )}
 
       {!lists ? (
-        <div className="promo-skel" aria-hidden="true" />
+        <div className="oph-empty"><span aria-hidden="true">⏳</span><b>Carregando operações…</b></div>
       ) : (
         <>
-          <Cards title="Minhas operações correntes" lists={mine} action="Retomar lista" onClick={(l) => onOpen(l.id)} empty="Você não tem lista em andamento." />
-          <Cards title="Fila livre" lists={free} action="Pegar lista" onClick={(l) => void take(l)} empty="Nenhuma lista livre agora." />
-          {done.length > 0 && <Cards title="Concluídas hoje" lists={done} action="Ver" onClick={(l) => onOpen(l.id)} empty="" />}
+          <Cards
+            tone="blue"
+            title="Minhas operações correntes"
+            lists={mine}
+            action="Retomar lista"
+            onClick={(l) => onOpen(l.id)}
+            empty={{ icon: '📋', title: 'Nenhuma lista ativa', text: 'Pegue uma lista na fila livre logo abaixo para começar a bipar.' }}
+          />
+          <Cards
+            tone="gray"
+            title="Fila livre"
+            lists={free}
+            action="Pegar lista"
+            onClick={(l) => void take(l)}
+            empty={{ icon: '📭', title: 'Fila vazia', text: 'Nenhuma lista nova esperando separação.' }}
+          />
+          {done.length > 0 && <Cards tone="green" title="Concluídas hoje" lists={done} action="Ver lista" onClick={(l) => onOpen(l.id)} />}
         </>
       )}
 
       <Modal open={choices !== null} onClose={() => setChoices(null)} label={choices?.title ?? 'Resultados'} wide>
         {choices && (
-          <div className="full-modal">
-            <h2>{choices.title}</h2>
-            <ul className="full-choices">
+          <div className="oph-dialog">
+            <header>
+              <h2>{choices.title}</h2>
+              <p>Escolha o item para ir direto na separação. Se estiver com outra pessoa e nada foi bipado, ele vem para você.</p>
+            </header>
+            <ul>
               {choices.items.map((c) => (
                 <li key={c.itemId}>
                   <button type="button" onClick={() => void go(c)}>
-                    <span className="full-item-sku">
-                      <b>{c.sku}</b>
-                      <small>{c.description}</small>
+                    <span className="oph-dialog-main">
+                      <span className="oph-dialog-top">
+                        <b>{c.sku}</b>
+                        <em data-status={c.status}>{STATUS_LABEL[c.status] ?? c.status}</em>
+                      </span>
+                      <span className="oph-dialog-desc">{c.description}</span>
+                      <span className="oph-dialog-meta">
+                        <span><small>Lista</small><code>{c.listCode}</code></span>
+                        {c.mlCode && <span><small>Código ML</small><code data-ml>{c.mlCode}</code></span>}
+                        <span><small>Operador</small><b>{c.operatorName ?? 'Disponível'}</b></span>
+                        <span><small>Qtd</small><b>{c.qtyPicked}/{c.qtyRequired}</b></span>
+                      </span>
                     </span>
-                    <span className="full-choice-meta">
-                      <span className="full-code">{c.listCode}</span>
-                      <small>{c.operatorName ?? 'Disponível'} · {c.qtyPicked}/{c.qtyRequired}</small>
-                    </span>
+                    <span className="oph-arrow" aria-hidden="true">›</span>
                   </button>
                 </li>
               ))}
             </ul>
+            <button type="button" className="oph-cancel" onClick={() => setChoices(null)}>Cancelar</button>
           </div>
         )}
       </Modal>
@@ -158,27 +198,52 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   );
 }
 
-function Cards({ title, lists, action, onClick, empty }: { title: string; lists: WmsListSummaryDto[]; action: string; onClick: (l: WmsListSummaryDto) => void; empty: string }) {
+type Tone = 'blue' | 'gray' | 'green';
+
+function Cards({
+  tone,
+  title,
+  lists,
+  action,
+  onClick,
+  empty,
+}: {
+  tone: Tone;
+  title: string;
+  lists: WmsListSummaryDto[];
+  action: string;
+  onClick: (l: WmsListSummaryDto) => void;
+  empty?: { icon: string; title: string; text: string };
+}) {
   return (
-    <section className="full-op-sec">
-      <h2 className="full-h2">● {title}</h2>
+    <section className="oph-sec" data-tone={tone}>
+      <h2><i aria-hidden="true" />{title}</h2>
       {!lists.length ? (
-        <p className="full-empty">{empty}</p>
+        empty && (
+          <div className="oph-empty">
+            <span aria-hidden="true">{empty.icon}</span>
+            <b>{empty.title}</b>
+            <small>{empty.text}</small>
+          </div>
+        )
       ) : (
-        <div className="full-op-cards">
+        <div className="oph-cards">
           {lists.map((l) => {
             const pct = l.itemsTotal ? Math.round((l.itemsPicked / l.itemsTotal) * 100) : 0;
             return (
-              <button key={l.id} type="button" className="full-op-card" onClick={() => onClick(l)}>
-                <span className="full-ml" data-mp={l.marketplace} aria-hidden="true">{l.marketplace === 'shopee' ? 'S' : 'ML'}</span>
-                <span className="full-op-card-main">
-                  <b>{l.code}</b>
-                  <em>{action} →</em>
-                  <small>{l.skuCount === 1 ? '1 SKU' : `${l.skuCount} SKUs`} · {int(l.itemsTotal)} un.</small>
+              <button key={l.id} type="button" className="oph-card" onClick={() => onClick(l)}>
+                <span className="oph-card-top">
+                  <span className="full-ml" data-mp={l.marketplace} aria-hidden="true">{l.marketplace === 'shopee' ? 'S' : 'ML'}</span>
+                  <span className="oph-card-id">
+                    <b>{l.code}</b>
+                    <em>{action}</em>
+                    <small>{l.skuCount === 1 ? '1 SKU' : `${l.skuCount} SKUs`} · {int(l.itemsTotal)} un.</small>
+                  </span>
+                  <span className="oph-arrow" aria-hidden="true">{tone === 'green' ? '✓' : '→'}</span>
                 </span>
-                <span className="full-op-card-prog">
+                <span className="oph-prog">
                   <span><small>Progresso</small><b>{int(l.itemsPicked)}/{int(l.itemsTotal)}</b></span>
-                  <span className="full-track" data-tone={pct === 100 ? 'ok' : 'blue'}><i style={{ width: `${pct}%` }} /></span>
+                  <span className="oph-track"><i style={{ width: `${pct}%` }} /></span>
                 </span>
               </button>
             );

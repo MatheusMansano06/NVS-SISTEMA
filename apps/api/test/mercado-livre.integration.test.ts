@@ -863,9 +863,8 @@ describe.skipIf(!TEST_DB)('Central de Devoluções — contrato das telas origin
     expect(telas[0]).toMatchObject({
       devolucao: { id_externo: '5001', aguarda_revisao: true, pode_contestar: true }, conferencia: null, evidencias: [],
       midia: { anuncio: [{ nome: 'Peça 1', imagem: 'https://http2.mlstatic.com/foto-1.jpg' }], link: 'https://www.mercadolivre.com.br/vendas/2000009/detalhe' },
-      olist: { pedidos: [] },
     });
-    expect(telas[0].olist.erro).toBeTruthy();
+    expect(telas[0]).not.toHaveProperty('olist');
     const id = telas[0].devolucao.id as string;
     expect((await call('GET', '/conferencia/NADA-A-VER-999')).json()).toEqual([]);
 
@@ -903,7 +902,7 @@ describe.skipIf(!TEST_DB)('Central de Devoluções — contrato das telas origin
     expect((await call('POST', `/mediacoes/${id}/aceitar`)).statusCode).toBe(409);
 
     // estoque: um clique só
-    const lancado = (await call('POST', `/conferencia/${id}/lancar-estoque`, { via_olist: false })).json();
+    const lancado = (await call('POST', `/conferencia/${id}/lancar-estoque`, {})).json();
     // sem ERP: avaria vai para o estoque virtual do sistema
     expect(lancado).toEqual([expect.objectContaining({ sku: 'vendido', deposito: 'avaria', tipo: 'E', ok: true, quantidade: 1, destino: 'Estoque virtual · avaria SKU-1 (saldo 1)' })]);
     expect((await call('POST', `/conferencia/${id}/lancar-estoque`, {})).statusCode).toBe(409);

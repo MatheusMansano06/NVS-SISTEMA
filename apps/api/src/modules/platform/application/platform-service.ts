@@ -15,7 +15,7 @@ import type {
 import type { Database } from '../../../shared/infrastructure/database.js';
 import { hashPassword, verifyPassword } from '../../../shared/infrastructure/password.js';
 import { NotFoundError, UnauthorizedError, ValidationError } from '../../../shared/kernel/errors.js';
-import { couponProblem, cyclesFor, discountFor, dueDateOf, invoiceSituation, monthKey, type CouponRule } from '../domain/billing.js';
+import { couponProblem, cyclesFor, discountFor, dueDateOf, invoiceSituation, type CouponRule } from '../domain/billing.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any;
@@ -139,7 +139,7 @@ export class PlatformService {
   }
 
   // ================= empresas
-  async tenants(q?: string): Promise<TenantRowDto[]> {
+  async tenants(q?: string, id?: string): Promise<TenantRowDto[]> {
     const today = this.deps.today();
     const { rows } = await this.db.query<Json>(
       `SELECT t.id, t.name, t.cnpj, t.phone, t.status, t.created_at,
@@ -151,10 +151,11 @@ export class PlatformService {
          FROM tenants t
          LEFT JOIN subscriptions s ON s.tenant_id = t.id
          LEFT JOIN plans p ON p.id = s.plan_id
-        WHERE ($1::text IS NULL OR t.name ILIKE '%' || $1 || '%' OR t.cnpj LIKE '%' || regexp_replace($1, '\\D', '', 'g') || '%'
+        WHERE ($3::uuid IS NULL OR t.id = $3)
+          AND ($1::text IS NULL OR t.name ILIKE '%' || $1 || '%' OR t.cnpj LIKE '%' || regexp_replace($1, '\\D', '', 'g') || '%'
                OR EXISTS (SELECT 1 FROM login_identities li WHERE li.tenant_id = t.id AND li.email ILIKE '%' || $1 || '%'))
         ORDER BY t.created_at DESC LIMIT 500`,
-      [q?.trim() || null, today],
+      [q?.trim() || null, today, id ?? null],
     );
     return rows.map((r) => this.tenantRow(r));
   }
@@ -169,7 +170,7 @@ export class PlatformService {
   }
 
   async tenant(id: string): Promise<TenantDetailDto> {
-    const row = (await this.tenants()).find((t) => t.id === id) ?? null;
+    const row = (await this.tenants(undefined, id))[0] ?? null;
     if (!row) throw new NotFoundError('Empresa não encontrada');
     const inner = await this.db.withTenant(id, async (db) => {
       const people = (await db.query<Json>('SELECT id, name, email, role, is_active, must_change_password, created_at FROM users ORDER BY created_at')).rows;
@@ -304,31 +305,34 @@ export class PlatformService {
     const exists = await this.db.query('SELECT 1 FROM tenants WHERE id = $1', [tenantId]);
     if (!exists.rowCount) throw new NotFoundError('Empresa não encontrada');
     if (!input.planId && (input.price === null || input.price === undefined)) throw new ValidationError('Escolha um plano ou informe o valor combinado.');
-    const cur = (await this.db.query<Json>('SELECT s.coupon_id, s.coupon_cycles_left, c.code FROM subscriptions s LEFT JOIN coupons c ON c.id = s.coupon_id WHERE s.tenant_id = $1', [tenantId])).rows[0];
-    let couponId: string | null = cur?.coupon_id ?? null;
-    let cycles: number | null = cur?.coupon_cycles_left ?? null;
     const code = input.couponCode?.trim() || null;
-    if (!code) {
-      couponId = null;
-      cycles = null;
-    } else if (code !== cur?.code) {
-      const c = (await this.db.query<Json>('SELECT * FROM coupons WHERE code = $1', [code])).rows[0];
-      if (!c) throw new ValidationError(`Cupom ${code} não existe.`);
-      const problem = couponProblem(this.couponRule(c), this.deps.today());
-      if (problem) throw new ValidationError(problem);
-      couponId = c.id;
-      cycles = cyclesFor(this.couponRule(c));
-      await this.db.query('UPDATE coupons SET redemptions = redemptions + 1 WHERE id = $1', [c.id]);
-    }
-    await this.db.query(
-      `INSERT INTO subscriptions (tenant_id, plan_id, price, status, trial_ends_on, billing_day, coupon_id, coupon_cycles_left, notes, canceled_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $4 = 'canceled' THEN now() END)
-       ON CONFLICT (tenant_id) DO UPDATE SET plan_id = EXCLUDED.plan_id, price = EXCLUDED.price, status = EXCLUDED.status,
-         trial_ends_on = EXCLUDED.trial_ends_on, billing_day = EXCLUDED.billing_day, coupon_id = EXCLUDED.coupon_id,
-         coupon_cycles_left = EXCLUDED.coupon_cycles_left, notes = EXCLUDED.notes,
-         canceled_at = CASE WHEN EXCLUDED.status = 'canceled' THEN coalesce(subscriptions.canceled_at, now()) END, updated_at = now()`,
-      [tenantId, input.planId ?? null, input.price ?? null, input.status, input.trialEndsOn ?? null, input.billingDay, couponId, cycles, input.notes ?? null],
-    );
+    // cupom (limite conferido com a linha travada) e assinatura gravados juntos
+    await this.db.transaction(async (db) => {
+      const cur = (await db.query<Json>('SELECT s.coupon_id, s.coupon_cycles_left, c.code FROM subscriptions s LEFT JOIN coupons c ON c.id = s.coupon_id WHERE s.tenant_id = $1 FOR UPDATE OF s', [tenantId])).rows[0];
+      let couponId: string | null = cur?.coupon_id ?? null;
+      let cycles: number | null = cur?.coupon_cycles_left ?? null;
+      if (!code) {
+        couponId = null;
+        cycles = null;
+      } else if (code !== cur?.code) {
+        const c = (await db.query<Json>('SELECT * FROM coupons WHERE code = $1 FOR UPDATE', [code])).rows[0];
+        if (!c) throw new ValidationError(`Cupom ${code} não existe.`);
+        const problem = couponProblem(this.couponRule(c), this.deps.today());
+        if (problem) throw new ValidationError(problem);
+        couponId = c.id;
+        cycles = cyclesFor(this.couponRule(c));
+        await db.query('UPDATE coupons SET redemptions = redemptions + 1 WHERE id = $1', [c.id]);
+      }
+      await db.query(
+        `INSERT INTO subscriptions (tenant_id, plan_id, price, status, trial_ends_on, billing_day, coupon_id, coupon_cycles_left, notes, canceled_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $4 = 'canceled' THEN now() END)
+         ON CONFLICT (tenant_id) DO UPDATE SET plan_id = EXCLUDED.plan_id, price = EXCLUDED.price, status = EXCLUDED.status,
+           trial_ends_on = EXCLUDED.trial_ends_on, billing_day = EXCLUDED.billing_day, coupon_id = EXCLUDED.coupon_id,
+           coupon_cycles_left = EXCLUDED.coupon_cycles_left, notes = EXCLUDED.notes,
+           canceled_at = CASE WHEN EXCLUDED.status = 'canceled' THEN coalesce(subscriptions.canceled_at, now()) END, updated_at = now()`,
+        [tenantId, input.planId ?? null, input.price ?? null, input.status, input.trialEndsOn ?? null, input.billingDay, couponId, cycles, input.notes ?? null],
+      );
+    });
     await this.audit(by, 'subscription.save', tenantId, { status: input.status, planId: input.planId, price: input.price, coupon: code });
   }
 
@@ -338,15 +342,17 @@ export class PlatformService {
     const { rows } = await this.db.query<Json>(
       `SELECT i.*, t.name AS tenant_name FROM invoices i JOIN tenants t ON t.id = i.tenant_id
         WHERE ($1::uuid IS NULL OR i.tenant_id = $1) AND ($2::date IS NULL OR i.period = $2)
+          AND ($3::text IS NULL OR $3 = CASE WHEN i.status <> 'pending' THEN i.status WHEN i.due_date < $4 THEN 'overdue' ELSE 'pending' END)
         ORDER BY i.due_date DESC, t.name LIMIT 1000`,
-      [f.tenantId ?? null, f.period ?? null],
+      // situação filtrada no banco (antes do limite): a lista "em atraso" não fica cortada
+      [f.tenantId ?? null, f.period ?? null, f.situation ?? null, today],
     );
     const list = rows.map((i): InvoiceDto => ({
       id: i.id, tenantId: i.tenant_id, tenantName: i.tenant_name, period: day(i.period)!, description: i.description, amount: Number(i.amount),
       discount: Number(i.discount), total: Number(i.total), couponCode: i.coupon_code, dueDate: day(i.due_date)!,
       situation: invoiceSituation(i.status, day(i.due_date)!, today), paidAt: iso(i.paid_at), method: i.method ? (METHOD_LABEL[i.method] ?? i.method) : null, notes: i.notes,
     }));
-    return f.situation ? list.filter((i) => i.situation === f.situation) : list;
+    return list;
   }
 
   /**
@@ -370,18 +376,21 @@ export class PlatformService {
       const amount = num(s.amount) ?? 0;
       const withCoupon = s.coupon_id && s.coupon_active && (s.coupon_cycles_left === null || s.coupon_cycles_left > 0);
       const discount = withCoupon ? discountFor(amount, { kind: s.kind, value: Number(s.value) }) : 0;
-      const r = await this.db.query(
-        `INSERT INTO invoices (tenant_id, period, description, amount, discount, total, coupon_code, due_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (tenant_id, period) DO NOTHING`,
-        [s.tenant_id, period, `Mensalidade ${m}/${y}${s.plan_name ? ` · ${s.plan_name}` : ''}`, amount, discount, Math.max(0, amount - discount),
-          withCoupon ? s.code : null, dueDateOf(period, s.billing_day)],
-      );
-      if (r.rowCount) {
-        created++;
-        if (withCoupon && s.coupon_cycles_left !== null) {
-          await this.db.query('UPDATE subscriptions SET coupon_cycles_left = coupon_cycles_left - 1 WHERE tenant_id = $1', [s.tenant_id]);
+      // mensalidade e ciclo do cupom juntos: uma falha no meio não dá ciclo de desconto a mais
+      const inserted = await this.db.transaction(async (db) => {
+        const r = await db.query(
+          `INSERT INTO invoices (tenant_id, period, description, amount, discount, total, coupon_code, due_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (tenant_id, period) DO NOTHING`,
+          [s.tenant_id, period, `Mensalidade ${m}/${y}${s.plan_name ? ` · ${s.plan_name}` : ''}`, amount, discount, Math.max(0, amount - discount),
+            withCoupon ? s.code : null, dueDateOf(period, s.billing_day)],
+        );
+        if (r.rowCount && withCoupon && s.coupon_cycles_left !== null) {
+          await db.query('UPDATE subscriptions SET coupon_cycles_left = coupon_cycles_left - 1 WHERE tenant_id = $1', [s.tenant_id]);
         }
-      } else skipped++;
+        return Boolean(r.rowCount);
+      });
+      if (inserted) created++;
+      else skipped++;
     }
     await this.audit(by, 'invoice.generate', period, { created, skipped });
     return { created, skipped };
@@ -404,23 +413,30 @@ export class PlatformService {
   async payInvoice(by: string, id: string, input: { method: string; paidOn?: string | null; notes?: string | null }) {
     const { rows } = await this.db.query<Json>(
       `UPDATE invoices SET status = 'paid', method = $2, paid_at = coalesce($3::date::timestamptz, now()), notes = coalesce($4, notes)
-        WHERE id = $1 AND status <> 'canceled' RETURNING tenant_id`,
+        WHERE id = $1 AND status = 'pending' RETURNING tenant_id`,
       [id, input.method, input.paidOn ?? null, input.notes ?? null],
     );
-    if (!rows[0]) throw new NotFoundError('Mensalidade não encontrada (ou cancelada)');
-    // pagou tudo o que estava atrasado: a assinatura volta a ficar em dia
-    await this.db.query(
-      `UPDATE subscriptions SET status = 'active', updated_at = now() WHERE tenant_id = $1 AND status = 'past_due'
-         AND NOT EXISTS (SELECT 1 FROM invoices WHERE tenant_id = $1 AND status = 'pending' AND due_date < $2)`,
-      [rows[0].tenant_id, this.deps.today()],
-    );
+    if (!rows[0]) throw new NotFoundError('Mensalidade não encontrada (já paga ou cancelada)');
+    await this.settleIfUpToDate(rows[0].tenant_id);
     await this.audit(by, 'invoice.pay', id, { method: input.method });
   }
 
   async setInvoiceStatus(by: string, id: string, status: 'pending' | 'canceled') {
-    const r = await this.db.query(`UPDATE invoices SET status = $2, paid_at = NULL, method = NULL WHERE id = $1`, [id, status]);
-    if (!r.rowCount) throw new NotFoundError('Mensalidade não encontrada');
+    const { rows } = await this.db.query<Json>(`UPDATE invoices SET status = $2, paid_at = NULL, method = NULL WHERE id = $1 RETURNING tenant_id`, [id, status]);
+    if (!rows[0]) throw new NotFoundError('Mensalidade não encontrada');
+    // cancelar a vencida também tira a empresa de "em atraso"; reabrir uma vencida volta para atraso
+    if (status === 'canceled') await this.settleIfUpToDate(rows[0].tenant_id);
+    else await this.markPastDue();
     await this.audit(by, status === 'canceled' ? 'invoice.cancel' : 'invoice.reopen', id);
+  }
+
+  /** Pagou (ou cancelou) tudo o que estava vencido: a assinatura em atraso volta a ficar em dia. */
+  private async settleIfUpToDate(tenantId: string) {
+    await this.db.query(
+      `UPDATE subscriptions SET status = 'active', updated_at = now() WHERE tenant_id = $1 AND status = 'past_due'
+         AND NOT EXISTS (SELECT 1 FROM invoices WHERE tenant_id = $1 AND status = 'pending' AND due_date < $2)`,
+      [tenantId, this.deps.today()],
+    );
   }
 
   /** Assinaturas com mensalidade vencida viram "em atraso" (roda junto da geração e do agendador). */
@@ -499,7 +515,11 @@ export class PlatformService {
 
   async dismiss(userId: string, announcementId: string) {
     if (!/^[0-9a-f-]{36}$/.test(announcementId)) return; // aviso automático não se dispensa
-    await this.db.query('INSERT INTO announcement_dismissals (announcement_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [announcementId, userId]);
+    await this.db
+      .query('INSERT INTO announcement_dismissals (announcement_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [announcementId, userId])
+      .catch((err) => {
+        if ((err as { code?: string }).code !== '23503') throw err; // aviso que já não existe: nada a dispensar
+      });
   }
 
   // ================= registro
@@ -512,10 +532,5 @@ export class PlatformService {
 
   private async audit(adminId: string, action: string, target: string | null, details: Record<string, unknown> = {}) {
     await this.db.query('INSERT INTO admin_audit (admin_id, action, target, details) VALUES ($1, $2, $3, $4)', [adminId, action, target, JSON.stringify(details)]);
-  }
-
-  /** Mês corrente (1º dia), para a tela de gerar mensalidades. */
-  currentPeriod() {
-    return monthKey(this.deps.today());
   }
 }

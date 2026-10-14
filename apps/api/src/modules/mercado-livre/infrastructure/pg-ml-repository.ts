@@ -209,7 +209,9 @@ export class PgMlRepository {
   /** Empresas com conta do ML vinculada (tabela global de roteamento). */
   async connectedTenants(): Promise<string[]> {
     const { rows } = await this.db.query<{ tenant_id: string }>(
-      "SELECT DISTINCT tenant_id FROM marketplace_identities WHERE marketplace = 'mercado_livre'",
+      // empresa suspensa pela master não gasta ML nem banco nos agendadores
+      `SELECT DISTINCT mi.tenant_id FROM marketplace_identities mi JOIN tenants t ON t.id = mi.tenant_id
+        WHERE mi.marketplace = 'mercado_livre' AND t.status = 'active'`,
     );
     return rows.map((r) => r.tenant_id);
   }

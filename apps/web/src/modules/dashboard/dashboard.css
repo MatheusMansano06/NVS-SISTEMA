@@ -239,3 +239,62 @@ a.top5-row:hover { background: #fff; transform: translateX(4px); box-shadow: 0 0
   .ads-bar-title, .ads-toggle { grid-column: 1 / -1; }
   .ads-num { border-left: 0; padding-left: 0; }
 }
+
+/* ============ Detalhamento financeiro (recolhível) ============ */
+.fb {
+  border-radius: 28px 28px 28px 10px; background: #fff;
+  box-shadow: 0 0 0 1px var(--gray-100), 0 16px 34px -28px rgba(11,28,77,.4); animation: rise .5s .12s both;
+}
+.fb-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 22px; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; border-radius: inherit;
+}
+.fb-head:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 45%, transparent); outline-offset: 2px; }
+.fb-title { display: grid; gap: 2px; }
+.fb-title strong { color: var(--navy); font-size: 1.05rem; }
+.fb-title small { color: var(--gray-500); font-size: .82rem; }
+.fb-chevron {
+  display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; flex: none;
+  background: var(--blue-soft); color: var(--blue); transition: transform .3s cubic-bezier(.3,1.3,.5,1), background .2s;
+}
+.fb-head:hover .fb-chevron { background: var(--blue); color: #fff; }
+.fb[data-open] .fb-chevron { transform: rotate(180deg); }
+.fb-body { display: grid; gap: 12px; padding: 0 22px 20px; animation: rise .35s both; }
+.fb-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.fb-row2 { grid-template-columns: 2.2fr repeat(4, minmax(0, 1fr)); }
+.fb-card {
+  --tone: var(--gray-300); --soft: var(--gray-50, #f6f7f9);
+  position: relative; overflow: hidden; display: grid; align-content: space-between; gap: 10px;
+  min-width: 0; min-height: 104px; padding: 18px 16px 14px; border-radius: 18px; background: var(--soft); box-shadow: inset 0 0 0 1px var(--gray-100);
+}
+.fb-card::before { content: ''; position: absolute; inset: 0 0 auto; height: 5px; background: var(--tone); }
+.fb-card[data-tone='purple'] { --tone: #6b3fd4; --soft: #f3eefc; }
+.fb-card[data-tone='red'] { --tone: #e8603c; --soft: #fdeee8; }
+.fb-card[data-tone='yellow'] { --tone: var(--yellow); --soft: var(--yellow-soft); }
+.fb-card[data-tone='blue'] { --tone: var(--blue); --soft: var(--blue-soft); }
+.fb-card[data-tone='green'] { --tone: var(--ok); --soft: #e5f5ee; }
+.fb-card.skeleton { min-height: 104px; }
+.fb-main { display: grid; gap: 2px; min-width: 0; }
+.fb-main > span { color: var(--gray-500); font-size: .8rem; font-weight: 600; }
+.fb-main > b { color: var(--navy); font-size: clamp(1.05rem, 1.4vw, 1.25rem); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fb-main > small { color: var(--gray-500); font-size: .74rem; }
+.fb-side { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding-top: 8px; border-top: 1px solid rgba(11,28,77,.08); }
+.fb-side div, .fb-logi dl div { display: grid; }
+.fb-side dt, .fb-logi dt { color: var(--gray-500); font-size: .72rem; font-weight: 550; }
+.fb-side dd, .fb-logi dd { margin: 0; color: var(--navy); font-size: .84rem; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fb-logi dl { width: 100%; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+.fb-logi .fb-total dd { color: var(--blue); }
+.fb-fc { margin-top: 6px; font-size: .74rem; font-weight: 600; gap: 8px; white-space: normal; line-height: 1.2; }
+.fb-fc .ads-switch { width: 34px; height: 20px; }
+.fb-fc .ads-switch::after { width: 14px; height: 14px; }
+.fb-fc input:checked + .ads-switch::after { left: 17px; }
+.fb-foot { margin: 0; color: var(--gray-500); font-size: .82rem; }
+@media (max-width: 1200px) {
+  .fb-grid, .fb-row2 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fb-logi { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .fb-grid, .fb-row2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fb-grid > .fb-card[data-tone] { grid-column: 1 / -1; }
+  .fb-head, .fb-body { padding-left: 16px; padding-right: 16px; }
+}

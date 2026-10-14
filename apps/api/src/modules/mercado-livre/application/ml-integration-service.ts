@@ -4,7 +4,8 @@ import { SYNC_PHASE_END } from '@nvs/shared';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js';
 import type { EventBus } from '../../../shared/kernel/event-bus.js';
-import { todayIn, type SalesIngestion } from '../../sales/index.js';
+import { KeyedMutex } from '../../../shared/kernel/keyed-mutex.js';
+import { retentionCutoff, todayIn, type SalesIngestion } from '../../sales/index.js';
 import { feeBonusOf, mapMlItem, mapMlOrder, type MlOrder } from '../domain/ml-order.js';
 import { billedDifal, sellerCoupon, sellerPaidFreight, shipmentAddress, shipmentFreight } from '../domain/ml-finance.js';
 import { MlApiError, ORDERS_PAGE_SIZE, type MlApi } from '../infrastructure/ml-api.js';
@@ -59,6 +60,8 @@ export class MlIntegrationService {
   private inflight = new Set<Promise<void>>();
   /** Conexões com sincronização completa rodando neste processo: um segundo clique não abre outra. */
   private activeSyncs = new Set<string>();
+  /** Fila das gravações por empresa ANTES de pegar conexão: workers esperando não ocupam o pool do banco. */
+  private writes = new KeyedMutex();
   /** Conexões guardando o histórico agora (segundo plano). */
   private historyRunning = new Set<string>();
   private processingOrders = new Set<string>();
@@ -221,13 +224,19 @@ export class MlIntegrationService {
     // sinal de vida enquanto roda: etapas longas (frete pago, fatura) não parecem "interrompidas"
     const beat = setInterval(() => void this.run(tenantId, runId, {}).catch(() => undefined), HEARTBEAT_MS);
     beat.unref();
+    let ok = false;
     const job = this.runSync(tenantId, connectionId, runId)
+      .then(() => {
+        ok = true;
+      })
       .catch((err) => this.log.error({ err }, 'Mercado Livre: sincronização falhou'))
       .finally(() => {
         clearInterval(beat);
         this.activeSyncs.delete(connectionId);
         this.inflight.delete(job);
-        // depois da completa, guarda o histórico mais antigo em segundo plano (não segura a barra)
+        // depois da completa, guarda o histórico mais antigo em segundo plano (não segura a barra);
+        // se ela falhou (ex.: token revogado), o histórico tentaria à toa — fica para a retomada de hora em hora
+        if (!ok) return;
         const history = this.backfillHistory(tenantId, connectionId).finally(() => this.inflight.delete(history));
         this.inflight.add(history);
       });
@@ -243,10 +252,12 @@ export class MlIntegrationService {
   private async serialWrite<T>(tenantId: string, fn: (db: Queryable) => Promise<T>): Promise<T> {
     for (let attempt = 1; ; attempt++) {
       try {
-        return await this.db.withTenant(tenantId, async (db) => {
-          await db.query("SELECT pg_advisory_xact_lock(hashtext('apply-costs:' || current_setting('app.tenant_id', true)))");
-          return fn(db);
-        });
+        return await this.writes.run(tenantId, () =>
+          this.db.withTenant(tenantId, async (db) => {
+            await db.query("SELECT pg_advisory_xact_lock(hashtext('apply-costs:' || current_setting('app.tenant_id', true)))");
+            return fn(db);
+          }),
+        );
       } catch (err) {
         if ((err as { code?: string }).code !== '40P01' || attempt >= 4) throw err;
         await new Promise((res) => setTimeout(res, 200 * attempt));
@@ -372,13 +383,17 @@ export class MlIntegrationService {
         new Set((await db.query<{ m: string }>(`SELECT to_char(month, 'YYYY-MM-DD') AS m FROM ml_history_months WHERE account_id = $1`, [conn.account_id])).rows.map((x) => x.m)),
       );
       const limit = new Date(Date.now() - 90 * DAY); // daqui para frente a sincronização completa já cobre
+      // antes do corte de retenção os pedidos seriam descartados ao gravar: não vale buscar no ML
+      const cutoff = new Date(`${retentionCutoff()}T03:00:00Z`); // meia-noite de São Paulo
       for (let i = 0; i < HISTORY_MONTHS; i++) {
         const first = new Date(Date.UTC(limit.getUTCFullYear(), limit.getUTCMonth() - i, 1));
         const key = first.toISOString().slice(0, 10);
         if (done.has(key)) continue;
         const next = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 1));
         const to = new Date(Math.min(next.getTime() - 1, limit.getTime()));
-        const n = await this.importRange(tenantId, connectionId, null, conn, first, to, 'orders_history', this.opts.historyPaceMs ?? HISTORY_PACE_MS);
+        const from = first < cutoff ? cutoff : first;
+        const n =
+          from > to ? 0 : await this.importRange(tenantId, connectionId, null, conn, from, to, 'orders_history', this.opts.historyPaceMs ?? HISTORY_PACE_MS);
         // os dias que depois saem dos 90 dias já foram importados enquanto estavam dentro deles: o mês fica guardado
         await this.db.withTenant(tenantId, (db) =>
           db.query(
@@ -738,15 +753,15 @@ export class MlIntegrationService {
     const slot = new Date(now);
     slot.setUTCMinutes(0, 0, 0);
     if (!(await this.repo.claimSlot('ml_hourly_sync', slot))) return false;
-    for (const tenantId of await this.repo.connectedTenants()) {
+    // algumas empresas em paralelo (com muitas, uma por vez passava de 1h); dentro da empresa, uma conta por vez
+    await eachLimited(await this.repo.connectedTenants(), TENANT_CONCURRENCY, async (tenantId) => {
       const conns = await this.db.withTenant(tenantId, (db) => this.repo.connections(db));
       for (const c of conns.filter((x) => x.status === 'active')) {
-        // uma conta por vez: respeita o limite de requisições do ML e não sobrecarrega o banco
         await this.syncIncremental(tenantId, c.id).catch((err) =>
           this.log.error({ err, tenantId }, 'Mercado Livre: atualização automática falhou'),
         );
       }
-    }
+    });
     return true;
   }
 
@@ -844,4 +859,15 @@ export class MlIntegrationService {
     await this.enrichFinance(tenantId, conn.id, null, conn, new Date(Date.now() - 400 * DAY), false, orderId);
     this.log.info({ tenantId, orderId }, 'Mercado Livre: pedido atualizado por notificação');
   }
+}
+
+const TENANT_CONCURRENCY = 3;
+
+/** Roda `fn` para cada item com no máximo `limit` ao mesmo tempo (erros ficam a cargo de `fn`). */
+export async function eachLimited<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]!);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }

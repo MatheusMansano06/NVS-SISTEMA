@@ -29,7 +29,6 @@ const SEGMENTOS: [string, string, string][] = [
   ['motivo', 'defeito', 'Motivo da devolução: produto com defeito'],
 ];
 const CARENCIA_FECHAMENTO_DIAS = 7;
-const OLIST_OFF = { erro: 'Olist não conectada a esta empresa: confira o pedido e a NF pelo painel do marketplace.', pedidos: [] };
 const TIPOS_EVIDENCIA: Record<string, ['foto' | 'video', number]> = {
   'image/jpeg': ['foto', 15], 'image/png': ['foto', 15], 'image/webp': ['foto', 15],
   'video/mp4': ['video', 50], 'video/webm': ['video', 50], 'video/quicktime': ['video', 50],
@@ -765,7 +764,6 @@ export class CentralService {
     const cf = l.conferencia;
     return {
       devolucao: publico(l),
-      olist: OLIST_OFF,
       midia: {
         anuncio: l.itens.map((i) => ({ nome: i.nome, imagem: (i.item_id && porItem.get(i.item_id)) || null })),
         comprador: { fotos: [], videos: [] }, // no ML ficam na reclamação, atrás do login: vai pelo link
@@ -831,8 +829,7 @@ export class CentralService {
    * anúncio no Mercado Livre e a avaria vai para o estoque virtual do sistema (ver ReturnStock). O que já deu certo numa
    * tentativa anterior não repete; o estoque só fica "lançado" (e trava) quando tudo deu certo.
    */
-  async lancarEstoque(a: ReturnActor, id: string, viaOlist: boolean) {
-    if (viaOlist) throw new ValidationError('Olist não conectada a esta empresa: lance o estoque pela Central.');
+  async lancarEstoque(a: ReturnActor, id: string) {
     const [r] = await this.db.withTenant(a.tenantId, (db) => this.repo.rows(db, 'r.id = $1', [id]));
     if (!r?.c_class) throw new NotFoundError(`Devolução ${id} ainda não foi conferida`);
     if (r.c_stock_done_at) {
@@ -850,7 +847,7 @@ export class CentralService {
         continue;
       }
       const sku = lanc.sku === 'vendido' ? (vendido?.sku ?? null) : r.c_sku_received;
-      const item = { ...lanc, sku_olist: sku ?? (vendido?.itemId ? `anúncio ${vendido.itemId}` : null), produto_id: null, quantidade: qtd, pela_olist: false };
+      const item = { ...lanc, sku_olist: sku ?? (vendido?.itemId ? `anúncio ${vendido.itemId}` : null), produto_id: null, quantidade: qtd };
       try {
         const destino = await this.deps.stock.move(a.tenantId, {
           sku, itemId: lanc.sku === 'vendido' ? vendido?.itemId : null, variationId: lanc.sku === 'vendido' ? vendido?.variationId : null,

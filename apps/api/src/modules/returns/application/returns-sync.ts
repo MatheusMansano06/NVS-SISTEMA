@@ -255,8 +255,34 @@ export class ReturnsSync {
       out.claims += Math.min(total, MAX_OFFSET);
     }
 
-    // sondagens: quanto o ML diz ter em outras formas de buscar (só o total, uma chamada cada)
-    const u = conn.ml_user_id;
+    // sondagens (diagnóstico do "O que veio do ML"): só nas rodadas completas — manual e a cada 6 h —, não a cada 10 min
+    if (opts.allOpen) await this.probe(conn.ml_user_id, get, rep);
+
+    // pacote não entregue que voltou: não abre reclamação. Janela de 60 dias (ou a da carga, se maior), todas as páginas.
+    // Só nas rodadas de 2+ dias (hh:20 e manual): o incremental de 3 h não relê 60 dias inteiros
+    if (opts.days < 2) return out;
+    const from = new Date(Date.now() - Math.max(60, opts.days) * 86_400_000).toISOString().replace('Z', '+00:00');
+    const notDelivered: ReturnRecord[] = [];
+    for (let offset = 0, total = 1; offset < Math.min(total, MAX_OFFSET); offset += 50) {
+      const orders = await get<{ results?: Json[]; paging?: { total: number } }>(
+        `/orders/search?seller=${conn.ml_user_id}&shipping.substatus=returned&order.date_created.from=${encodeURIComponent(from)}&sort=date_desc&limit=50&offset=${offset}`,
+      );
+      if (!orders) break;
+      total = orders.paging?.total ?? 0;
+      notDelivered.push(...(orders.results ?? []).filter((o) => o.shipping?.id).map(normalizeNotDelivered));
+      if (!(orders.results ?? []).length) break;
+    }
+    await this.db.withTenant(tenantId, async (db) => {
+      for (const r of notDelivered) await this.repo.upsert(db, tenantId, conn.account_id, r);
+    });
+    out.saved += notDelivered.length;
+    rep.naoEntregues += notDelivered.length;
+    rep.gravadas += notDelivered.length;
+    return out;
+  }
+
+  /** Quanto o ML diz ter em outras formas de buscar (só o total, uma chamada cada). */
+  private async probe(u: string | number, get: <T>(path: string) => Promise<T | null>, rep: SyncReport): Promise<void> {
     const probes: [string, string][] = [
       ['vendedor (player_role) abertas', `player_role=respondent&player_user_id=${u}&status=opened`],
       ['vendedor (player_role) encerradas', `player_role=respondent&player_user_id=${u}&status=closed`],
@@ -276,26 +302,6 @@ export class ReturnsSync {
         rep.sondagens.push({ consulta, total: null, erro: (err as Error).message.slice(0, 120) });
       }
     }
-
-    // pacote não entregue que voltou: não abre reclamação. Janela de 60 dias (ou a da carga, se maior), todas as páginas
-    const from = new Date(Date.now() - Math.max(60, opts.days) * 86_400_000).toISOString().replace('Z', '+00:00');
-    const notDelivered: ReturnRecord[] = [];
-    for (let offset = 0, total = 1; offset < Math.min(total, MAX_OFFSET); offset += 50) {
-      const orders = await get<{ results?: Json[]; paging?: { total: number } }>(
-        `/orders/search?seller=${conn.ml_user_id}&shipping.substatus=returned&order.date_created.from=${encodeURIComponent(from)}&sort=date_desc&limit=50&offset=${offset}`,
-      );
-      if (!orders) break;
-      total = orders.paging?.total ?? 0;
-      notDelivered.push(...(orders.results ?? []).filter((o) => o.shipping?.id).map(normalizeNotDelivered));
-      if (!(orders.results ?? []).length) break;
-    }
-    await this.db.withTenant(tenantId, async (db) => {
-      for (const r of notDelivered) await this.repo.upsert(db, tenantId, conn.account_id, r);
-    });
-    out.saved += notDelivered.length;
-    rep.naoEntregues += notDelivered.length;
-    rep.gravadas += notDelivered.length;
-    return out;
   }
 
   private async triageOf(reasonId: string | undefined, get: <T>(path: string) => Promise<T | null>): Promise<string | null> {

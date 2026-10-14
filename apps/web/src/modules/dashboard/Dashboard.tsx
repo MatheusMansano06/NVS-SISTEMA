@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { int, money, pct } from '../../shared/format';
 import { Button } from '../../shared/ui/Button';
 import { FilterBar } from './components/FilterBar';
+import { FinanceBreakdown } from './components/FinanceBreakdown';
 import { KpiCard } from './components/KpiCard';
 import { MarginRing } from './components/MarginRing';
 import { RevenueChart } from './components/RevenueChart';
@@ -202,6 +203,15 @@ export function Dashboard() {
               </label>
             </section>
             {data.ads.message && <p className="costs-note" role="note">{data.ads.message}</p>}
+
+            <FinanceBreakdown
+              range={data.range}
+              marketplace={filters.marketplace}
+              accountId={filters.accountId}
+              adSpend={k.adSpend}
+              discountAds={discountAds}
+              stamp={data.generatedAt}
+            />
 
             <section className="minis" aria-label="Outros indicadores">
               <div><span>Pedidos</span><strong>{int(k.orders)}</strong></div>

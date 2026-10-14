@@ -2,40 +2,13 @@ import type { Devolucao } from "../../shared/devolucao";
 
 export type Classe = "A" | "B" | "C";
 
-export interface NotaResumo {
-  id: number;
-  numero: string;
-  serie: string | null;
-  situacao: string;
-}
-
-export interface ItemOlist {
-  produto_id: number;
-  sku: string;
-  descricao: string;
-  quantidade: number;
-  valor_unitario: number;
-  custo: number | null;
-}
-
-export interface PedidoOlist {
-  id: number;
-  numero: number;
-  situacao: string;
-  canal: string;
-  nota: NotaResumo | null;
-  nota_devolucao: NotaResumo | null;
-  itens: ItemOlist[];
-}
-
 export interface Lancamento {
   sku: "vendido" | "recebido";
   deposito: "vendavel" | "avaria";
   tipo: "E" | "S";
   ok?: boolean;
   erro?: string;
-  sku_olist?: string;
-  pela_olist?: boolean; // entrada feita pelo "devolver produtos" da Olist
+  sku_olist?: string; // SKU lançado (nome do campo mantido: lançamentos antigos gravados assim)
   destino?: string; // onde foi parar: anúncio no Mercado Livre ou estoque virtual
 }
 
@@ -77,7 +50,6 @@ export interface Midia {
 
 export interface Tela {
   devolucao: Devolucao;
-  olist: { erro: string | null; pedidos: PedidoOlist[] };
   midia: Midia;
   conferencia: Conferencia | null;
   evidencias: Evidencia[];

@@ -87,7 +87,7 @@ export function centralRoutes(service: CentralService) {
       service.buscar(tenant(req), param(req, 'codigo'), q(req, 'etiqueta', 'str', undefined)),
     );
     app.post('/central/conferencia/:id', auth, async (req) => service.registrar(actor(req), id(req), body(req)));
-    app.post('/central/conferencia/:id/lancar-estoque', auth, async (req) => service.lancarEstoque(actor(req), id(req), body(req).via_olist === true));
+    app.post('/central/conferencia/:id/lancar-estoque', auth, async (req) => service.lancarEstoque(actor(req), id(req)));
     app.post('/central/conferencia/:id/chamado-manual', auth, async (req) => service.chamadoManual(actor(req), id(req)));
     app.post('/central/conferencia/:id/chamado-manual/aberto', auth, async (req) => service.chamadoAberto(actor(req), id(req), body(req)));
     app.post('/central/conferencia/:id/evidencias', { preHandler: app.authenticate, bodyLimit: EVIDENCE_BODY_LIMIT }, async (req) => {

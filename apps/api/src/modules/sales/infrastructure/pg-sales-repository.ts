@@ -58,17 +58,30 @@ export class PgSalesRepository {
     return rows;
   }
 
-  /** Ciclo da fatura do ML aberto hoje (e o anterior), das faturas já lidas. */
+  /**
+   * Ciclo da fatura do ML mais recente (e o anterior DA MESMA conta), das faturas já lidas. Com várias contas e sem
+   * filtro, vale a conta de ciclo mais recente: misturar contas sobrepunha o "anterior" ao atual.
+   */
   async invoicePeriods(db: Queryable, today: string, accountId?: string) {
     const { rows } = await db.query<{ from: string; to: string }>(
-      `SELECT DISTINCT to_char(date_from, 'YYYY-MM-DD') AS from, to_char(date_to, 'YYYY-MM-DD') AS to
-         FROM ml_billing_periods
-        WHERE date_from IS NOT NULL AND date_to IS NOT NULL AND date_from <= $1::date
-          AND ($2::uuid IS NULL OR account_id = $2)
-        ORDER BY 1 DESC LIMIT 2`,
+      `WITH cur AS (
+         SELECT account_id, date_from, date_to FROM ml_billing_periods
+          WHERE date_from IS NOT NULL AND date_to IS NOT NULL AND date_from <= $1::date
+            AND ($2::uuid IS NULL OR account_id = $2)
+          ORDER BY date_from DESC, account_id LIMIT 1
+       ),
+       prev AS (
+         SELECT p.date_from, p.date_to FROM ml_billing_periods p JOIN cur ON p.account_id = cur.account_id
+          WHERE p.date_from IS NOT NULL AND p.date_to IS NOT NULL AND p.date_to < cur.date_from
+          ORDER BY p.date_from DESC LIMIT 1
+       )
+       SELECT to_char(date_from, 'YYYY-MM-DD') AS from, to_char(date_to, 'YYYY-MM-DD') AS to, 0 AS ord FROM cur
+       UNION ALL
+       SELECT to_char(date_from, 'YYYY-MM-DD'), to_char(date_to, 'YYYY-MM-DD'), 1 FROM prev
+       ORDER BY ord`,
       [today, accountId ?? null],
     );
-    return rows;
+    return rows.map(({ from, to }) => ({ from, to }));
   }
 
   /** Série completa (intervalos sem venda vêm zerados) por hora ou por dia. */

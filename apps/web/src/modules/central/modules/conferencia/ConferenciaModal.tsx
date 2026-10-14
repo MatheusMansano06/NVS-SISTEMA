@@ -12,7 +12,7 @@ import { Veredito } from "./Veredito";
 
 const PASSOS = ["Conferir", "Fotos e vídeo", "Estoque", "Aceitar ou contestar"] as const;
 
-/** Já conferida reabre no passo da Olist; se o estoque já foi lançado, pula direto para a decisão na plataforma. */
+/** Já conferida reabre no passo do estoque; se o estoque já foi lançado, pula direto para a decisão na plataforma. */
 const passoInicial = (t?: Tela) => (!t?.conferencia ? 0 : t.conferencia.estoque_lancado_em ? 3 : 2);
 
 /** QR da etiqueta amarela do Full: id da triagem (13 dígitos), que a API do ML não expõe. */
@@ -241,7 +241,7 @@ export function ConferenciaModal({ codigo, onFechar, onMudou }: Props) {
                 )}
                 {passo >= 2 && (
                   <>
-                    <Veredito tela={tela} onAtualizar={atualizar} onIrParaProvas={() => setPasso(1)} parte={passo === 2 ? "olist" : "plataforma"} />
+                    <Veredito tela={tela} onAtualizar={atualizar} onIrParaProvas={() => setPasso(1)} parte={passo === 2 ? "estoque" : "plataforma"} />
                     <div className="passo-rodape">
                       <button type="button" className="botao" onClick={() => setPasso(passo - 1)}>Voltar</button>
                       {passo === 2 && <button type="button" className="botao principal" onClick={() => setPasso(3)}>Próximo: aceitar ou contestar</button>}
@@ -293,7 +293,7 @@ function Midias({ midia, plataforma }: { midia: Midia; plataforma: string }) {
 }
 
 function Ficha({ tela }: { tela: Tela }) {
-  const { devolucao: d, olist } = tela;
+  const { devolucao: d } = tela;
   const culpa = CULPA[d.responsavel];
   const prazo = prazoRestante(d.prazo_vendedor);
 
@@ -319,30 +319,6 @@ function Ficha({ tela }: { tela: Tela }) {
 
       <Midias midia={tela.midia} plataforma={PLATAFORMA[d.plataforma]} />
 
-      {!olist.erro && <h3>Na Olist</h3>}
-      {!olist.erro && olist.pedidos.length === 0 && <p className="aviso">Pedido ainda não encontrado na Olist.</p>}
-      {olist.pedidos.map((p) => {
-        const cancelada = p.nota?.situacao === "Cancelada";
-        return (
-          <div key={p.id} className="olist">
-            <p className="sub">Pedido {p.numero}, {p.situacao.toLowerCase()}</p>
-            {p.itens.map((i) => (
-              <div key={i.produto_id} className="item">
-                <strong>{i.sku}</strong>
-                <span>{i.descricao}</span>
-                <small>{i.quantidade} un, custo {i.custo == null ? "sem custo cadastrado" : reais(i.custo)}</small>
-              </div>
-            ))}
-            {p.nota && <p className="sub">NF de venda {p.nota.numero}: {p.nota.situacao.toLowerCase()}</p>}
-            {cancelada && p.nota_devolucao && (
-              <p className="aviso erro">NF de devolução {p.nota_devolucao.numero} para venda com nota cancelada. Confira com o fiscal.</p>
-            )}
-            {!cancelada && p.nota && (p.nota_devolucao
-              ? <p className="sub">NF de devolução {p.nota_devolucao.numero}: {p.nota_devolucao.situacao.toLowerCase()}</p>
-              : <p className="aviso">NF de devolução ainda não criada na Olist.</p>)}
-          </div>
-        );
-      })}
     </aside>
   );
 }

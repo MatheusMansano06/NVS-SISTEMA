@@ -7,6 +7,16 @@ import type { PgSalesRepository, SalesFilter } from '../infrastructure/pg-sales-
 
 const CACHE_TTL_SECONDS = 30;
 const brDate = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const addDays = (iso: string, n: number) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const addMonths = (iso: string, n: number) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return d.toISOString().slice(0, 10);
+};
 
 const ADS_MESSAGE: Record<Exclude<AdsInfoDto['status'], 'ok'>, string> = {
   sem_permissao: 'O Mercado Livre não liberou a leitura de publicidade para o NVS: o investimento em Ads não entra na conta.',
@@ -30,11 +40,18 @@ export class DashboardService {
     if (q.period === 'invoice') {
       // ciclo real da fatura do ML (as contas fecham em dias diferentes): o aberto hoje e o anterior
       const periods = await this.db.withTenant(tenantId, (db) => this.repo.invoicePeriods(db, today, q.accountId));
-      const cur = periods[0];
-      if (cur) {
-        range = { from: cur.from, to: cur.to < today ? cur.to : today };
+      const last = periods[0];
+      if (last && last.to < today) {
+        // a fatura do ciclo aberto ainda não foi lida: o ciclo atual começa no dia seguinte ao fechamento da última
+        const from = addDays(last.to, 1);
+        const end = addDays(addMonths(from, 1), -1);
+        range = { from, to: today };
+        prev = { from: last.from, to: last.to };
+        invoiceLabel = `Fatura ${brDate(from)} a ${brDate(end)}`;
+      } else if (last) {
+        range = { from: last.from, to: today };
         prev = periods[1] ? { from: periods[1].from, to: periods[1].to } : previousRange('30d', range);
-        invoiceLabel = `Fatura ${brDate(cur.from)} a ${brDate(cur.to)}`;
+        invoiceLabel = `Fatura ${brDate(last.from)} a ${brDate(last.to)}`;
       }
     }
     // versão muda quando custos são alterados (cadastro de SKUs) → cache invalidado na hora

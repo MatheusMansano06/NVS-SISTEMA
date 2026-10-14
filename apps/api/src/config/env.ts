@@ -21,6 +21,9 @@ const schema = z.object({
   ML_USE_PKCE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   /** Chave AES-256 (64 hex) para criptografar tokens de marketplaces em repouso. */
   TOKEN_ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'TOKEN_ENCRYPTION_KEY precisa ter 64 caracteres hex').optional(),
+  /** Primeira conta do Painel Master (criada uma única vez, quando ainda não existe nenhuma). */
+  PLATFORM_ADMIN_EMAIL: z.string().email().optional(),
+  PLATFORM_ADMIN_PASSWORD: z.string().min(10, 'PLATFORM_ADMIN_PASSWORD precisa ter ao menos 10 caracteres').optional(),
 });
 
 export type Env = z.infer<typeof schema>;

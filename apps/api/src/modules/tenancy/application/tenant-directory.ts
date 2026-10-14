@@ -16,6 +16,13 @@ export class TenantDirectory {
     return this.cached(`tenant:id:${id}`, () => this.repo.findById(id));
   }
 
+  /** Esquece a empresa no cache (ex.: suspensa pela master — vale na hora). */
+  async forget(id: string): Promise<void> {
+    const t = await this.cache.get<Tenant>(`tenant:id:${id}`);
+    await this.cache.del(`tenant:id:${id}`);
+    if (t) await this.cache.del(`tenant:slug:${t.slug}`);
+  }
+
   private async cached(key: string, load: () => Promise<Tenant | null>): Promise<Tenant | null> {
     const hit = await this.cache.get<Tenant>(key);
     if (hit) return hit;

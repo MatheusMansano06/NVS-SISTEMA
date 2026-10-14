@@ -8,6 +8,7 @@ import { navigate, usePath } from './router';
 import { TOUR_EVENT } from '../shared/tour/Tour';
 import { usePerson } from '../modules/operation/PersonContext';
 import { PinChange } from '../modules/operation/PinChange';
+import { NoticesBar } from './NoticesBar';
 import './shell.css';
 
 const NAV: { label: string; icon: IconName; path?: string; master?: boolean }[] = [
@@ -128,6 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {notice}
           </p>
         )}
+        <NoticesBar />
         {children}
       </main>
 

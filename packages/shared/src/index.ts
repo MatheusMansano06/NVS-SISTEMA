@@ -11,3 +11,4 @@ export * from './sales-analytics.js';
 export * from './operation.js';
 export * from './wms.js';
 export * from './returns.js';
+export * from './platform.js';

@@ -4,6 +4,7 @@ import { LoginForm } from './forms/LoginForm';
 import { RegisterForm } from './forms/RegisterForm';
 import { ForgotForm } from './forms/ForgotForm';
 import { usePointerGlow } from '../../shared/ui/usePointerGlow';
+import { navigate } from '../../app/router';
 import './auth.css';
 
 type View = 'login' | 'register' | 'forgot';
@@ -30,6 +31,7 @@ export function AuthPage() {
           <span>organizada em um só lugar.</span>
         </h1>
         <p>Financeiro, rotinas e marketplaces conectados pela NVS Tech.</p>
+        <button type="button" className="link auth-master" onClick={() => navigate('/master')}>Acesso master →</button>
       </section>
 
       <main className="auth-panel" data-glow>

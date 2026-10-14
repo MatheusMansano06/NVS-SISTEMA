@@ -162,3 +162,5 @@
 .op-choice-dev em { color: #7a5600; }
 .station[data-area='devolucoes'] .station-main, .station[data-area='full'] .station-main { place-items: start stretch; }
 @media (max-width: 720px) { .op-choices { grid-template-columns: 1fr; } .op-choice { min-height: 0; } }
+.station-notices { width: min(1280px, 96vw); justify-self: center; }
+.station-notices:empty { display: none; }

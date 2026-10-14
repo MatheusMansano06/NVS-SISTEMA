@@ -94,3 +94,4 @@ h2 { margin: 0; font-size: 1.65rem; font-weight: 650; letter-spacing: -0.025em; 
   .auth-panel { justify-self: center; border-radius: 44px 44px 44px 88px / 44px 44px 44px 80px; }
 }
 @media (max-height: 640px) and (min-width: 881px) { .auth-logo { margin-bottom: 20px; } }
+.auth-master { margin-top: 18px; font-size: .82rem; color: var(--gray-500); }

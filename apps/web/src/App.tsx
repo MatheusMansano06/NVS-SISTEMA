@@ -24,6 +24,7 @@ import { TeamEntry } from './modules/operation/TeamEntry';
 import { TeamPage } from './modules/operation/TeamPage';
 import { TeamSetup } from './modules/operation/TeamSetup';
 import { teamApi } from './modules/operation/operation-api';
+import { MasterApp } from './modules/master/MasterApp';
 import './modules/operation/operation.css';
 
 function Boot() {
@@ -141,6 +142,9 @@ function Router() {
 }
 
 export function App() {
+  const path = usePath();
+  // Painel Master (dono do NVS Tech): login e sessão próprios, fora do fluxo das empresas
+  if (path.startsWith('/master')) return <MasterApp />;
   return (
     <AuthProvider>
       <Router />

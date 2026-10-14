@@ -51,6 +51,7 @@ import {
 } from './modules/mercado-livre/index.js';
 import { TokenCipher } from './shared/infrastructure/token-cipher.js';
 import { serveWeb } from './shared/infrastructure/web-static.js';
+import { PlatformService, platformRoutes } from './modules/platform/index.js';
 import { healthRoutes } from './modules/health/presentation/routes.js';
 import { CentralService, PgReturnsRepository, ReturnStock, ReturnsService, ReturnsSync, centralRoutes, returnsRoutes } from './modules/returns/index.js';
 import { PgWmsRepository, PrintHub, WmsService, wmsAgentSocket, wmsRoutes } from './modules/wms/index.js';
@@ -58,8 +59,8 @@ import { OperatorService, PERSON_COOKIE, PgOperatorRepository, operationRoutes }
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'person'; mode?: 'analise' | 'operacao' };
-    user: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'person'; mode?: 'analise' | 'operacao' };
+    payload: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'person' | 'admin'; mode?: 'analise' | 'operacao' };
+    user: { sub: string; tenantId: string; role: Role; mcp?: boolean; typ?: 'person' | 'admin'; mode?: 'analise' | 'operacao' };
   }
 }
 declare module 'fastify' {
@@ -115,14 +116,17 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
     cookie: { cookieName: 'nvs_session', signed: false },
   });
 
+  // empresa suspensa pela master perde o acesso na hora, mesmo com sessão aberta (resolvido depois da composição)
+  let tenantStatus: (id: string) => Promise<string | null> = async () => 'active';
   app.decorate('authenticate', async (req: FastifyRequest) => {
     try {
       await req.jwtVerify();
     } catch {
       throw new UnauthorizedError('Token ausente ou inválido');
     }
-    // tokens da Operação (estação/operador) nunca valem como sessão da Análise
+    // tokens da Operação (estação/operador) e da master nunca valem como sessão da Análise
     if (req.user.typ) throw new UnauthorizedError('Token ausente ou inválido');
+    if ((await tenantStatus(req.user.tenantId)) === 'suspended') throw new ForbiddenError('Acesso suspenso. Fale com o suporte do NVS Tech.');
   });
   app.decorate('requirePermission', (permission: Permission) => async (req: FastifyRequest) => {
     await app.authenticate(req, undefined as never);
@@ -148,9 +152,14 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   // ---- composição dos módulos
   const sharedCache = cache ?? new MemoryCache();
   const tenants = new TenantDirectory(new PgTenantRepository(database), sharedCache);
+  tenantStatus = async (id) => (await tenants.resolveById(id))?.status ?? null;
   const identity = new IdentityService(database, new PgUserRepository(), tenants, events);
 
   await app.register(healthRoutes(database));
+  // Painel Master (dono do NVS Tech): empresas, mensalidades, cupons, comunicados
+  const platform = new PlatformService(database, { today: () => todayIn(), forgetTenant: (id) => tenants.forget(id) });
+  if (await platform.bootstrap(env.PLATFORM_ADMIN_EMAIL, env.PLATFORM_ADMIN_PASSWORD).catch(() => false)) app.log.info('Painel Master: primeira conta criada');
+  await app.register(platformRoutes(platform, { secureCookies: env.NODE_ENV === 'production' }), { prefix: '/api/v1' });
   const dashboard = new DashboardService(database, new PgSalesRepository(), sharedCache);
   await app.register(salesRoutes(dashboard), { prefix: '/api/v1' });
   const skuCosts = new SkuCostService(database, new PgSkuRepository(), sharedCache);

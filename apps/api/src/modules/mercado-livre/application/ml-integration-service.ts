@@ -234,6 +234,26 @@ export class MlIntegrationService {
     this.inflight.add(job);
   }
 
+  /**
+   * Gravação de vendas da empresa em fila (trava consultiva por empresa, a mesma do recálculo de custos) ANTES de mexer
+   * em qualquer pedido: as consultas ao ML seguem em paralelo, mas duas gravações não se cruzam — antes, uma segurava o
+   * pedido esperando a fila e a outra segurava a fila esperando o pedido (deadlock que derrubava a sincronização).
+   * Se o banco ainda acusar deadlock, repete.
+   */
+  private async serialWrite<T>(tenantId: string, fn: (db: Queryable) => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.db.withTenant(tenantId, async (db) => {
+          await db.query("SELECT pg_advisory_xact_lock(hashtext('apply-costs:' || current_setting('app.tenant_id', true)))");
+          return fn(db);
+        });
+      } catch (err) {
+        if ((err as { code?: string }).code !== '40P01' || attempt >= 4) throw err;
+        await new Promise((res) => setTimeout(res, 200 * attempt));
+      }
+    }
+  }
+
   /** Aguarda sincronizações em andamento (testes e desligamento gracioso). */
   async whenIdle(): Promise<void> {
     while (this.inflight.size) await Promise.all([...this.inflight]);
@@ -322,7 +342,7 @@ export class MlIntegrationService {
       for (let offset = 0, page = first; ; ) {
         const orders = page.results.map(mapMlOrder).filter((o) => o !== null);
         const winDone = Math.min(1, (offset + page.results.length) / Math.max(1, page.paging.total));
-        await this.db.withTenant(tenantId, async (db) => {
+        await this.serialWrite(tenantId, async (db) => {
           await this.sales.upsertOrders(db, tenantId, conn.account_id, 'mercado_livre', orders);
           const done = (doneMs + (wTo.getTime() - wFrom.getTime()) * winDone) / totalMs;
           if (runId) await this.repo.updateRun(db, runId, { progress: Math.round(start + (end - start) * Math.min(1, done)), addOrders: orders.length });
@@ -496,14 +516,14 @@ export class MlIntegrationService {
               costs,
               sellerId,
             });
-            const ids = await this.db.withTenant(tenantId, async (db) => {
+            const ids = await this.serialWrite(tenantId, async (db) => {
               await this.sales.setShipmentAddress(db, next.shippingRef!, shipmentAddress(shipment));
               return this.sales.setShipmentFinance(db, next.shippingRef!, freight);
             });
             touched.push(...ids);
           }
         }
-        await this.db.withTenant(tenantId, async (db) => {
+        await this.serialWrite(tenantId, async (db) => {
           await this.sales.setCoupon(db, next.id, coupon, true);
           await this.sales.recompute(db, [...new Set(touched)]);
         });
@@ -530,7 +550,7 @@ export class MlIntegrationService {
         const costs = await this.api.shipmentCosts(token, ref).catch(() => null);
         const paid = costs ? sellerPaidFreight(costs, sellerId) : null;
         const list = typeof costs?.gross_amount === 'number' && costs.gross_amount > 0 ? costs.gross_amount : null;
-        await this.db.withTenant(tenantId, async (db) => {
+        await this.serialWrite(tenantId, async (db) => {
           const ids = await this.sales.setPaidFreight(db, ref, paid, list);
           if (paid !== null) await this.sales.recompute(db, ids);
         });
@@ -551,7 +571,7 @@ export class MlIntegrationService {
       for (let ref = queue.shift(); ref; ref = queue.shift()) {
         const { token } = await this.accessToken(tenantId, connectionId);
         const shipment = await this.api.shipment(token, ref).catch(() => null);
-        await this.db.withTenant(tenantId, (db) =>
+        await this.serialWrite(tenantId, (db) =>
           this.sales.setShipmentAddress(db, ref, shipment ? shipmentAddress(shipment) : { uf: null, city: null, zip: null }),
         );
       }
@@ -819,9 +839,7 @@ export class MlIntegrationService {
     const order: MlOrder = await this.api.order(token, orderId);
     const mapped = mapMlOrder(order);
     if (!mapped) return;
-    await this.db.withTenant(tenantId, (db) =>
-      this.sales.upsertOrders(db, tenantId, conn.account_id, 'mercado_livre', [mapped]),
-    );
+    await this.serialWrite(tenantId, (db) => this.sales.upsertOrders(db, tenantId, conn.account_id, 'mercado_livre', [mapped]));
     // fretes/cupom só deste pedido (força o recálculo: status/valores podem ter mudado)
     await this.enrichFinance(tenantId, conn.id, null, conn, new Date(Date.now() - 400 * DAY), false, orderId);
     this.log.info({ tenantId, orderId }, 'Mercado Livre: pedido atualizado por notificação');

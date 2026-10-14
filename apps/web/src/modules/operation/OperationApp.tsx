@@ -4,6 +4,7 @@ import { navigate, usePath } from '../../app/router';
 import { CentralDevolucoes } from '../central/CentralDevolucoes';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../../shared/ui/Modal';
+import { NoticesBar } from '../../app/NoticesBar';
 import { OperationHome } from './OperationHome';
 import { PinChange } from './PinChange';
 import { usePerson } from './PersonContext';
@@ -47,6 +48,7 @@ export function OperationApp() {
         </span>
       </header>
       <main className="station-main">
+        <div className="station-notices"><NoticesBar /></div>
         {view === 'pin' ? (
           <PinChange person={ctx.person} onCancel={() => setView('home')} onDone={(p) => { ctx.update(p); setView('home'); }} />
         ) : area === 'full' ? (

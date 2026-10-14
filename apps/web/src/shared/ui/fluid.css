@@ -2,8 +2,8 @@
 .fluid-bg {
   position: absolute; inset: 0; z-index: -1;
   background:
-    radial-gradient(120% 90% at 100% 0%, #f1f5ff 0%, transparent 60%),
-    linear-gradient(180deg, #ffffff 0%, #f6f8fd 100%);
+    radial-gradient(120% 90% at 100% 0%, var(--blue-soft) 0%, transparent 60%),
+    linear-gradient(180deg, var(--surface) 0%, var(--gray-50) 100%);
 }
 .blob {
   position: absolute; border-radius: 50%;
@@ -36,6 +36,6 @@
   stroke-dasharray: 6 14; animation: flow 22s linear infinite;
 }
 .fluid-lines path + path { stroke-width: 1.2; opacity: .6; animation-duration: 30s; }
-.fluid-lines circle { fill: #fff; stroke: var(--blue); stroke-width: 2; }
+.fluid-lines circle { fill: var(--surface); stroke: var(--blue); stroke-width: 2; }
 @keyframes flow { to { stroke-dashoffset: -400; } }
 

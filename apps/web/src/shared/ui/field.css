@@ -14,7 +14,7 @@ form { display: grid; gap: 18px; }
 .field input::placeholder { color: #a3aabb; }
 .field input:hover { border-color: #aab3c8; }
 .field input:focus {
-  outline: none; border-color: var(--blue); background: #fff;
+  outline: none; border-color: var(--blue); background: var(--surface);
   box-shadow: 0 0 0 5px rgba(31,95,255,.14), 0 10px 24px -14px rgba(31,95,255,.55);
   transform: translateY(-1px);
 }

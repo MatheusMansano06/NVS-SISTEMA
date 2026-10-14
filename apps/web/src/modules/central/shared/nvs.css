@@ -2,12 +2,12 @@
    cartões e os botões do sistema. Carregado depois de estilo.css (mesma especificidade: este vence). */
 .central-dev {
   --fundo: var(--gray-50);
-  --papel: #fff;
+  --papel: var(--surface);
   --linha: var(--gray-100);
   --linha-forte: var(--gray-300);
   --tinta: var(--ink);
   --suave: var(--gray-500);
-  --fraco: #9aa2b4;
+  --fraco: var(--gray-500);
   --azul: var(--blue);
   --azul-fundo: var(--blue-soft);
   --vermelho: var(--danger);
@@ -51,26 +51,26 @@
 .central-dev .kpi:hover { transform: translateY(-2px); box-shadow: 0 0 0 1.5px var(--blue), 0 18px 34px -24px rgba(31, 95, 255, .45); }
 .central-dev .kpi strong { color: var(--navy); letter-spacing: -0.03em; }
 .central-dev .kpi-icone, .central-dev .funil-icone { border-radius: 16px; }
-.central-dev .financeiro { border-radius: 28px 28px 28px 10px; background: linear-gradient(150deg, var(--navy) 0%, #13307a 70%, #1f5fff 140%);
+.central-dev .financeiro { border-radius: 28px 28px 28px 10px; background: linear-gradient(150deg, var(--navy-solid) 0%, #13307a 70%, #1f5fff 140%);
   box-shadow: 0 22px 40px -26px rgba(11, 28, 77, .8); }
 .central-dev .abas-operador button[aria-selected="true"] { box-shadow: 0 0 0 2px var(--blue), 0 0 0 6px rgba(31, 95, 255, .12); }
-.central-dev .abas-operador button[aria-selected="true"] .contagem { background: var(--navy); }
+.central-dev .abas-operador button[aria-selected="true"] .contagem { background: var(--navy-solid); }
 .central-dev .motivo-bloco.destaque { box-shadow: 0 0 0 1.5px #f2b8a6, 0 16px 34px -28px rgba(11, 28, 77, .4); }
-.central-dev .qb-alerta { box-shadow: 0 0 0 1.5px #f2d27a, 0 16px 34px -28px rgba(11, 28, 77, .4); background: #fffdf5; }
+.central-dev .qb-alerta { box-shadow: 0 0 0 1.5px #f2d27a, 0 16px 34px -28px rgba(11, 28, 77, .4); background: var(--yellow-soft); }
 .central-dev .aviso { border-radius: 16px 16px 16px 6px; }
 .central-dev .aviso.forte { background: var(--blue-soft); color: var(--navy); }
 
 /* ---------- Botões e campos do sistema ---------- */
 .central-dev .botao { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); min-height: 42px; padding: 0 1.15rem;
   transition: transform .2s cubic-bezier(.2, .7, .2, 1), box-shadow .25s, background .2s; }
-.central-dev .botao:hover:not(:disabled) { background: #e3e7f0; }
+.central-dev .botao:hover:not(:disabled) { background: var(--gray-100); }
 .central-dev .botao.principal { color: #fff; background: linear-gradient(115deg, var(--blue-deep), var(--blue) 55%, #4a82ff);
   box-shadow: 0 12px 24px -12px rgba(31, 95, 255, .7); }
 .central-dev .botao.principal:hover:not(:disabled) { background: linear-gradient(115deg, var(--blue-deep), var(--blue) 55%, #4a82ff); transform: translateY(-1px);
   box-shadow: 0 18px 30px -14px rgba(31, 95, 255, .75); }
 .central-dev .botao.alerta { background: linear-gradient(115deg, #b3132b, var(--danger)); color: #fff; }
 .central-dev .botao-linha { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); padding: .35rem .85rem; }
-.central-dev .botao-linha:hover { background: #e3e7f0; }
+.central-dev .botao-linha:hover { background: var(--gray-100); }
 .central-dev .botao-linha.destaque { background: var(--blue); color: #fff; }
 .central-dev .icone-botao { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); }
 .central-dev .seletor { border: 0; border-radius: 999px; box-shadow: 0 0 0 1px var(--gray-100); padding-left: 1rem; height: 40px; }
@@ -78,16 +78,16 @@
   border: 0; border-radius: 14px; box-shadow: 0 0 0 1px var(--gray-300); padding: .65rem .85rem; transition: box-shadow .2s; }
 .central-dev .campo input:focus, .central-dev .campo textarea:focus, .central-dev .campo select:focus, .central-dev .vincular input:focus {
   outline: none; box-shadow: 0 0 0 2px var(--blue), 0 0 0 6px rgba(31, 95, 255, .12); }
-.central-dev .segmentos { gap: 4px; padding: 4px; border-radius: 999px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); }
+.central-dev .segmentos { gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); }
 .central-dev .segmentos button { border: 0; border-radius: 999px; padding: .4rem .85rem; color: var(--gray-500); font-weight: 600; background: none; }
-.central-dev .segmentos button[aria-pressed="true"], .central-dev .segmentos button[aria-selected="true"] { background: var(--navy); color: #fff; }
+.central-dev .segmentos button[aria-pressed="true"], .central-dev .segmentos button[aria-selected="true"] { background: var(--navy-solid); color: #fff; }
 .central-dev .paginacao button { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); padding: .3rem .85rem; }
 
 /* ---------- Bancada (bipe) ---------- */
 .central-dev .bipe { border: 0; border-radius: 999px; box-shadow: 0 0 0 1.5px var(--gray-300); padding: .4rem .4rem .4rem 1.2rem; }
 .central-dev .bipe:focus-within { box-shadow: 0 0 0 2px var(--blue), 0 0 0 7px rgba(31, 95, 255, .12); }
 .central-dev .bipe .botao { min-height: 48px; }
-.central-dev .passos span { background: var(--navy); color: #fff; }
+.central-dev .passos span { background: var(--navy-solid); color: #fff; }
 
 /* ---------- Tabelas e listas ---------- */
 .central-dev .tabela th { color: var(--gray-500); font-weight: 600; letter-spacing: .01em; }
@@ -99,7 +99,7 @@
 .central-dev .modal { border-radius: 30px 30px 30px 12px; box-shadow: 0 40px 80px -30px rgba(11, 28, 77, .55); }
 .central-dev .modal-topo h2 { color: var(--navy); letter-spacing: -0.02em; }
 .central-dev .modal.ev-modal { width: min(520px, 100%); height: auto; grid-template-rows: auto auto; }
-.central-dev .ev-corpo { padding: 1rem 1.25rem 1.25rem; background: #fff; display: grid; gap: .2rem; }
+.central-dev .ev-corpo { padding: 1rem 1.25rem 1.25rem; background: var(--surface); display: grid; gap: .2rem; }
 .central-dev .ev-corpo .linha-botoes { justify-content: flex-end; margin-top: 1rem; }
 
 /* ---------- Selo da sincronização ---------- */
@@ -136,4 +136,4 @@
 .central-dev .lml-lista li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 12px; border-radius: 12px; background: var(--gray-50); }
 .central-dev .lml-lista li b { color: var(--navy); font-size: 1.05rem; }
 .central-dev .lml-lista li small { grid-column: 1 / -1; color: var(--gray-500); }
-.central-dev .sinc-selo.erro { background: #fde4e7; color: #a3121f; }
+.central-dev .sinc-selo.erro { background: var(--danger-soft); color: var(--danger-ink); }

@@ -12,11 +12,11 @@
 @keyframes tour-fade { from { opacity: 0; } }
 .tour-bubble {
   position: absolute; display: grid; gap: 8px; padding: 18px 20px 16px 20px; border-radius: 28px 28px 28px 10px;
-  background: #fff; box-shadow: 0 30px 70px -20px rgba(11,28,77,.55); animation: tour-in .35s cubic-bezier(.2,1.2,.4,1) both;
+  background: var(--surface); box-shadow: 0 30px 70px -20px rgba(11,28,77,.55); animation: tour-in .35s cubic-bezier(.2,1.2,.4,1) both;
   transition: top .35s, left .35s, bottom .35s;
 }
 @keyframes tour-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
-.tour-gz { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(31,95,255,.3); }
+.tour-gz { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px rgba(31,95,255,.3); }
 .tour-head { display: flex; align-items: center; gap: 10px; }
 .tour-head .tour-name { flex: 1; }
 .tour-name { font-size: .72rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; color: var(--blue); }
@@ -49,5 +49,5 @@
   background: rgba(255,255,255,.92); color: var(--navy); font: inherit; font-size: .82rem; font-weight: 650;
   box-shadow: 0 6px 18px -8px rgba(11,28,77,.5);
 }
-.tour-exit:hover { background: #fff; }
+.tour-exit:hover { background: var(--surface); }
 .tour-exit-static { position: static; }

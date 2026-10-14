@@ -9,7 +9,7 @@
 .sku-field[data-locked] input { color: var(--gray-500); }
 .pcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
 .pcols[aria-busy='true'] { opacity: .7; }
-.pcol { display: grid; gap: 12px; padding: 18px 20px; border-radius: 30px 30px 30px 12px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); align-content: start; }
+.pcol { display: grid; gap: 12px; padding: 18px 20px; border-radius: 30px 30px 30px 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); align-content: start; }
 .pcol[data-active] { box-shadow: 0 0 0 2px var(--blue), 0 16px 34px -26px rgba(31,95,255,.5); }
 .pcol header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pcol h2 { margin: 0; color: var(--navy); font-size: 1.15rem; }
@@ -18,9 +18,9 @@
 .pmc small { font-size: .7rem; color: var(--gray-500); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .pmc b { font-size: 1.8rem; letter-spacing: -0.03em; color: var(--navy); font-variant-numeric: tabular-nums; }
 .pmc span { font-weight: 700; color: var(--navy); }
-.pmc[data-tone='ok'] { background: #e3f6ef; } .pmc[data-tone='ok'] b, .pmc[data-tone='ok'] span { color: #0b6a49; }
-.pmc[data-tone='warn'] { background: var(--yellow-soft); } .pmc[data-tone='warn'] b, .pmc[data-tone='warn'] span { color: #7a5600; }
-.pmc[data-tone='bad'] { background: #fdecef; } .pmc[data-tone='bad'] b, .pmc[data-tone='bad'] span { color: #a3182b; }
+.pmc[data-tone='ok'] { background: var(--ok-soft); } .pmc[data-tone='ok'] b, .pmc[data-tone='ok'] span { color: var(--ok-ink); }
+.pmc[data-tone='warn'] { background: var(--yellow-soft); } .pmc[data-tone='warn'] b, .pmc[data-tone='warn'] span { color: var(--warn-ink); }
+.pmc[data-tone='bad'] { background: var(--danger-soft); } .pmc[data-tone='bad'] b, .pmc[data-tone='bad'] span { color: var(--danger-ink); }
 .papply { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-radius: 24px; background: var(--blue-soft); color: var(--navy); }
 .papply .btn { width: auto; padding: 0 22px; height: 44px; }
 .pcat-chosen { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border-radius: 20px; background: var(--blue-soft); }
@@ -30,7 +30,7 @@
 .pcat-chosen em { font-style: normal; font-size: .76rem; color: var(--gray-500); }
 .sfilter-results .pcat-opt { grid-template-columns: minmax(0, 1fr); }
 .psaved { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.psim { display: grid; gap: 8px; padding: 16px; border-radius: 26px 26px 26px 10px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); }
+.psim { display: grid; gap: 8px; padding: 16px; border-radius: 26px 26px 26px 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); }
 .psim header { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
 .psim header strong { color: var(--navy); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .psim-title { margin: 0; font-size: .82rem; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -43,7 +43,7 @@
 .link-danger { color: var(--danger); }
 @media (max-width: 1100px) { .pinputs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ptarget { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .pfree { grid-template-columns: 1fr; } .pinputs { grid-template-columns: 1fr; } }
-.banner-warn { background: var(--yellow-soft); color: #5c4300; }
+.banner-warn { background: var(--yellow-soft); color: var(--warn-ink); }
 
 /* ============ Simulação livre: categorias e medidas ============ */
 .pcat-crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .84rem; color: var(--gray-500); }
@@ -55,7 +55,7 @@
 .pcat-list strong { color: var(--navy); font-size: .86rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcat-list i { font-style: normal; color: var(--blue); font-weight: 700; font-size: .78rem; text-align: right; }
 .pcat-fees { display: inline-flex; gap: 6px; font-size: .72rem; color: var(--gray-500); white-space: nowrap; }
-.pcat-fees span { padding: 2px 8px; border-radius: 99px; background: #fff; box-shadow: inset 0 0 0 1px var(--gray-100); }
+.pcat-fees span { padding: 2px 8px; border-radius: 99px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--gray-100); }
 .pcat-fees b { color: var(--navy); }
 .pcat-usethis { justify-self: start; }
 .pcat-chosen .pcat-fees { margin-top: 4px; }

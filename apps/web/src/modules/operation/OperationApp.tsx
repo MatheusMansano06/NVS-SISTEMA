@@ -5,6 +5,7 @@ import { CentralDevolucoes } from '../central/CentralDevolucoes';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../../shared/ui/Modal';
 import { NoticesBar } from '../../app/NoticesBar';
+import { ThemeSwitch } from '../../shared/theme';
 import { OperationHome } from './OperationHome';
 import { PinChange } from './PinChange';
 import { usePerson } from './PersonContext';
@@ -41,6 +42,7 @@ export function OperationApp() {
           {tab('devolucoes', '/op/devolucoes', '↩︎ Devoluções')}
         </nav>
         <span className="station-user">
+          <ThemeSwitch compact />
           <b>{me.name}</b>
           {me.master && <button type="button" className="act" onClick={() => setTeam(true)}>Equipe</button>}
           <button type="button" className="act" onClick={() => setView('pin')}>Trocar PIN</button>

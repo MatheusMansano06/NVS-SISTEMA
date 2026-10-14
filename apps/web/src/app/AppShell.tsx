@@ -9,6 +9,7 @@ import { TOUR_EVENT } from '../shared/tour/Tour';
 import { usePerson } from '../modules/operation/PersonContext';
 import { PinChange } from '../modules/operation/PinChange';
 import { NoticesBar } from './NoticesBar';
+import { ThemeSwitch } from '../shared/theme';
 import './shell.css';
 
 const NAV: { label: string; icon: IconName; path?: string; master?: boolean }[] = [
@@ -85,6 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="sidebar-user">
           {userMenu && (
             <div className="user-menu" role="menu">
+              <ThemeSwitch />
               <button type="button" role="menuitem" onClick={() => { setUserMenu(false); window.dispatchEvent(new Event(TOUR_EVENT)); }}>
                 <Icon name="info" size={18} /> Rever tour desta tela
               </button>

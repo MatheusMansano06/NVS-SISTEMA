@@ -139,7 +139,9 @@ export function SyncProgress({ onAdvance, justConnected }: { onAdvance: () => vo
               <p className="sync-meta">
                 {run.status === 'failed'
                   ? run.error
-                  : `${run.ordersImported.toLocaleString('pt-BR')} pedidos importados até agora. O dashboard se atualiza sozinho.`}
+                  : run.phase === 'finishing'
+                    ? 'Últimos ajustes: frete pago de cada envio e a fatura do ML. Pode levar alguns minutos — o sistema já pode ser usado.'
+                    : `${run.ordersImported.toLocaleString('pt-BR')} pedidos importados até agora. O dashboard se atualiza sozinho.`}
               </p>
             </div>
             {run.status === 'failed' && <Button onClick={() => void retry(c)}>Tentar novamente</Button>}

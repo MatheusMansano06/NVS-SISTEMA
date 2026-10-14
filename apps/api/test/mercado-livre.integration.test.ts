@@ -380,7 +380,7 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     const status = (await app.inject({ method: 'GET', url: '/api/v1/integrations/mercado-livre/status', cookies })).json();
     const conn = status.connections[0];
     expect(conn).toMatchObject({ nickname: 'LOJA TESTE ML', mlUserId: String(sellerId), status: 'active' });
-    expect(conn.sync).toMatchObject({ status: 'done', progress: 100, phase: 'shipping_costs' });
+    expect(conn.sync).toMatchObject({ status: 'done', progress: 100, phase: 'finishing' });
     expect(conn.sync.ordersImported).toBe(120);
     expect(fake.calls.refresh).toBe(1); // token expirando foi renovado uma única vez
 

@@ -38,7 +38,10 @@ const PHASE_START: Record<SyncPhase, number> = {
   listings: SYNC_PHASE_END.orders_recent,
   orders_history: SYNC_PHASE_END.listings,
   shipping_costs: SYNC_PHASE_END.orders_history,
+  finishing: SYNC_PHASE_END.shipping_costs,
 };
+/** Sinal de vida da sincronização: sem ele por 3 min, a execução é dada como interrompida (servidor reiniciou). */
+const HEARTBEAT_MS = 30_000;
 const MAX_LISTING_PAGES = 200; // até 20 mil anúncios por status (scan de 100 em 100)
 
 /**
@@ -50,6 +53,8 @@ export class MlIntegrationService {
   onManualSync: ((tenantId: string) => void) | null = null;
 
   private inflight = new Set<Promise<void>>();
+  /** Conexões com sincronização completa rodando neste processo: um segundo clique não abre outra. */
+  private activeSyncs = new Set<string>();
   private processingOrders = new Set<string>();
   private refreshing = new Map<string, Promise<{ token: string; conn: ConnectionRow }>>();
   // fila de notificações: o ML reenvia muito; repetidas em 30s são descartadas e a fila tem limite
@@ -193,6 +198,7 @@ export class MlIntegrationService {
   // ================= Sincronização progressiva
   /** Inicia (em segundo plano) se não houver uma em andamento. */
   async startSync(tenantId: string, connectionId: string): Promise<void> {
+    if (this.activeSyncs.has(connectionId)) return;
     const runId = await this.db.withTenant(tenantId, async (db) => {
       await this.repo.lockSync(db, connectionId); // dois cliques seguidos não abrem duas sincronizações
       const last = await this.repo.latestRun(db, connectionId);
@@ -200,9 +206,17 @@ export class MlIntegrationService {
       return this.repo.startRun(db, tenantId, connectionId);
     });
     if (!runId) return;
+    this.activeSyncs.add(connectionId);
+    // sinal de vida enquanto roda: etapas longas (frete pago, fatura) não parecem "interrompidas"
+    const beat = setInterval(() => void this.run(tenantId, runId, {}).catch(() => undefined), HEARTBEAT_MS);
+    beat.unref();
     const job = this.runSync(tenantId, connectionId, runId)
       .catch((err) => this.log.error({ err }, 'Mercado Livre: sincronização falhou'))
-      .finally(() => this.inflight.delete(job));
+      .finally(() => {
+        clearInterval(beat);
+        this.activeSyncs.delete(connectionId);
+        this.inflight.delete(job);
+      });
     this.inflight.add(job);
   }
 
@@ -241,9 +255,15 @@ export class MlIntegrationService {
 
       // 4. fretes (comprador/vendedor), cupons e devoluções de todo o período importado
       await this.enrichFinance(tenantId, connectionId, runId, conn, d90, true);
+
+      // 5. últimos ajustes (longos: até 2 mil envios e a fatura do ML, que limita rajadas)
+      await this.run(tenantId, runId, { phase: 'finishing', progress: SYNC_PHASE_END.shipping_costs });
       await this.backfillAddresses(tenantId, connectionId, conn, 2000);
+      await this.run(tenantId, runId, { progress: 94 });
       await this.backfillPaidFreight(tenantId, connectionId, conn, 2000);
+      await this.run(tenantId, runId, { progress: 97 });
       await this.syncBilling(tenantId, connectionId, conn);
+      await this.run(tenantId, runId, { progress: 99 });
       await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
 
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
@@ -411,7 +431,7 @@ export class MlIntegrationService {
         });
         done++;
         if (reportProgress && runId && done % 10 === 0) {
-          await this.run(tenantId, runId, { progress: Math.round(start + (100 - start) * (done / pending.length)) });
+          await this.run(tenantId, runId, { progress: Math.round(start + (SYNC_PHASE_END.shipping_costs - start) * (done / pending.length)) });
         }
       }
     };

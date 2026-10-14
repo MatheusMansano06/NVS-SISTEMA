@@ -1,4 +1,4 @@
-export const SYNC_PHASES = ['profile', 'orders_recent', 'listings', 'orders_history', 'shipping_costs'] as const;
+export const SYNC_PHASES = ['profile', 'orders_recent', 'listings', 'orders_history', 'shipping_costs', 'finishing'] as const;
 export type SyncPhase = (typeof SYNC_PHASES)[number];
 
 export const SYNC_PHASE_LABELS: Record<SyncPhase, string> = {
@@ -7,6 +7,7 @@ export const SYNC_PHASE_LABELS: Record<SyncPhase, string> = {
   listings: 'Anúncios e fotos',
   orders_history: 'Histórico de 31 a 90 dias',
   shipping_costs: 'Fretes, cupons e devoluções',
+  finishing: 'Últimos ajustes: endereços, frete pago e fatura',
 };
 
 /** Progresso (0–100) ao concluir cada etapa: o sistema vai se preenchendo por partes. */
@@ -15,7 +16,8 @@ export const SYNC_PHASE_END: Record<SyncPhase, number> = {
   orders_recent: 45,
   listings: 60,
   orders_history: 85,
-  shipping_costs: 100,
+  shipping_costs: 92,
+  finishing: 100,
 };
 
 export interface SyncRunDto {

@@ -968,6 +968,14 @@ describe.skipIf(!TEST_DB)('Central de Devoluções — contrato das telas origin
 
     // sincronização: ML conectado, Shopee não integrada; barra parada em 100%
     expect((await call('GET', '/sincronizacao')).json()).toMatchObject({ mercado_livre: { ok: true }, logistica_venda: { ok: true }, shopee: { ok: false } });
+    // relatório da leitura: o que o ML respondeu, para conferir com o painel de Pós-venda
+    const rel = (await call('GET', '/sincronizacao')).json().mercado_livre.resultado.relatorio;
+    expect(rel.buscas).toEqual([
+      expect.objectContaining({ status: 'opened', filtro: 'todas', total: 1, lidas: 1, erro: null }),
+      expect.objectContaining({ status: 'closed', total: 0, erro: null }),
+    ]);
+    expect(rel).toMatchObject({ comDevolucao: { delivered: 1 }, semDevolucao: {}, falhas: [], gravadas: 1 });
+    expect(rel.sondagens.length).toBeGreaterThan(3);
     expect((await call('GET', '/sincronizacao/progresso')).json()).toMatchObject({ rodando: false, percentual: 100, pendentes: { mediacao_origem: 0, mediacao_atuacao: 0 } });
     expect((await call('GET', '/triagens-full')).json()).toEqual([]);
 

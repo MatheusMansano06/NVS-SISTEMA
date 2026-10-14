@@ -4,7 +4,7 @@ import { api } from "./api";
 
 interface Progresso {
   refazendo?: string | null; varredura?: boolean; rodando: boolean; tarefa: string | null; percentual: number;
-  iniciada_em: string | null; terminada_em: string | null; pendentes: Record<string, number>;
+  iniciada_em: string | null; terminada_em: string | null; pendentes: Record<string, number>; erro?: string | null;
 }
 
 const NOME_TAREFA: Record<string, string> = {
@@ -42,15 +42,17 @@ export function BarraSincronizacao({ onTerminou }: { onTerminou: () => void }) {
   // Selo curto (o cabeçalho não tem espaço sobrando); o detalhe vai na dica do mouse.
   const texto = p.rodando
     ? `${p.refazendo ? `Relendo fatura ${p.refazendo.slice(5, 7)}/${p.refazendo.slice(2, 4)}` : p.varredura ? "Varredura do dia" : "Sincronizando"} ${Math.floor(p.percentual)}%`
-    : pendentes > 0 ? `Sincronizado ${hora(p.terminada_em!)} · faltam ${pendentes}` : `✓ Sincronizado ${hora(p.terminada_em!)}`;
+    : p.erro ? `Leitura com erro ${hora(p.terminada_em!)}`
+      : pendentes > 0 ? `Sincronizado ${hora(p.terminada_em!)} · faltam ${pendentes}` : `✓ Sincronizado ${hora(p.terminada_em!)}`;
   const dica = p.rodando
     ? `Agora: ${NOME_TAREFA[p.tarefa ?? ""] ?? p.tarefa ?? "iniciando"}`
-    : pendentes > 0 ? `Faltam ${pendentes} consultas para o B.I; continuam na próxima rodada (a cada 10 min)`
+    : p.erro ? `O Mercado Livre não respondeu tudo: ${p.erro}. Veja em “O que veio do ML”.`
+      : pendentes > 0 ? `Faltam ${pendentes} consultas para o B.I; continuam na próxima rodada (a cada 10 min)`
       : "Tudo sincronizado. A próxima rodada é em até 10 min; a varredura completa roda 1x por dia às 23h.";
 
   return (
     <>
-      <span className={p.rodando ? "sinc-selo rodando" : pendentes > 0 ? "sinc-selo pendente" : "sinc-selo ok"}
+      <span className={p.rodando ? "sinc-selo rodando" : p.erro ? "sinc-selo erro" : pendentes > 0 ? "sinc-selo pendente" : "sinc-selo ok"}
             role="status" title={dica}>{texto}</span>
       {p.rodando && (
         <div className="sinc-barra" role="progressbar" aria-label="Sincronização" aria-valuemin={0} aria-valuemax={100}

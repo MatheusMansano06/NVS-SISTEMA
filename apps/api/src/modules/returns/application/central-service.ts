@@ -1255,6 +1255,7 @@ export class CentralService {
       iniciada_em: base.iniciada_em ? base.iniciada_em.toISOString() : null,
       terminada_em: terminada ? new Date(terminada).toISOString() : null,
       percentual: this.sync?.progress.percent(tenantId) ?? 0,
+      erro: estado.mercado_livre && !estado.mercado_livre.ok ? estado.mercado_livre.erro : null,
       pendentes: Object.fromEntries(['mediacao_origem', 'mediacao_atuacao'].map((t) => [t, Number((estado[t]?.resultado as Json)?.faltam ?? 0)])),
     };
   }

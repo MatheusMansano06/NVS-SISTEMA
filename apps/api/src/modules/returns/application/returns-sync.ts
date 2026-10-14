@@ -19,6 +19,17 @@ const PACE_MS = 150;
 const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 const tooMany = (err: unknown) => (err as { status?: number })?.status === 429;
 
+export interface SyncReport {
+  buscas: { status: 'opened' | 'closed'; filtro: string; total: number; lidas: number; erro: string | null }[];
+  comDevolucao: Record<string, number>; // por status da devolução no ML
+  semDevolucao: Record<string, number>; // por tipo/etapa da reclamação
+  falhas: { reclamacao: string; erro: string }[];
+  naoEntregues: number;
+  gravadas: number;
+  /** Totais que o ML responde para variações da busca (para achar onde estão as devoluções que faltam). */
+  sondagens?: { consulta: string; total: number | null; erro?: string }[];
+}
+
 /** Repete a chamada enquanto o ML disser 429; qualquer outro erro sobe na hora. */
 export async function patient<T>(fn: () => Promise<T>, wait: (ms: number) => Promise<void> = sleep): Promise<T> {
   for (let attempt = 0; ; attempt++) {
@@ -43,6 +54,8 @@ export class ReturnsSync {
   private readonly triage = new Map<string, string | null>();
   private readonly running = new Set<string>();
   readonly progress = new SyncProgress();
+  /** O que o ML respondeu na última leitura de cada empresa (a Central mostra, para conferir com o painel do ML). */
+  private readonly reports = new Map<string, SyncReport>();
   readonly enrichment: ReturnsEnrichment;
 
   constructor(
@@ -53,6 +66,15 @@ export class ReturnsSync {
     private readonly log: FastifyBaseLogger,
   ) {
     this.enrichment = new ReturnsEnrichment(db);
+  }
+
+  private report(tenantId: string): SyncReport {
+    let r = this.reports.get(tenantId);
+    if (!r) {
+      r = { buscas: [], comDevolucao: {}, semDevolucao: {}, falhas: [], naoEntregues: 0, gravadas: 0 };
+      this.reports.set(tenantId, r);
+    }
+    return r;
   }
 
   isRunning(tenantId: string) {
@@ -71,6 +93,7 @@ export class ReturnsSync {
     if (this.running.has(tenantId)) return { claims: 0, saved: 0, failures: 0 };
     this.running.add(tenantId);
     const tasks = opts.redo ? ['refazer_ml', 'refazer_fatura', 'fechamento'] : TASKS;
+    this.reports.delete(tenantId); // relatório novo a cada rodada
     this.progress.start(tenantId, tasks, { sweep: opts.sweep, redoing: opts.redo ?? null });
     try {
       const st = await this.ml.status(tenantId);
@@ -89,7 +112,9 @@ export class ReturnsSync {
           this.log.warn({ err, tenantId }, 'Devoluções: conta do ML falhou na sincronização');
         }
       }
-      this.progress.record(tenantId, 'mercado_livre', { ok: !erro, erro, resultado: { ...total } });
+      const buscaComErro = this.report(tenantId).buscas.find((b) => b.erro);
+      const erroGeral = erro ?? (buscaComErro ? `Busca de reclamações ${buscaComErro.status === 'opened' ? 'abertas' : 'encerradas'}: ${buscaComErro.erro}` : null);
+      this.progress.record(tenantId, 'mercado_livre', { ok: !erroGeral, erro: erroGeral, resultado: { ...total, relatorio: this.report(tenantId) } });
       for (const c of conns) {
         const { conn } = await this.ml.accessToken(tenantId, c.id).catch(() => ({ conn: null }));
         if (!conn) continue;
@@ -104,7 +129,7 @@ export class ReturnsSync {
         db.query(
           `INSERT INTO return_sync_state (tenant_id, last_sync, last_result) VALUES ($1, now(), $2)
            ON CONFLICT (tenant_id) DO UPDATE SET last_sync = now(), last_result = EXCLUDED.last_result`,
-          [tenantId, JSON.stringify(total)],
+          [tenantId, JSON.stringify({ ...total, relatorio: this.report(tenantId), erro: erroGeral })],
         ),
       );
       return total;
@@ -148,24 +173,45 @@ export class ReturnsSync {
     const get = <T>(path: string) => patient(async () => this.api.rawGet<T>((await this.ml.accessToken(tenantId, connectionId)).token, path));
 
     // o ML não aceita só vendedor + data: exige um filtro "de verdade", então busca por status
+    const rep = this.report(tenantId);
     for (const status of ['opened', 'closed'] as const) {
       const dateFilter = status === 'opened' && opts.allOpen ? '' : `&range=last_updated:after:${encodeURIComponent(since)}`;
+      const busca = { status, filtro: dateFilter ? `atualizadas desde ${since.slice(0, 10)}` : 'todas', total: 0, lidas: 0, erro: null as string | null };
+      rep.buscas.push(busca);
       let offset = 0;
       let total = 1;
       while (offset < Math.min(total, MAX_OFFSET)) {
-        const page = await get<{ paging: { total: number }; data: Json[] }>(
-          `/post-purchase/v1/claims/search?players.user_id=${conn.ml_user_id}&players.role=respondent&status=${status}${dateFilter}&sort=last_updated:desc&limit=100&offset=${offset}`,
-        );
-        if (!page) break;
+        let page: { paging: { total: number }; data: Json[] } | null;
+        try {
+          page = await get<{ paging: { total: number }; data: Json[] }>(
+            `/post-purchase/v1/claims/search?players.user_id=${conn.ml_user_id}&players.role=respondent&status=${status}${dateFilter}&sort=last_updated:desc&limit=100&offset=${offset}`,
+          );
+        } catch (err) {
+          busca.erro = (err as Error).message.slice(0, 200); // a busca falhou: registra e segue para a próxima
+          break;
+        }
+        if (!page) {
+          busca.erro = 'O Mercado Livre negou ou não achou a busca de reclamações (403/404).';
+          break;
+        }
         total = page.paging?.total ?? 0;
+        busca.total = total;
         offset += 100;
         onProgress((status === 'opened' ? 0 : 0.5) + Math.min(1, offset / Math.max(1, Math.min(total, MAX_OFFSET))) / 2);
         const records: ReturnRecord[] = [];
         for (const claim of page.data ?? []) {
+          busca.lidas++;
           await sleep(PACE_MS);
           try {
-            const ret = await get<Json>(`/post-purchase/v2/claims/${claim.id}/returns`);
-            if (!ret) continue; // reclamação sem devolução física é mediação pura (fora desta central)
+            // ficha da devolução; se o ML não der pela rota atual, tenta a antiga antes de descartar
+            const ret = (await get<Json>(`/post-purchase/v2/claims/${claim.id}/returns`)) ?? (await get<Json>(`/v2/claims/${claim.id}/returns`));
+            if (!ret) {
+              // reclamação sem devolução física é mediação pura (fora desta central) — mas conta no relatório
+              const temDevolucao = (claim.related_entities ?? []).some((e: unknown) => String(e).toLowerCase().includes('return'));
+              rep.semDevolucao[`${claim.type ?? '?'}/${claim.stage ?? '?'}${temDevolucao ? ' (com devolução ligada!)' : ''}`] =
+                (rep.semDevolucao[`${claim.type ?? '?'}/${claim.stage ?? '?'}${temDevolucao ? ' (com devolução ligada!)' : ''}`] ?? 0) + 1;
+              continue;
+            }
             records.push(
               normalizeClaim({
                 claim,
@@ -178,19 +224,57 @@ export class ReturnsSync {
                 review: ret.status === 'delivered' ? await get<Json>(`/post-purchase/v1/returns/${ret.id}/reviews`) : null,
               }),
             );
+            rep.comDevolucao[String(ret.status ?? '?')] = (rep.comDevolucao[String(ret.status ?? '?')] ?? 0) + 1;
           } catch (err) {
             // uma reclamação inacessível ou fora do padrão não pode travar as outras
             out.failures++;
+            if (rep.falhas.length < 15) rep.falhas.push({ reclamacao: String(claim?.id), erro: (err as Error).message.slice(0, 160) });
             this.log.warn({ err, tenantId, claim: claim?.id }, 'Devoluções: reclamação ignorada');
           }
         }
-        // grava a cada página: uma carga longa que cair no meio não perde o que já veio
-        await this.db.withTenant(tenantId, async (db) => {
-          for (const r of records) await this.repo.upsert(db, tenantId, conn.account_id, r);
+        // grava a cada página: uma carga longa que cair no meio não perde o que já veio; um registro ruim não derruba a página
+        const saved = await this.db.withTenant(tenantId, async (db) => {
+          let n = 0;
+          for (const r of records) {
+            try {
+              await db.query('SAVEPOINT r');
+              await this.repo.upsert(db, tenantId, conn.account_id, r);
+              await db.query('RELEASE SAVEPOINT r');
+              n++;
+            } catch (err) {
+              await db.query('ROLLBACK TO SAVEPOINT r');
+              out.failures++;
+              if (rep.falhas.length < 15) rep.falhas.push({ reclamacao: r.externalId, erro: `ao gravar: ${(err as Error).message.slice(0, 140)}` });
+            }
+          }
+          return n;
         });
-        out.saved += records.length;
+        out.saved += saved;
+        rep.gravadas += saved;
       }
       out.claims += Math.min(total, MAX_OFFSET);
+    }
+
+    // sondagens: quanto o ML diz ter em outras formas de buscar (só o total, uma chamada cada)
+    const u = conn.ml_user_id;
+    const probes: [string, string][] = [
+      ['vendedor (player_role) abertas', `player_role=respondent&player_user_id=${u}&status=opened`],
+      ['vendedor (player_role) encerradas', `player_role=respondent&player_user_id=${u}&status=closed`],
+      ['tipo return, abertas', `players.user_id=${u}&players.role=respondent&type=return&status=opened`],
+      ['tipo returns, abertas', `players.user_id=${u}&players.role=respondent&type=returns&status=opened`],
+      ['tipo mediations, abertas', `players.user_id=${u}&players.role=respondent&type=mediations&status=opened`],
+      ['etapa claim, abertas', `players.user_id=${u}&players.role=respondent&stage=claim&status=opened`],
+      ['etapa dispute, abertas', `players.user_id=${u}&players.role=respondent&stage=dispute&status=opened`],
+      ['encerradas nos últimos 30 dias', `players.user_id=${u}&players.role=respondent&status=closed&range=last_updated:after:${encodeURIComponent(new Date(Date.now() - 30 * 86_400_000).toISOString().replace('Z', '+00:00'))}`],
+    ];
+    rep.sondagens = [];
+    for (const [consulta, q] of probes) {
+      try {
+        const page = await get<{ paging?: { total?: number } }>(`/post-purchase/v1/claims/search?${q}&limit=1&offset=0`);
+        rep.sondagens.push({ consulta, total: page ? (page.paging?.total ?? 0) : null, ...(page ? {} : { erro: '403/404' }) });
+      } catch (err) {
+        rep.sondagens.push({ consulta, total: null, erro: (err as Error).message.slice(0, 120) });
+      }
     }
 
     // pacote não entregue que voltou: não abre reclamação. Janela de 60 dias (ou a da carga, se maior), todas as páginas
@@ -209,6 +293,8 @@ export class ReturnsSync {
       for (const r of notDelivered) await this.repo.upsert(db, tenantId, conn.account_id, r);
     });
     out.saved += notDelivered.length;
+    rep.naoEntregues += notDelivered.length;
+    rep.gravadas += notDelivered.length;
     return out;
   }
 

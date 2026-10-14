@@ -128,3 +128,12 @@
 .central-dev .a-caminho-numero { border: 0; border-radius: 14px; box-shadow: 0 0 0 1px var(--gray-100); white-space: nowrap; }
 .central-dev .a-caminho-numero[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--blue); background: var(--blue-soft); }
 .central-dev .cd-busca { min-width: 300px; }
+
+/* ---------- O que veio do ML (relatório da leitura) ---------- */
+.central-dev .modal.leitura-ml { width: min(640px, 100%); max-height: 90vh; overflow: auto; }
+.central-dev .leitura-ml h3 { margin: 1rem 0 .4rem; font-size: .95rem; color: var(--navy); }
+.central-dev .lml-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.central-dev .lml-lista li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 12px; border-radius: 12px; background: var(--gray-50); }
+.central-dev .lml-lista li b { color: var(--navy); font-size: 1.05rem; }
+.central-dev .lml-lista li small { grid-column: 1 / -1; color: var(--gray-500); }
+.central-dev .sinc-selo.erro { background: #fde4e7; color: #a3121f; }

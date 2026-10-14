@@ -13,6 +13,7 @@ import { RetornoFullPage } from "./modules/retirada-full/RetornoFullPage";
 import { ResumoPage } from "./modules/resumo/ResumoPage";
 import { ehEtiquetaFull, RetiradaFullModal } from "./modules/retirada-full/RetiradaFullModal";
 import { BarraSincronizacao } from "./shared/BarraSincronizacao";
+import { LeituraML } from "./shared/LeituraML";
 import type { Plataforma } from "./shared/devolucao";
 import { Icone } from "./shared/Icone";
 import type { Envio } from "./shared/operacao";
@@ -96,6 +97,7 @@ function Central({ telas, modo }: { telas?: IdTela[]; modo: Modo }) {
   }
 
   const nav: Navegacao = { abrir, irPara, versao, statusInicial, filtroInicial };
+  const [leitura, setLeitura] = useState(false);
   return (
     <div className="cd-app">
       <header className="skus-head cd-head">
@@ -105,6 +107,7 @@ function Central({ telas, modo }: { telas?: IdTela[]; modo: Modo }) {
         </div>
         <div className="cd-head-acoes">
           <BarraSincronizacao onTerminou={recarregar} />
+          {modo === "analise" && <button type="button" className="link cd-tour" onClick={() => setLeitura(true)}>O que veio do ML</button>}
           <button type="button" className="link cd-tour" onClick={tour.start}>Rever com a Gertrudez</button>
         </div>
       </header>
@@ -137,6 +140,7 @@ function Central({ telas, modo }: { telas?: IdTela[]; modo: Modo }) {
       {codigo && (ehEtiquetaFull(codigo)
         ? <RetiradaFullModal codigo={codigo} onFechar={fechar} />
         : <ConferenciaModal codigo={codigo} onFechar={fechar} onMudou={() => setVersao((v) => v + 1)} />)}
+      {leitura && <LeituraML onFechar={() => setLeitura(false)} />}
       {tour.element}
     </div>
   );

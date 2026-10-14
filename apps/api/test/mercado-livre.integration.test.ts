@@ -469,9 +469,25 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect(st.connections[0].sync.status).toBe('done'); // card de progresso segue mostrando a completa
     expect(Date.parse(st.connections[0].lastSyncedAt)).toBeGreaterThan(Date.now() - 60_000);
 
+    // anúncio excluído no ML (a base ainda o tinha como ativo) sai como encerrado na completa e some do Cadastro de SKUs
+    const meTid = (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies })).json().tenant.id as string;
+    const ghostDb = new Database(TEST_DB!);
+    await ghostDb.withTenant(meTid, (c) =>
+      c.query(
+        `INSERT INTO listings (tenant_id, account_id, marketplace, external_id, title, status, sku, updated_at)
+         SELECT tenant_id, account_id, 'mercado_livre', 'MLB777', 'Anúncio excluído', 'active', 'SKU-FANTASMA', now() - interval '1 day'
+           FROM listings WHERE external_id = 'MLB0' LIMIT 1`,
+      ),
+    );
+    expect((await app.inject({ method: 'GET', url: '/api/v1/skus?q=FANTASMA', cookies })).json().counts.all).toBe(1);
+
     // reimportar não duplica
     await app.inject({ method: 'POST', url: '/api/v1/integrations/mercado-livre/sync', cookies, payload: {} });
     await app.ml!.whenIdle();
+    expect((await app.inject({ method: 'GET', url: '/api/v1/skus?q=FANTASMA', cookies })).json().counts.all).toBe(0);
+    const ghost = await ghostDb.withTenant(meTid, (c) => c.query("SELECT status FROM listings WHERE external_id = 'MLB777'"));
+    expect(ghost.rows[0].status).toBe('closed');
+    await ghostDb.close();
     const again = (await app.inject({ method: 'GET', url: '/api/v1/dashboard/summary?period=30d&fresh=1', cookies })).json();
     expect(again.kpis.orders).toBe(paid30 + 1); // +1 = venda trazida pela atualização automática acima
 

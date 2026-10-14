@@ -112,14 +112,18 @@ export class PgSkuRepository {
     return orderIds.length;
   }
 
-  /** Lista consolidada: SKUs vistos em vendas, anúncios (e variações) ou já cadastrados. */
+  /**
+   * Lista consolidada: SKUs dos anúncios que existem hoje no marketplace (ativos, pausados, em revisão; com variações)
+   * e os vendidos nos últimos 90 dias (ainda pesam na margem). Anúncio encerrado/excluído e venda antiga do histórico
+   * não entram — o custo cadastrado deles continua guardado.
+   */
   async list(db: Queryable, q: { q?: string; filter: SkuFilter; offset: number; limit: number }) {
     const base = `
       WITH all_skus AS (
-        SELECT sku FROM order_items
-        UNION SELECT sku FROM listings WHERE sku IS NOT NULL
-        UNION SELECT unnest(variation_skus) FROM listings
-        UNION SELECT sku FROM sku_costs
+        SELECT sku FROM listings WHERE sku IS NOT NULL AND status NOT IN ('closed', 'inactive')
+        UNION SELECT unnest(variation_skus) FROM listings WHERE status NOT IN ('closed', 'inactive')
+        UNION SELECT i.sku FROM order_items i JOIN orders o ON o.id = i.order_id
+               WHERE o.ordered_at >= now() - interval '90 days'
       ),
       sold AS (
         SELECT i.sku, sum(i.quantity) AS units, sum(i.quantity * i.unit_price) / nullif(sum(i.quantity), 0) AS avg_price

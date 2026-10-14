@@ -438,12 +438,22 @@ export class MlIntegrationService {
         if (!scrollId) break;
       }
     }
-    // os que estavam pausados na base e não estão mais (reativados/encerrados) também são atualizados
-    const known = await this.db.withTenant(tenantId, (db) => this.sales.pausedListingIds(db, conn.account_id));
+    // os que estavam pausados (ou, na completa, vivos) na base e não vieram agora — reativados, encerrados ou
+    // excluídos no ML — também são relidos
+    const startedAt = new Date();
+    const known = await this.db.withTenant(tenantId, (db) =>
+      scope === 'all' ? this.sales.liveListingIds(db, conn.account_id) : this.sales.pausedListingIds(db, conn.account_id),
+    );
+    const seen = new Set(ids);
+    const vanished = known.filter((id) => !seen.has(id));
     const all = [...new Set([...ids, ...known])];
     await this.importListings(tenantId, connectionId, conn, all, async (done) => {
       if (runId) await this.run(tenantId, runId, { progress: Math.round(start + span * 0.9 * done) });
     });
+    // o ML nem devolveu (anúncio excluído): sai das listas como encerrado
+    if (vanished.length) {
+      await this.db.withTenant(tenantId, (db) => this.sales.closeUnseenListings(db, conn.account_id, vanished, startedAt));
+    }
     await this.fillMissingListings(tenantId, connectionId, conn);
   }
 

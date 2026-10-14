@@ -296,6 +296,24 @@ export class SalesIngestion {
     return rows.map((r) => r.external_id);
   }
 
+  /** Anúncios que a base considera vivos (ativos, pausados ou em revisão). */
+  async liveListingIds(db: Queryable, accountId: string): Promise<string[]> {
+    const { rows } = await db.query<{ external_id: string }>(
+      "SELECT external_id FROM listings WHERE account_id = $1 AND source = 'marketplace' AND status NOT IN ('closed', 'inactive')",
+      [accountId],
+    );
+    return rows.map((r) => r.external_id);
+  }
+
+  /** Anúncios que o ML não devolveu na releitura (excluídos): marcados como encerrados. */
+  async closeUnseenListings(db: Queryable, accountId: string, ids: string[], since: Date): Promise<void> {
+    await db.query(
+      `UPDATE listings SET status = 'closed', updated_at = now()
+        WHERE account_id = $1 AND external_id = ANY($2::text[]) AND updated_at < $3 AND status <> 'closed'`,
+      [accountId, ids, since],
+    );
+  }
+
   async setShippingCost(db: Queryable, orderId: string, cost: number): Promise<void> {
     await db.query('UPDATE orders SET shipping_cost = $2 WHERE id = $1', [orderId, cost]);
   }

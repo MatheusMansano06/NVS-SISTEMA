@@ -12,6 +12,7 @@ export function ImportModal({ onDone }: { onDone: () => void }) {
   const [report, setReport] = useState<SkuImportReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [ignoreUnknown, setIgnoreUnknown] = useState(false);
 
   async function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -27,14 +28,15 @@ export function ImportModal({ onDone }: { onDone: () => void }) {
       return;
     }
     setCsv(text);
-    await run(text, true);
+    setIgnoreUnknown(false);
+    await run(text, true, false);
   }
 
-  async function run(text: string, dryRun: boolean) {
+  async function run(text: string, dryRun: boolean, ignore = ignoreUnknown) {
     setBusy(true);
     setError('');
     try {
-      const r = await skusApi.importCsv(text, dryRun);
+      const r = await skusApi.importCsv(text, dryRun, ignore);
       setReport(r);
       if (!dryRun && r.status === 'ok') onDone();
     } catch (err) {
@@ -49,7 +51,7 @@ export function ImportModal({ onDone }: { onDone: () => void }) {
       <h2>Importar planilha</h2>
       <p className="lead">
         Envie a planilha do <b>Excel (.xlsx)</b> ou <b>.csv</b> com as colunas <code>SKU</code> e{' '}
-        <code>Custo Unitario</code>. Coluna de imposto, se houver, é ignorada: o imposto é a alíquota única da empresa.
+        <code>Custo Unitario</code>. Custo vazio ou zero é aceito (o SKU fica “sem custo”). SKU que não existe nos seus anúncios é barrado para você corrigir. Coluna de imposto, se houver, é ignorada: o imposto é a alíquota única da empresa.
       </p>
       <label className="dropzone">
         <input type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => void onFile(e)} />
@@ -61,7 +63,30 @@ export function ImportModal({ onDone }: { onDone: () => void }) {
 
       {report && (
         <div className="import-report" data-status={report.status}>
-          {report.status === 'rejected' ? (
+          {report.status === 'rejected' && report.unknownSkus.length > 0 ? (
+            <>
+              <strong>
+                {report.unknownSkus.length} SKU(s) da planilha não existem em nenhum anúncio do Mercado Livre — nada foi gravado.
+              </strong>
+              <p className="import-hint">Corrija a planilha (SKU digitado errado ou anúncio de outra conta) e envie de novo, ou importe só os que existem.</p>
+              <ul className="import-unknown">
+                {report.unknownSkus.slice(0, 200).map((r) => (
+                  <li key={`${r.line}-${r.sku}`}>Linha {r.line}: <b>{r.sku}</b></li>
+                ))}
+                {report.unknownSkus.length > 200 && <li>… e mais {report.unknownSkus.length - 200}</li>}
+              </ul>
+              <Button
+                variant="ghost"
+                loading={busy}
+                onClick={() => {
+                  setIgnoreUnknown(true);
+                  void run(csv, true, true);
+                }}
+              >
+                Importar só os {report.received - report.unknownSkus.length} que existem
+              </Button>
+            </>
+          ) : report.status === 'rejected' ? (
             <>
               <strong>Planilha com {report.invalidRows.length} linha(s) inválida(s) — nada foi gravado.</strong>
               <ul>
@@ -77,7 +102,12 @@ export function ImportModal({ onDone }: { onDone: () => void }) {
                 <span><b>{report.created}</b> novos</span>
                 <span><b>{report.updated}</b> alterados</span>
                 <span><b>{report.unchanged}</b> sem mudança</span>
+                {report.withoutCost > 0 && <span><b>{report.withoutCost}</b> sem custo</span>}
+                {report.ignored > 0 && <span><b>{report.ignored}</b> pulados (não existem no ML)</span>}
               </div>
+              {report.withoutCost > 0 && (
+                <p className="import-hint">Linhas com custo vazio ou zero foram aceitas: esses SKUs continuam “sem custo” no cadastro até você preencher.</p>
+              )}
               {report.status === 'dry_run' && (
                 <Button onClick={() => void run(csv, false)} loading={busy} disabled={!report.created && !report.updated}>
                   Confirmar importação

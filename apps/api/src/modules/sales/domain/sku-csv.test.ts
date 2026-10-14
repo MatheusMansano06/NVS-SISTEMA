@@ -23,13 +23,17 @@ describe('parseSkuCsv', () => {
     ]);
   });
   it('aponta linhas inválidas sem descartar as demais', () => {
-    const { rows } = parseSkuCsv('sku,custo_unit,imposto_pct\nA,0,9\n,10,9\nB,10,150\nC,abc,1');
+    const { rows } = parseSkuCsv('sku,custo_unit,imposto_pct\nA,0,9\n,10,9\nB,10,150\nC,abc,1\nD,-5,1\nE,,9');
     expect(rows.map((r) => r.error)).toEqual([
-      'custo precisa ser maior que zero',
+      null, // custo zero é aceito: o SKU fica "sem custo"
       'SKU vazio',
       'imposto fora de 0 a 100',
       'custo inválido',
+      'custo não pode ser negativo',
+      null, // custo vazio também
     ]);
+    expect(rows[0]!.custoUnit).toBeNull();
+    expect(rows[5]!.custoUnit).toBeNull();
   });
   it('exige as colunas mínimas', () => {
     expect(parseSkuCsv('produto;valor\nx;1').headerError).toMatch(/sku/);

@@ -21,6 +21,8 @@ export const listSkusSchema = z.object({
 export const importSkusSchema = z.object({
   csv: z.string().min(1).max(2_000_000),
   dryRun: z.boolean().default(true),
+  /** Importa só os SKUs que existem nos anúncios/vendas e pula os outros (em vez de barrar a planilha). */
+  ignoreUnknown: z.boolean().default(false),
 });
 
 
@@ -49,5 +51,11 @@ export interface SkuImportReport {
   created: number;
   updated: number;
   unchanged: number;
+  /** Linhas com custo vazio ou zero: aceitas, o SKU fica "sem custo" no cadastro. */
+  withoutCost: number;
+  /** SKUs que não existem em nenhum anúncio nem venda do marketplace (barram a planilha, a não ser que se peça para pular). */
+  unknownSkus: { line: number; sku: string }[];
+  /** SKUs desconhecidos que foram pulados (com "importar só os que existem"). */
+  ignored: number;
   invalidRows: { line: number; sku: string | null; reason: string }[];
 }

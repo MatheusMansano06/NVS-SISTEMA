@@ -68,11 +68,12 @@ export function parseSkuCsv(csv: string): { rows: CsvSkuRow[]; headerError: stri
     const custo = parseBrNumber(cells[idx.custo] ?? '');
     const imposto = idx.imposto >= 0 ? parseBrNumber(cells[idx.imposto] ?? '') : 0;
     let error: string | null = null;
+    // custo vazio ou zero é aceito: o SKU fica "sem custo" no cadastro (não trava a planilha)
     if (!sku) error = 'SKU vazio';
-    else if (custo === null || Number.isNaN(custo)) error = 'custo inválido';
-    else if (custo <= 0) error = 'custo precisa ser maior que zero';
+    else if (custo !== null && Number.isNaN(custo)) error = 'custo inválido';
+    else if (custo !== null && custo < 0) error = 'custo não pode ser negativo';
     else if (imposto !== null && (Number.isNaN(imposto) || imposto < 0 || imposto > 100)) error = 'imposto fora de 0 a 100';
-    rows.push({ line: i + 2, sku, custoUnit: custo, impostoPct: imposto ?? 0, error });
+    rows.push({ line: i + 2, sku, custoUnit: custo !== null && custo > 0 ? custo : null, impostoPct: imposto ?? 0, error });
   });
   return { rows, headerError: null };
 }

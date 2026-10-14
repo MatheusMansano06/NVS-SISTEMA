@@ -10,8 +10,8 @@ export const skusApi = {
   save: (sku: string, custoUnit: number) =>
     http<{ affectedOrders: number }>('/api/v1/skus', { method: 'PUT', body: { sku, custoUnit } }),
   remove: (sku: string) => http<void>('/api/v1/skus', { method: 'DELETE', body: { sku } }),
-  importCsv: (csv: string, dryRun: boolean) =>
-    http<SkuImportReport>('/api/v1/skus/import', { body: { csv, dryRun } }),
+  importCsv: (csv: string, dryRun: boolean, ignoreUnknown = false) =>
+    http<SkuImportReport>('/api/v1/skus/import', { body: { csv, dryRun, ignoreUnknown } }),
   taxRate: () => http<TaxRateDto>('/api/v1/settings/tax-rate'),
   setTaxRate: (ratePct: number) => http<TaxRateDto>('/api/v1/settings/tax-rate', { method: 'PUT', body: { ratePct } }),
   exportUrl: '/api/v1/skus/export',

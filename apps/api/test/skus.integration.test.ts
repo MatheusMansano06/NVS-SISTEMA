@@ -142,13 +142,22 @@ describe.skipIf(!TEST_DB)('Cadastro de SKUs (custos)', () => {
 
   it('importação CSV: pré-visualiza, rejeita tudo se houver erro, e aplica', async () => {
     const { cookies } = await setup();
-    const imp = (csv: string, dryRun: boolean) =>
-      app.inject({ method: 'POST', url: '/api/v1/skus/import', cookies, payload: { csv, dryRun } }).then((r) => r.json());
+    const imp = (csv: string, dryRun: boolean, ignoreUnknown = false) =>
+      app.inject({ method: 'POST', url: '/api/v1/skus/import', cookies, payload: { csv, dryRun, ignoreUnknown } }).then((r) => r.json());
 
-    const rejected = await imp('sku;custo_unit;imposto_pct\nSKU-A;40;9\nSKU-B;0;9', false);
+    const rejected = await imp('sku;custo_unit;imposto_pct\nSKU-A;40;9\nSKU-B;abc;9', false);
     expect(rejected.status).toBe('rejected');
     expect(rejected.invalidRows[0]).toMatchObject({ line: 3, sku: 'SKU-B' });
     expect((await dash(cookies)).missingCosts).toBe(true); // nada gravado
+
+    // custo zero ou vazio é aceito (fica "sem custo"); SKU que não existe nos anúncios/vendas barra a planilha
+    const zero = await imp('sku;custo_unit\nSKU-A;40\nSKU-B;0', true);
+    expect(zero).toMatchObject({ status: 'dry_run', created: 1, withoutCost: 1, unknownSkus: [] });
+    const unknown = await imp('sku;custo_unit\nsku-a;40\nSKU-X;10\nSKU-Y;', false);
+    expect(unknown).toMatchObject({ status: 'rejected', unknownSkus: [{ line: 3, sku: 'SKU-X' }, { line: 4, sku: 'SKU-Y' }] });
+    expect((await dash(cookies)).missingCosts).toBe(true);
+    const skipped = await imp('sku;custo_unit\nsku-a;40\nSKU-X;10', true, true);
+    expect(skipped).toMatchObject({ status: 'dry_run', created: 1, ignored: 1 }); // "sku-a" grava como "SKU-A" (grafia do anúncio)
 
     const preview = await imp('sku;custo_unit;imposto_pct\nSKU-A;40;9\nSKU-B;25,50;9', true);
     expect(preview).toMatchObject({ status: 'dry_run', created: 2, updated: 0 });

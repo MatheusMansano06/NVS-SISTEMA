@@ -184,6 +184,18 @@ export class PgSkuRepository {
     return { items, total, counts: { all, done, missing: all - done } };
   }
 
+  /** SKUs que existem no marketplace (anúncios e variações, mais o que já foi vendido): MAIÚSCULO → como está no anúncio. */
+  async knownSkus(db: Queryable): Promise<Map<string, string>> {
+    const { rows } = await db.query<{ sku: string }>(
+      `SELECT DISTINCT trim(sku) AS sku FROM listings WHERE sku IS NOT NULL AND source = 'marketplace'
+       UNION SELECT trim(v) FROM listings, unnest(variation_skus) v WHERE source = 'marketplace'
+       UNION SELECT trim(i.sku) FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.source = 'marketplace'`,
+    );
+    const out = new Map<string, string>();
+    for (const r of rows) if (r.sku && !out.has(r.sku.toUpperCase())) out.set(r.sku.toUpperCase(), r.sku);
+    return out;
+  }
+
   async allCosts(db: Queryable) {
     const { rows } = await db.query<{ sku: string; custo_unit: string }>('SELECT sku, custo_unit FROM sku_costs');
     return new Map(rows.map((r) => [r.sku, { custoUnit: Number(r.custo_unit) }]));

@@ -131,3 +131,6 @@ a.btn-ghost svg { transform: rotate(90deg); }
   .fill { flex-wrap: wrap; }
 }
 .skus .pager { margin-top: 4px; }
+.import-hint { margin: 4px 0 8px; color: var(--gray-500); font-size: .86rem; }
+.import-unknown { max-height: 220px; overflow: auto; margin: 0 0 12px; padding: 10px 14px 10px 30px; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px #f3c4c9; font-size: .86rem; columns: 2; }
+.import-unknown b { color: #a3121f; }

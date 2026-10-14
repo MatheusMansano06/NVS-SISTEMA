@@ -79,39 +79,57 @@ export class SkuCostService {
     return removed;
   }
 
-  async importCsv(tenantId: string, userId: string, csv: string, dryRun: boolean, today = todayIn()): Promise<SkuImportReport> {
+  /**
+   * Importação em 2 passos (pré-visualiza → confirma). Custo vazio/zero é aceito (fica "sem custo"). SKU que não existe
+   * em nenhum anúncio nem venda do marketplace barra a planilha — ou é pulado, se `ignoreUnknown`.
+   */
+  async importCsv(tenantId: string, userId: string, csv: string, dryRun: boolean, today = todayIn(), ignoreUnknown = false): Promise<SkuImportReport> {
     const { rows, headerError } = parseSkuCsv(csv);
     if (headerError) throw new ValidationError(headerError);
     const invalidRows = rows.filter((r) => r.error).map((r) => ({ line: r.line, sku: r.sku || null, reason: r.error! }));
     const seen = new Set<string>();
     for (const r of rows) {
-      if (!r.error && seen.has(r.sku)) invalidRows.push({ line: r.line, sku: r.sku, reason: 'SKU repetido na planilha' });
-      seen.add(r.sku);
+      if (!r.error && seen.has(r.sku.toUpperCase())) invalidRows.push({ line: r.line, sku: r.sku, reason: 'SKU repetido na planilha' });
+      seen.add(r.sku.toUpperCase());
     }
-    const base = { received: rows.length, created: 0, updated: 0, unchanged: 0 };
+    const base = { received: rows.length, created: 0, updated: 0, unchanged: 0, withoutCost: 0, unknownSkus: [] as { line: number; sku: string }[], ignored: 0 };
     if (invalidRows.length) return { status: 'rejected', ...base, invalidRows: invalidRows.slice(0, 50) };
 
     const report = await this.db.withTenant(tenantId, async (db) => {
+      // só confere com o marketplace quando já há anúncios/vendas sincronizados (empresa nova importa livre)
+      const known = await this.repo.knownSkus(db);
+      const unknown = known.size ? rows.filter((r) => !known.has(r.sku.trim().toUpperCase())) : [];
+      const counts = { ...base, unknownSkus: unknown.map((r) => ({ line: r.line, sku: r.sku })) };
+      if (unknown.length && !ignoreUnknown) return { rejected: true, counts };
+      counts.ignored = unknown.length;
+      const skip = new Set(unknown.map((r) => r.line));
       const existing = await this.repo.allCosts(db);
-      const counts = { ...base };
       const changedSkus: string[] = [];
       for (const r of rows) {
-        const cur = existing.get(r.sku);
+        if (skip.has(r.line)) continue;
+        if (r.custoUnit === null) {
+          counts.withoutCost++; // sem custo na planilha: o SKU continua "sem custo" no cadastro
+          continue;
+        }
+        // grava com a grafia do anúncio (planilha com outra caixa de letra continua ligando às vendas)
+        const sku = known.get(r.sku.trim().toUpperCase()) ?? r.sku.trim();
+        const cur = existing.get(sku);
         if (!cur) counts.created++;
-        else if (same(cur.custoUnit, r.custoUnit!)) {
+        else if (same(cur.custoUnit, r.custoUnit)) {
           counts.unchanged++;
           continue;
         } else counts.updated++;
         if (!dryRun) {
-          await this.write(db, tenantId, userId, r.sku, r.custoUnit!, 'importacao', today);
-          changedSkus.push(r.sku);
+          await this.write(db, tenantId, userId, sku, r.custoUnit, 'importacao', today);
+          changedSkus.push(sku);
         }
       }
       if (!dryRun) await this.repo.applyCosts(db, { skus: changedSkus });
-      return counts;
+      return { rejected: false, counts };
     });
+    if (report.rejected) return { status: 'rejected', ...report.counts, invalidRows: [] };
     if (!dryRun) await this.invalidate(tenantId);
-    return { status: dryRun ? 'dry_run' : 'ok', ...report, invalidRows: [] };
+    return { status: dryRun ? 'dry_run' : 'ok', ...report.counts, invalidRows: [] };
   }
 
   // ---------- alíquota única de imposto

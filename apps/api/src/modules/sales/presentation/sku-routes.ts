@@ -30,8 +30,8 @@ export function skuRoutes(service: SkuCostService) {
     });
 
     app.post('/skus/import', { ...write, bodyLimit: 3_000_000 }, async (req) => {
-      const { csv, dryRun } = parse(importSkusSchema, req.body);
-      return service.importCsv(req.user.tenantId, req.user.sub, csv, dryRun);
+      const { csv, dryRun, ignoreUnknown } = parse(importSkusSchema, req.body);
+      return service.importCsv(req.user.tenantId, req.user.sub, csv, dryRun, undefined, ignoreUnknown);
     });
 
     // alíquota única de imposto da empresa (vale para todas as vendas)

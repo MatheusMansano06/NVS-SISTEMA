@@ -52,6 +52,8 @@ export interface MarketingAccountDto {
   nickname: string;
   activeListings: number;
   analyzed: number;
+  /** Na fila para (re)ler: novos, marcados pelo "Analisar agora"/"Sincronizar" ou com mais de uma semana. */
+  pending: number;
   lastCheckedAt: string | null;
   tools: MarketingToolStat[];
   /** Campanhas abertas para a conta agora, por tipo (o que o ML oferece a esta conta). */

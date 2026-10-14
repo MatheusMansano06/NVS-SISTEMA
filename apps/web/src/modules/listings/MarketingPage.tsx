@@ -22,7 +22,7 @@ import './listings.css';
 import './marketing.css';
 
 const STEPS = [
-  { title: 'Raio-X dos anúncios', text: 'O sistema lê no Mercado Livre, aos poucos, o que cada anúncio ativo usa: atacado, clips, cupom, ofertas, Ads…' },
+  { title: 'Raio-X dos anúncios', text: 'O sistema lê no Mercado Livre, aos poucos, o que cada anúncio ativo usa (atacado, clips, cupom, ofertas, Ads…) e guarda a análise. Relê toda semana ou quando você pede.' },
   { title: 'Veja o que falta', text: 'Cada quadro mostra quantos anúncios usam e quantos não usam a ferramenta. “Elegíveis” são os que o ML já aceita na ferramenta.' },
   { title: 'Abra a lista', text: 'Clique em “Ver quem não usa” para a lista de anúncios e aplique pelo Mercado Livre ou pela Central de Promoção.' },
 ];
@@ -147,17 +147,17 @@ export function MarketingPage() {
 }
 
 function Coverage({ acc, scanning }: { acc: MarketingAccountDto; scanning: boolean }) {
-  const ratio = acc.activeListings ? Math.min(1, acc.analyzed / acc.activeListings) : 0;
+  const ratio = acc.activeListings ? Math.max(0, Math.min(1, (acc.activeListings - acc.pending) / acc.activeListings)) : 0;
   return (
     <section className="mkt-cover" aria-label="Análise dos anúncios">
       <div>
         <strong>{int(acc.analyzed)} de {int(acc.activeListings)} anúncios ativos analisados</strong>
         <small>
           {scanning
-            ? 'Analisando agora no Mercado Livre…'
-            : ratio < 1
-              ? 'O restante é lido aos poucos em segundo plano, sem bater no limite do Mercado Livre.'
-              : `Tudo analisado. Última leitura em ${when(acc.lastCheckedAt)}; cada anúncio é relido uma vez por dia.`}
+            ? `Analisando agora no Mercado Livre… ${int(acc.pending)} na fila.`
+            : acc.pending > 0
+              ? `${int(acc.pending)} na fila para (re)ler, aos poucos em segundo plano, sem bater no limite do Mercado Livre. Os números abaixo são da última análise salva.`
+              : `Tudo analisado. Última leitura em ${when(acc.lastCheckedAt)}. Releitura automática toda semana, ou ao clicar em "Analisar agora" ou em "Sincronizar" no Dashboard.`}
         </small>
       </div>
       <span className="mkt-bar" aria-hidden="true"><i style={{ width: `${ratio * 100}%` }} /></span>

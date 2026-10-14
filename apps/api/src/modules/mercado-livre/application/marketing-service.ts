@@ -20,8 +20,8 @@ const TICK_MS = 15 * 60_000;
 /** Anúncios analisados por conta a cada ciclo (3 a 4 chamadas cada): ~600/h por conta, sem pressa. */
 const BATCH = 150;
 const PACE_MS = 200;
-/** Um anúncio é relido depois disso (promoções e clips mudam). */
-const STALE_HOURS = 24;
+/** Releitura automática: uma vez por semana (ou antes, quando forçada pelo "Analisar agora"/"Sincronizar"). */
+const STALE_HOURS = 7 * 24;
 const CAMPAIGNS_TTL = 600;
 /** Se o ML não responde clips/anúncios patrocinados nas primeiras leituras, para de perguntar neste ciclo. */
 const PROBE_LIMIT = 5;
@@ -79,7 +79,7 @@ export class MarketingService {
     const accounts: MarketingAccountDto[] = [];
     for (const c of status.connections.filter((x) => x.status === 'active')) {
       const { conn } = await this.ml.accessToken(tenantId, c.id);
-      const { rows, active, last } = await this.db.withTenant(tenantId, async (db) => ({
+      const { rows, active, last, pending } = await this.db.withTenant(tenantId, async (db) => ({
         rows: await this.analyzed(db, conn.account_id),
         active: Number(
           (await db.query<{ n: string }>(`SELECT count(*) AS n FROM listings WHERE account_id = $1 AND status = 'active'`, [conn.account_id])).rows[0]?.n ?? 0,
@@ -87,6 +87,17 @@ export class MarketingService {
         last: (
           await db.query<{ at: Date | null }>('SELECT max(checked_at) AS at FROM listing_marketing WHERE account_id = $1', [conn.account_id])
         ).rows[0]?.at,
+        pending: Number(
+          (
+            await db.query<{ n: string }>(
+              `SELECT count(*) AS n FROM listings l
+                 LEFT JOIN listing_marketing m ON m.account_id = l.account_id AND m.item_id = l.external_id
+                WHERE l.account_id = $1 AND l.status = 'active' AND l.source = 'marketplace'
+                  AND (m.item_id IS NULL OR m.stale OR m.checked_at < now() - make_interval(hours => $2))`,
+              [conn.account_id, STALE_HOURS],
+            )
+          ).rows[0]?.n ?? 0,
+        ),
       }));
       accounts.push({
         connectionId: c.id,
@@ -94,6 +105,7 @@ export class MarketingService {
         nickname: c.nickname,
         activeListings: active,
         analyzed: rows.length,
+        pending,
         lastCheckedAt: last ? new Date(last).toISOString() : null,
         tools: MARKETING_TOOLS.map((tool) => this.stat(rows, tool)),
         openCampaigns: await this.openCampaigns(tenantId, c.id, conn.ml_user_id),
@@ -131,27 +143,45 @@ export class MarketingService {
     });
   }
 
-  /** "Atualizar agora": analisa a empresa em segundo plano (a tela acompanha pelo `scanning`). */
+  /**
+   * Reanálise forçada ("Analisar agora"): marca todos os anúncios para reler e já começa, em segundo plano, até
+   * acabar a fila. A última análise continua valendo na tela até cada anúncio ser relido.
+   */
   refresh(tenantId: string): void {
-    void this.scanTenant(tenantId, BATCH * 4).catch((err) => this.log.error({ err, tenantId }, 'Central de Marketing: análise falhou'));
+    void (async () => {
+      await this.markStale(tenantId);
+      if (this.running.has(tenantId)) return; // a rodada em andamento continua pela fila nova
+      while ((await this.scanTenant(tenantId)) > 0) {
+        /* lote a lote, no ritmo do PACE_MS */
+      }
+    })().catch((err) => this.log.error({ err, tenantId }, 'Central de Marketing: análise falhou'));
   }
 
-  async scanTenant(tenantId: string, batch = BATCH): Promise<void> {
-    if (this.running.has(tenantId)) return;
+  /** "Sincronizar" do Dashboard: só marca para reler; o agendador relê aos poucos (sem somar à carga da sincronização). */
+  async markStale(tenantId: string): Promise<void> {
+    await this.db.withTenant(tenantId, (db) => db.query('UPDATE listing_marketing SET stale = true WHERE NOT stale'));
+  }
+
+  /** Um lote por conta; devolve quantos anúncios foram lidos (0 = nada pendente). */
+  async scanTenant(tenantId: string, batch = BATCH): Promise<number> {
+    if (this.running.has(tenantId)) return 0;
     this.running.add(tenantId);
+    let total = 0;
     try {
       const status = await this.ml.status(tenantId);
       for (const c of status.connections.filter((x) => x.status === 'active')) {
-        await this.scanAccount(tenantId, c.id, batch).catch((err) =>
-          this.log.error({ err, tenantId }, 'Central de Marketing: conta do ML falhou na análise'),
-        );
+        total += await this.scanAccount(tenantId, c.id, batch).catch((err) => {
+          this.log.error({ err, tenantId }, 'Central de Marketing: conta do ML falhou na análise');
+          return 0;
+        });
       }
     } finally {
       this.running.delete(tenantId);
     }
+    return total;
   }
 
-  /** Lê no ML os anúncios ativos nunca analisados ou analisados há mais de um dia. */
+  /** Lê no ML os anúncios ativos nunca analisados, marcados para reler ou lidos há mais de uma semana. */
   async scanAccount(tenantId: string, connectionId: string, batch = BATCH): Promise<number> {
     const { conn } = await this.ml.accessToken(tenantId, connectionId);
     const due = await this.db.withTenant(tenantId, async (db) =>
@@ -160,8 +190,8 @@ export class MarketingService {
           `SELECT l.external_id FROM listings l
              LEFT JOIN listing_marketing m ON m.account_id = l.account_id AND m.item_id = l.external_id
             WHERE l.account_id = $1 AND l.status = 'active' AND l.source = 'marketplace'
-              AND (m.checked_at IS NULL OR m.checked_at < now() - make_interval(hours => $2))
-            ORDER BY m.checked_at NULLS FIRST LIMIT $3`,
+              AND (m.checked_at IS NULL OR m.stale OR m.checked_at < now() - make_interval(hours => $2))
+            ORDER BY m.checked_at IS NOT NULL, m.checked_at LIMIT $3`,
           [conn.account_id, STALE_HOURS, batch],
         )
       ).rows.map((r) => r.external_id),
@@ -199,7 +229,8 @@ export class MarketingService {
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
            ON CONFLICT (tenant_id, account_id, item_id) DO UPDATE SET promos_active = EXCLUDED.promos_active,
              promos_candidate = EXCLUDED.promos_candidate, wholesale = EXCLUDED.wholesale,
-             clips = coalesce(EXCLUDED.clips, listing_marketing.clips), video = EXCLUDED.video, ads = EXCLUDED.ads, checked_at = now()`,
+             clips = coalesce(EXCLUDED.clips, listing_marketing.clips), video = EXCLUDED.video, ads = EXCLUDED.ads,
+             checked_at = now(), stale = false`,
           [tenantId, conn.account_id, id, row.promos_active, row.promos_candidate, row.wholesale, row.clips, row.video, row.ads],
         ),
       );

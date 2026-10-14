@@ -245,6 +245,8 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   if (ml && returnsSync) {
     ml.onManualSync = (tenantId) => {
       void returnsSync.syncTenant(tenantId, { days: 365, allOpen: true }).catch((err) => app.log.error({ err, tenantId }, 'Devoluções: sincronização falhou'));
+      // Central de Marketing: marca os anúncios para reler (o agendador relê aos poucos, fora da carga da sincronização)
+      void marketing?.markStale(tenantId).catch((err) => app.log.error({ err, tenantId }, 'Central de Marketing: reanálise falhou'));
     };
   }
   if (ml) {

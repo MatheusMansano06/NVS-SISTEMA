@@ -801,7 +801,12 @@ describe.skipIf(!TEST_DB)('Central de Devoluções (pós-venda do ML)', () => {
     await app.marketing!.scanTenant(tenantId);
     const mkt = (await app.inject({ method: 'GET', url: '/api/v1/listings/marketing', cookies: base })).json();
     const acc = mkt.accounts[0];
-    expect(acc).toMatchObject({ activeListings: 5, analyzed: 5 });
+    expect(acc).toMatchObject({ activeListings: 5, analyzed: 5, pending: 0 });
+    // "Sincronizar"/"Analisar agora" marca para reler sem perder a análise salva
+    await app.marketing!.markStale(tenantId);
+    const marked = (await app.inject({ method: 'GET', url: '/api/v1/listings/marketing', cookies: base })).json().accounts[0];
+    expect(marked).toMatchObject({ analyzed: 5, pending: 5 });
+    expect(await app.marketing!.scanTenant(tenantId)).toBe(5);
     const tool = (t: string) => acc.tools.find((x: { tool: string }) => x.tool === t);
     expect(tool('coupon')).toMatchObject({ using: 1, notUsing: 4, eligible: 1, available: true });
     expect(tool('lightning')).toMatchObject({ using: 1, notUsing: 4 });

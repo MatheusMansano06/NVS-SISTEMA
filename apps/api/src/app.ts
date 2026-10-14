@@ -38,6 +38,7 @@ import {
   PgListingRepository,
   ListingService,
   PromotionService,
+  MarketingService,
   ListingEditorService,
   PricingService,
   PgCategoryCache,
@@ -73,6 +74,7 @@ declare module 'fastify' {
     /** Radar de Frete (null sem ML configurado). */
     radar: FreightRadarService | null;
     returnsSync: ReturnsSync | null;
+    marketing: MarketingService | null;
     requirePermission: (
       p: Permission,
     ) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -198,6 +200,9 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   const flexService = listingService && ml && mlClient ? new FlexService(database, listingService, ml, mlClient, sharedCache) : null;
   const radarService = ml && mlLookups ? new FreightRadarService(database, ml, new PgMlRepository(database), mlLookups, app.log) : null;
   app.decorate('radar', radarService);
+  const rawMl = mlClient && 'rawGet' in mlClient ? (mlClient as unknown as MlRawApi) : null;
+  const marketing = ml && rawMl ? new MarketingService(database, ml, rawMl, sharedCache, app.log, { paceMs: env.NODE_ENV === 'test' ? 0 : undefined }) : null;
+  app.decorate('marketing', marketing);
   await app.register(
     listingRoutes(
       listingService,
@@ -205,6 +210,7 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
       listingService && ml && mlClient ? new ListingEditorService(listingService, ml, mlClient) : null,
       flexService,
       radarService,
+      marketing,
     ),
     { prefix: '/api/v1' },
   );

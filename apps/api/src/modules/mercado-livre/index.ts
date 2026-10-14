@@ -7,6 +7,7 @@ export { ListingService } from './application/listing-service.js';
 export { PgListingRepository } from './infrastructure/pg-listing-repository.js';
 export { listingRoutes } from './presentation/listing-routes.js';
 export { PromotionService } from './application/promotion-service.js';
+export { MarketingService } from './application/marketing-service.js';
 export { ListingEditorService } from './application/listing-editor-service.js';
 export { PricingService } from './application/pricing-service.js';
 export { pricingRoutes } from './presentation/pricing-routes.js';

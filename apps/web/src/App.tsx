@@ -23,6 +23,7 @@ function page<K extends string>(load: () => Promise<Record<K, ComponentType<any>
 const SkuPage = page(() => import('./modules/skus/SkuPage'), 'SkuPage');
 const ListingsPage = page(() => import('./modules/listings/ListingsPage'), 'ListingsPage');
 const PromotionsPage = page(() => import('./modules/listings/PromotionsPage'), 'PromotionsPage');
+const MarketingPage = page(() => import('./modules/listings/MarketingPage'), 'MarketingPage');
 const SalesPage = page(() => import('./modules/sales/SalesPage'), 'SalesPage');
 const PricingPage = page(() => import('./modules/pricing/PricingPage'), 'PricingPage');
 const FreightPage = page(() => import('./modules/freight/FreightPage'), 'FreightPage');
@@ -61,6 +62,7 @@ function Routes() {
   if (path.startsWith('/devolucoes')) return <AppShell><CentralDevolucoes /></AppShell>;
   if (path.startsWith('/full')) return <AppShell><FullRouter mode="analise" /></AppShell>;
   if (path.startsWith('/anuncios/promocoes')) return <PromotionsPage />;
+  if (path.startsWith('/anuncios/marketing')) return <MarketingPage />;
   if (path.startsWith('/anuncios')) return <ListingsPage />;
   if (path.startsWith('/financeiro')) return <FinancePage />;
   return <Dashboard />;

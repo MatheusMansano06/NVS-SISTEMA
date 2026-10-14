@@ -312,6 +312,13 @@ function fakeMl(sellerId: number) {
     '/post-purchase/v1/returns/reasons?flow=seller_return_failed&claim_id=5001': [{ id: 'SRF2', detail: 'O produto chegou com defeito' }],
     '/shipments/7001': { id: 7_001, logistic_type: 'fulfillment' }, // venda de ida pelo Full
     '/items/MLB1': { id: 'MLB1', available_quantity: 3, shipping: { logistic_type: 'drop_off' } },
+    // Central de Marketing: MLB0 com cupom e atacado; MLB1 elegível a cupom e com vídeo
+    '/seller-promotions/items/MLB0?app_version=v2': [{ type: 'SELLER_COUPON_CAMPAIGN', status: 'started' }],
+    '/seller-promotions/items/MLB1?app_version=v2': [{ type: 'SELLER_COUPON_CAMPAIGN', status: 'candidate' }, { type: 'LIGHTNING', status: 'started' }],
+    '/items/MLB0/prices': { prices: [{ type: 'standard', amount: 10 }, { type: 'standard', amount: 9, conditions: { min_purchase_unit: 3 } }] },
+    '/items/MLB1/prices': { prices: [{ type: 'standard', amount: 10 }] },
+    '/items/MLB1?attributes=id,video_id': { id: 'MLB1', video_id: 'yt123' },
+    '/items/MLB0?attributes=id,video_id': { id: 'MLB0' },
   };
   Object.assign(api, {
     async rawGet(_t: string, path: string) {
@@ -789,6 +796,24 @@ describe.skipIf(!TEST_DB)('Central de Devoluções (pós-venda do ML)', () => {
     // outra empresa não vê nada
     const other = await account();
     expect((await app.inject({ method: 'GET', url: `/api/v1/returns/${ret.id}`, cookies: other })).statusCode).toBe(401); // sem PIN
+
+    // Central de Marketing: raio-X dos anúncios ativos guardado no banco; o que o ML não informa fica sem leitura
+    await app.marketing!.scanTenant(tenantId);
+    const mkt = (await app.inject({ method: 'GET', url: '/api/v1/listings/marketing', cookies: base })).json();
+    const acc = mkt.accounts[0];
+    expect(acc).toMatchObject({ activeListings: 5, analyzed: 5 });
+    const tool = (t: string) => acc.tools.find((x: { tool: string }) => x.tool === t);
+    expect(tool('coupon')).toMatchObject({ using: 1, notUsing: 4, eligible: 1, available: true });
+    expect(tool('lightning')).toMatchObject({ using: 1, notUsing: 4 });
+    expect(tool('wholesale')).toMatchObject({ using: 1, notUsing: 1, available: true }); // os outros 3 sem leitura de preços
+    expect(tool('video')).toMatchObject({ using: 1, notUsing: 1 });
+    expect(tool('clips')).toMatchObject({ available: false });
+    const without = (
+      await app.inject({ method: 'GET', url: `/api/v1/listings/marketing/${acc.connectionId}/coupon?using=0`, cookies: base })
+    ).json();
+    expect(without.total).toBe(4);
+    expect(without.items[0]).toMatchObject({ id: 'MLB1', eligible: true }); // elegíveis primeiro
+    expect((await app.inject({ method: 'GET', url: '/api/v1/listings/marketing', cookies: other })).json().accounts).toEqual([]);
   });
 });
 

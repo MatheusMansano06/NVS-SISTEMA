@@ -4,6 +4,7 @@ import { navigate, usePath } from '../../app/router';
 const LINKS = [
   { path: '/anuncios', label: 'Meus anúncios' },
   { path: '/anuncios/promocoes', label: 'Central de Promoção' },
+  { path: '/anuncios/marketing', label: 'Central de Marketing' },
 ];
 
 /** Navegação entre as telas de anúncios. */

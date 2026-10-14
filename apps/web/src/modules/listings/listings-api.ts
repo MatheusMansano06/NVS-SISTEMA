@@ -7,6 +7,9 @@ import type {
   ListingPricingDto,
   ListingSalesDto,
   ListingTab,
+  MarketingDto,
+  MarketingListingDto,
+  MarketingTool,
   PromotionCandidatesDto,
   PromotionsDto,
   WholesaleDto,
@@ -41,6 +44,12 @@ export const listingsApi = {
     ),
   enroll: (connectionId: string, promotionId: string, itemId: string, body: { promotionType: string; dealPrice?: number }) =>
     http<{ ok: true }>(`/api/v1/listings/promotions/${enc(connectionId)}/${enc(promotionId)}/items/${enc(itemId)}`, { body }),
+  marketing: () => http<MarketingDto>('/api/v1/listings/marketing'),
+  marketingRefresh: () => http<{ ok: true }>('/api/v1/listings/marketing/refresh', { method: 'POST' }),
+  marketingListings: (connectionId: string, tool: MarketingTool, using: boolean, offset: number, limit = 20) =>
+    http<{ items: MarketingListingDto[]; total: number }>(
+      `/api/v1/listings/marketing/${enc(connectionId)}/${enc(tool)}?using=${using ? 1 : 0}&offset=${offset}&limit=${limit}`,
+    ),
   editor: (id: string) => http<ListingEditorDto>(`/api/v1/listings/${enc(id)}/editor`),
   setDescription: (id: string, text: string) =>
     http<{ ok: true }>(`/api/v1/listings/${enc(id)}/description`, { method: 'PUT', body: { text } }),

@@ -11,6 +11,7 @@ import {
   listingPicturesSchema,
   listingWholesaleSchema,
   listListingsSchema,
+  MARKETING_TOOLS,
   setListingPriceSchema,
   setListingStatusSchema,
   setListingStockSchema,
@@ -19,6 +20,7 @@ import { z } from 'zod';
 import { ValidationError } from '../../../shared/kernel/errors.js';
 import type { ListingService } from '../application/listing-service.js';
 import type { PromotionService } from '../application/promotion-service.js';
+import type { MarketingService } from '../application/marketing-service.js';
 import type { ListingEditorService } from '../application/listing-editor-service.js';
 import type { FlexService } from '../application/flex-service.js';
 import type { FreightRadarService } from '../application/freight-radar-service.js';
@@ -42,6 +44,7 @@ export function listingRoutes(
   editor: ListingEditorService | null = null,
   flex: FlexService | null = null,
   radar: FreightRadarService | null = null,
+  marketing: MarketingService | null = null,
 ) {
   return async (app: FastifyInstance) => {
     const read = { preHandler: app.requirePermission('dashboard:read') };
@@ -76,6 +79,22 @@ export function listingRoutes(
       const { connectionId, promotionId } = parse(promoParams, req.params);
       const { id } = parse(idParam, req.params);
       return promos().enroll(req.user.tenantId, connectionId, promotionId, id, parse(enrollPromotionSchema, req.body));
+    });
+
+    // ---- Central de Marketing (lê o banco; a análise no ML roda em segundo plano)
+    const mkt = () => {
+      if (!marketing) throw new ValidationError('Integração com o Mercado Livre ainda não configurada neste ambiente');
+      return marketing;
+    };
+    app.get('/listings/marketing', read, async (req) => mkt().summary(req.user.tenantId));
+    app.post('/listings/marketing/refresh', write, async (req, reply) => {
+      mkt().refresh(req.user.tenantId);
+      return reply.code(202).send({ ok: true });
+    });
+    app.get('/listings/marketing/:connectionId/:tool', read, async (req) => {
+      const { connectionId, tool } = parse(z.object({ connectionId: z.string().uuid(), tool: z.enum(MARKETING_TOOLS) }), req.params);
+      const q = parse(pagingSchema.extend({ using: z.enum(['0', '1']).default('0') }), req.query);
+      return mkt().listings(req.user.tenantId, connectionId, tool, q.using === '1', q.offset, q.limit);
     });
 
     // ---- Editor do anúncio

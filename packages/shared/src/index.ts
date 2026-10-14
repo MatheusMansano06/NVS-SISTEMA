@@ -12,3 +12,4 @@ export * from './operation.js';
 export * from './wms.js';
 export * from './returns.js';
 export * from './platform.js';
+export * from './marketing.js';

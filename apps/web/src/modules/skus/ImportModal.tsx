@@ -105,6 +105,13 @@ export function ImportModal({ onDone }: { onDone: () => void }) {
                 {report.withoutCost > 0 && <span><b>{report.withoutCost}</b> sem custo</span>}
                 {report.ignored > 0 && <span><b>{report.ignored}</b> pulados (não existem no ML)</span>}
               </div>
+              {report.duplicates.length > 0 && (
+                <p className="import-hint">
+                  {report.duplicates.length} linha(s) repetida(s) foram puladas (ficou a primeira):{' '}
+                  {report.duplicates.slice(0, 20).map((d) => `${d.sku} (linha ${d.line}, mantida a ${d.keptLine})`).join(' · ')}
+                  {report.duplicates.length > 20 ? ' …' : ''}
+                </p>
+              )}
               {report.withoutCost > 0 && (
                 <p className="import-hint">Linhas com custo vazio ou zero foram aceitas: esses SKUs continuam “sem custo” no cadastro até você preencher.</p>
               )}

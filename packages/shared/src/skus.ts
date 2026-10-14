@@ -57,5 +57,7 @@ export interface SkuImportReport {
   unknownSkus: { line: number; sku: string }[];
   /** SKUs desconhecidos que foram pulados (com "importar só os que existem"). */
   ignored: number;
+  /** Linhas repetidas (mesmo SKU, mesmo que com outra caixa de letra): fica a primeira, as outras são puladas. */
+  duplicates: { line: number; sku: string; keptLine: number }[];
   invalidRows: { line: number; sku: string | null; reason: string }[];
 }

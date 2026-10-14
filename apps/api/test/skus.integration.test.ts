@@ -158,6 +158,9 @@ describe.skipIf(!TEST_DB)('Cadastro de SKUs (custos)', () => {
     expect((await dash(cookies)).missingCosts).toBe(true);
     const skipped = await imp('sku;custo_unit\nsku-a;40\nSKU-X;10', true, true);
     expect(skipped).toMatchObject({ status: 'dry_run', created: 1, ignored: 1 }); // "sku-a" grava como "SKU-A" (grafia do anúncio)
+    // mesmo SKU em outra caixa de letra não barra: fica a primeira linha e a repetida é avisada
+    const dup = await imp('sku;custo_unit\nSKU-A;40\nsku-a;41\nSKU-B;10', true);
+    expect(dup).toMatchObject({ status: 'dry_run', created: 2, duplicates: [{ line: 3, sku: 'sku-a', keptLine: 2 }] });
 
     const preview = await imp('sku;custo_unit;imposto_pct\nSKU-A;40;9\nSKU-B;25,50;9', true);
     expect(preview).toMatchObject({ status: 'dry_run', created: 2, updated: 0 });

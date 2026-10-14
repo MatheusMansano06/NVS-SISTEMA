@@ -87,32 +87,41 @@ export class SkuCostService {
     const { rows, headerError } = parseSkuCsv(csv);
     if (headerError) throw new ValidationError(headerError);
     const invalidRows = rows.filter((r) => r.error).map((r) => ({ line: r.line, sku: r.sku || null, reason: r.error! }));
-    const seen = new Set<string>();
-    for (const r of rows) {
-      if (!r.error && seen.has(r.sku.toUpperCase())) invalidRows.push({ line: r.line, sku: r.sku, reason: 'SKU repetido na planilha' });
-      seen.add(r.sku.toUpperCase());
-    }
-    const base = { received: rows.length, created: 0, updated: 0, unchanged: 0, withoutCost: 0, unknownSkus: [] as { line: number; sku: string }[], ignored: 0 };
+    const base = {
+      received: rows.length, created: 0, updated: 0, unchanged: 0, withoutCost: 0,
+      unknownSkus: [] as { line: number; sku: string }[], ignored: 0, duplicates: [] as { line: number; sku: string; keptLine: number }[],
+    };
     if (invalidRows.length) return { status: 'rejected', ...base, invalidRows: invalidRows.slice(0, 50) };
 
     const report = await this.db.withTenant(tenantId, async (db) => {
       // só confere com o marketplace quando já há anúncios/vendas sincronizados (empresa nova importa livre)
       const known = await this.repo.knownSkus(db);
-      const unknown = known.size ? rows.filter((r) => !known.has(r.sku.trim().toUpperCase())) : [];
+      // grafia exata do anúncio primeiro; senão a mesma letra em outra caixa (o anúncio manda)
+      const canonical = (sku: string) => (known.exact.has(sku.trim()) ? sku.trim() : (known.byUpper.get(sku.trim().toUpperCase()) ?? sku.trim()));
+      const unknown = known.size ? rows.filter((r) => !known.exact.has(r.sku.trim()) && !known.byUpper.has(r.sku.trim().toUpperCase())) : [];
       const counts = { ...base, unknownSkus: unknown.map((r) => ({ line: r.line, sku: r.sku })) };
       if (unknown.length && !ignoreUnknown) return { rejected: true, counts };
       counts.ignored = unknown.length;
       const skip = new Set(unknown.map((r) => r.line));
       const existing = await this.repo.allCosts(db);
       const changedSkus: string[] = [];
+      const firstLine = new Map<string, number>();
       for (const r of rows) {
         if (skip.has(r.line)) continue;
+        // mesmo SKU repetido (inclusive em outra caixa de letra que cai no mesmo anúncio): fica a primeira linha
+        const target = canonical(r.sku);
+        const kept = firstLine.get(target);
+        if (kept !== undefined) {
+          counts.duplicates.push({ line: r.line, sku: r.sku, keptLine: kept });
+          continue;
+        }
+        firstLine.set(target, r.line);
         if (r.custoUnit === null) {
           counts.withoutCost++; // sem custo na planilha: o SKU continua "sem custo" no cadastro
           continue;
         }
         // grava com a grafia do anúncio (planilha com outra caixa de letra continua ligando às vendas)
-        const sku = known.get(r.sku.trim().toUpperCase()) ?? r.sku.trim();
+        const sku = target;
         const cur = existing.get(sku);
         if (!cur) counts.created++;
         else if (same(cur.custoUnit, r.custoUnit)) {

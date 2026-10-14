@@ -87,6 +87,8 @@ export function PrinterGate({ status, reload, watchStart }: { status: WmsPrinter
                 {tried
                   ? 'Abriu a janela do agente? Em alguns segundos esta faixa fica verde. Não abriu nada: este computador ainda não tem o agente instalado — peça à Análise o instalador (Supervisão Full → Processamento).'
                   : 'Abre o programa de impressão neste computador. Na primeira vez o navegador pergunta se pode abrir: marque “sempre permitir”.'}
+                {' '}O agente já está aberto e a faixa continua vermelha? Ele está configurado para outro sistema (ex.: o NVS-WMS antigo): feche-o e
+                instale o do NVS Tech pelo instalador da Análise.
               </small>
             </div>
           )}

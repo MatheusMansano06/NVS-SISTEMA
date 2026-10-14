@@ -39,7 +39,9 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   /** Entrar numa lista só com a impressora pronta (ou liberado por um MASTER hoje). */
   const guard = (fn: () => void) => {
     if (!blocked) return fn();
-    flash('warn', 'Impressora não conferida', printer.status?.ready ? 'Faça a conferência da impressora de hoje (logo acima) antes de separar.' : 'Ligue o agente de impressão antes de separar.');
+    flash('warn', 'Impressora não conferida', printer.status?.ready
+      ? 'Faça a conferência da impressora de hoje (logo acima) antes de separar.'
+      : 'Nenhum agente de impressão está conectado ao NVS Tech. Ligue o agente (botão na faixa vermelha) antes de separar.');
   };
   const skipCheck = () => {
     if (!window.confirm('Separar hoje sem conferir a impressora? As etiquetas ficam na fila até o agente ser ligado.')) return;

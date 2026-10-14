@@ -1,5 +1,6 @@
 import type {
   WmsAgentStatusDto,
+  WmsPrinterStatusDto,
   WmsBatchDto,
   WmsFindCandidateDto,
   WmsFindDto,
@@ -73,6 +74,9 @@ export const fullApi = {
   printStatus: (id: string, sku: string) => http<WmsPrintJobDto | null>(`/api/v1/wms/lists/${id}/print?sku=${enc(sku)}`),
   zplUrl: (id: string, sku: string, qty?: number) => `/api/v1/wms/lists/${id}/zpl?sku=${enc(sku)}${qty ? `&qty=${qty}` : ''}`,
   agent: () => http<WmsAgentStatusDto>('/api/v1/wms/agent'),
+  printer: () => http<WmsPrinterStatusDto>('/api/v1/wms/printer'),
+  printerTest: () => http<{ id: string }>('/api/v1/wms/printer/test', { body: {} }),
+  printerConfirm: () => http<void>('/api/v1/wms/printer/confirm', { body: {} }),
   agentKey: () => http<{ key: string }>('/api/v1/wms/agent/key', { body: {} }),
   inbound: (b: { fullDate: string; pdfBase64: string; archiveOldestId?: string }) =>
     http<WmsInboundResultDto>('/api/v1/wms/inbound', { body: { marketplace: current, ...b } }),

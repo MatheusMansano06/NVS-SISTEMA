@@ -11,6 +11,7 @@ import {
   type WmsMarketplace,
   type WmsOverviewDto,
   type WmsPrintJobDto,
+  type WmsPrinterStatusDto,
   type WmsProductDto,
   type WmsProductPageDto,
   type WmsRankingDto,
@@ -22,6 +23,10 @@ import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError
 import { parseInboundText, splitIntoLists, type InboundItem } from '../domain/ml-inbound-pdf.js';
 import { parseShopeeInboundText } from '../domain/shopee-inbound-pdf.js';
 import { buildLabelsZpl } from '../domain/zpl.js';
+
+const TZ = 'America/Sao_Paulo';
+/** SKU reservado da etiqueta de teste (não pertence a lista nenhuma). */
+const TEST_SKU = 'TESTE-IMPRESSORA';
 import { extractPdfText } from '../infrastructure/pdf-text.js';
 import { sortLists, toItem, toJob, type ItemRow, type ListRow, type PgWmsRepository, type PrintRow } from '../infrastructure/pg-wms-repository.js';
 import { hashAgentKey, newAgentKey, type PrintHub } from '../infrastructure/print-hub.js';
@@ -708,6 +713,79 @@ export class WmsService {
       connected: this.hub.connected(tenantId),
       keys: rows.map((r) => ({ hint: r.key_hint, createdAt: r.created_at.toISOString(), lastSeenAt: r.last_seen_at?.toISOString() ?? null })),
     };
+  }
+
+  // ================= Conferência da impressora (tela do operador)
+  /**
+   * Situação para a Operação: agente ligado com impressora, conferência de hoje (etiqueta de teste confirmada por
+   * alguém do turno) e se há Full em andamento (listas abertas) — só então a conferência é exigida.
+   */
+  async printerStatus(tenantId: string): Promise<WmsPrinterStatusDto> {
+    const agents = this.hub.connected(tenantId).map((a) => ({ machine: a.machine, printer: a.printer, version: a.version }));
+    const ready = agents.some((a) => a.printer && a.printer.toUpperCase() !== 'NENHUMA');
+    return this.db.withTenant(tenantId, async (db) => {
+      const check = (
+        await db.query<{ confirmed_by: string; confirmed_at: Date; machine: string | null; printer_name: string | null }>(
+          `SELECT confirmed_by, confirmed_at, machine, printer_name FROM wms_printer_checks
+            WHERE day = (now() AT TIME ZONE '${TZ}')::date`,
+        )
+      ).rows[0];
+      const running = (await db.query(`SELECT 1 FROM wms_lists WHERE status <> 'completed' LIMIT 1`)).rowCount ?? 0;
+      const test = (
+        await db.query<{ id: string; status: 'PENDING' | 'PRINTING' | 'PRINTED' | 'ERROR'; error_msg: string | null; created_at: Date }>(
+          `SELECT id, status, error_msg, created_at FROM wms_print_jobs WHERE list_id IS NULL AND sku = '${TEST_SKU}'
+            ORDER BY created_at DESC LIMIT 1`,
+        )
+      ).rows[0];
+      return {
+        ready,
+        agents,
+        checkedToday: check
+          ? { by: check.confirmed_by, at: check.confirmed_at.toISOString(), machine: check.machine, printer: check.printer_name }
+          : null,
+        fullRunning: running > 0,
+        lastTest: test ? { id: test.id, status: test.status, error: test.error_msg, at: test.created_at.toISOString() } : null,
+      };
+    });
+  }
+
+  /** Etiqueta de teste (mesmo layout das do Full) para conferir que a impressora imprime e o código de barras sai legível. */
+  async printTest(a: Actor): Promise<{ id: string }> {
+    const name = await this.operatorName(a);
+    const when = new Date().toLocaleString('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const zpl = buildLabelsZpl({ marketplace: 'ml', code: 'TESTENVS', description: `ETIQUETA DE TESTE NVS - ${when} - ${name}`, sku: TEST_SKU, qty: 1 });
+    const id = await this.db.withTenant(a.tenantId, async (db) => {
+      await db.query(`DELETE FROM wms_print_jobs WHERE list_id IS NULL AND sku = $1 AND status IN ('PENDING', 'ERROR')`, [TEST_SKU]);
+      return (
+        await db.query<{ id: string }>(
+          `INSERT INTO wms_print_jobs (tenant_id, list_id, sku, zpl, labels, operator_id) VALUES ($1, NULL, $2, $3, 1, $4) RETURNING id`,
+          [a.tenantId, TEST_SKU, zpl, a.operatorId],
+        )
+      ).rows[0]!.id;
+    });
+    await this.hub.dispatch(a.tenantId).catch(() => undefined);
+    return { id };
+  }
+
+  /** "A etiqueta saiu legível": vale para o turno todo de hoje. */
+  async confirmPrinter(a: Actor): Promise<void> {
+    const name = await this.operatorName(a);
+    const agent = this.hub.connected(a.tenantId).find((x) => x.printer && x.printer.toUpperCase() !== 'NENHUMA');
+    if (!agent) throw new ValidationError('Nenhum agente de impressão conectado agora: ligue o agente antes de confirmar.');
+    await this.db.withTenant(a.tenantId, (db) =>
+      db.query(
+        `INSERT INTO wms_printer_checks (tenant_id, day, machine, printer_name, confirmed_by)
+         VALUES ($1, (now() AT TIME ZONE '${TZ}')::date, $2, $3, $4)
+         ON CONFLICT (tenant_id, day) DO UPDATE SET machine = EXCLUDED.machine, printer_name = EXCLUDED.printer_name,
+           confirmed_by = EXCLUDED.confirmed_by, confirmed_at = now()`,
+        [a.tenantId, agent.machine, agent.printer, name],
+      ),
+    );
+  }
+
+  private async operatorName(a: Actor): Promise<string> {
+    const { rows } = await this.db.withTenant(a.tenantId, (db) => db.query<{ name: string }>('SELECT name FROM operators WHERE id = $1', [a.operatorId]));
+    return rows[0]?.name ?? 'Operador';
   }
 
   /** Nova chave do agente (aparece uma única vez). As anteriores param de valer. */

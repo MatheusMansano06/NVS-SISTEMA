@@ -301,6 +301,23 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     await new Promise((r) => setTimeout(r, 150));
     expect((await call('GET', `/wms/lists/${listId}/print?sku=VARAL`, joao)).json()).toMatchObject({ status: 'PRINTED', printerName: 'ZDesigner' });
     expect((await call('GET', '/wms/agent', ana)).json().connected).toEqual([{ machine: 'CAIXA1', printer: 'ZDesigner', hostname: null, version: '3.0' }]);
+
+    // conferência do dia na tela do operador: agente pronto, Full em andamento, ainda não conferido
+    expect((await call('GET', '/wms/printer', joao)).json()).toMatchObject({ ready: true, fullRunning: true, checkedToday: null, lastTest: null });
+    wait = next();
+    const test = (await call('POST', '/wms/printer/test', joao)).json();
+    const testJob = await wait;
+    expect(testJob).toMatchObject({ type: 'print_job', id: test.id, sku: 'TESTE-IMPRESSORA' });
+    expect(String(testJob.zpl_content)).toContain('ETIQUETA DE TESTE NVS');
+    ws.send(JSON.stringify({ type: 'print_result', job_id: test.id, job_token: testJob.job_token, status: 'ok', printer: 'ZDesigner' }));
+    await new Promise((r) => setTimeout(r, 150));
+    expect((await call('GET', '/wms/printer', joao)).json().lastTest).toMatchObject({ id: test.id, status: 'PRINTED' });
+    expect((await call('POST', '/wms/printer/confirm', joao)).statusCode).toBe(204);
+    const checked = (await call('GET', '/wms/printer', ana)).json(); // vale para todos do turno
+    expect(checked.checkedToday).toMatchObject({ machine: 'CAIXA1', printer: 'ZDesigner' });
     ws.terminate();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((await call('GET', '/wms/printer', joao)).json().ready).toBe(false); // agente fechou
+    expect((await call('POST', '/wms/printer/confirm', joao)).statusCode).toBe(400);
   });
 });

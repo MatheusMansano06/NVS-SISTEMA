@@ -5,6 +5,17 @@ import { ApiError } from '../../shared/http';
 import { Modal } from '../../shared/ui/Modal';
 import { usePerson } from '../operation/PersonContext';
 import { fullApi } from './full-api';
+import { PrinterGate, printerBlocks, usePrinterStatus } from './PrinterGate';
+
+const OVERRIDE_KEY = 'nvs.printerOverride';
+const todayKey = () => new Date().toDateString();
+const readOverride = () => {
+  try {
+    return localStorage.getItem(OVERRIDE_KEY) === todayKey();
+  } catch {
+    return false;
+  }
+};
 
 type Note = { tone: 'error' | 'warn' | 'ok'; title: string; text: string };
 const STATUS_LABEL: Record<string, string> = { pending: 'Pendente', in_progress: 'Em andamento', partial: 'Parcial', complete: 'Completo', out_of_stock: 'Sem estoque' };
@@ -21,7 +32,24 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   const [choices, setChoices] = useState<{ title: string; items: WmsFindCandidateDto[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const printer = usePrinterStatus();
+  const [override, setOverride] = useState(readOverride);
+  const blocked = printerBlocks(printer.status) && !override;
   const load = () => fullApi.lists().then(setLists).catch(() => setLists([]));
+  /** Entrar numa lista só com a impressora pronta (ou liberado por um MASTER hoje). */
+  const guard = (fn: () => void) => {
+    if (!blocked) return fn();
+    flash('warn', 'Impressora não conferida', printer.status?.ready ? 'Faça a conferência da impressora de hoje (logo acima) antes de separar.' : 'Ligue o agente de impressão antes de separar.');
+  };
+  const skipCheck = () => {
+    if (!window.confirm('Separar hoje sem conferir a impressora? As etiquetas ficam na fila até o agente ser ligado.')) return;
+    try {
+      localStorage.setItem(OVERRIDE_KEY, todayKey());
+    } catch {
+      /* só nesta sessão */
+    }
+    setOverride(true);
+  };
   useEffect(() => {
     void load();
     inputRef.current?.focus();
@@ -37,6 +65,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   /** Abre o item: se for de outra pessoa (sem nada bipado), transfere para mim antes. */
   async function go(c: WmsFindCandidateDto) {
     setChoices(null);
+    if (blocked) return guard(() => undefined);
     if (c.operatorName && c.operatorName !== me.name && c.qtyPicked === 0 && c.status === 'pending') {
       if (!window.confirm(`${c.sku} está na lista de ${c.operatorName}. Transferir para você e separar agora?`)) return;
       try {
@@ -85,6 +114,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   }
 
   async function take(l: WmsListSummaryDto) {
+    if (blocked) return guard(() => undefined);
     try {
       await fullApi.claim(l.id);
       onOpen(l.id);
@@ -105,6 +135,11 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
         <h1>Sessões em andamento</h1>
         <p>Gerencie suas listas de trabalho: retome as suas, pegue uma da fila ou bipe um produto para ir direto nele.</p>
       </section>
+
+      <PrinterGate status={printer.status} reload={printer.reload} />
+      {blocked && me.master && (
+        <button type="button" className="link pgate-skip" onClick={skipCheck}>Sou MASTER: separar hoje sem conferir a impressora</button>
+      )}
 
       <section className="oph-tiles" aria-label="Resumo">
         <div data-tone="blue"><small>Minhas ativas</small><b>{mine.length}</b></div>
@@ -146,7 +181,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
             title="Minhas operações correntes"
             lists={mine}
             action="Retomar lista"
-            onClick={(l) => onOpen(l.id)}
+            onClick={(l) => guard(() => onOpen(l.id))}
             empty={{ icon: '📋', title: 'Nenhuma lista ativa', text: 'Pegue uma lista na fila livre logo abaixo para começar a bipar.' }}
           />
           <Cards

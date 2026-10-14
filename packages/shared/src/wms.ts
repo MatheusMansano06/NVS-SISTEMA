@@ -217,3 +217,16 @@ export interface WmsProductPageDto {
   total: number;
   items: WmsProductDto[];
 }
+
+/** Impressora na tela do operador: agente ligado + conferência do dia (etiqueta de teste confirmada). */
+export interface WmsPrinterStatusDto {
+  /** Agente conectado agora com uma impressora detectada. */
+  ready: boolean;
+  agents: { machine: string; printer: string | null; version: string | null }[];
+  /** Conferência de hoje (vale para todos do turno). */
+  checkedToday: { by: string; at: string; machine: string | null; printer: string | null } | null;
+  /** Há listas abertas ou em andamento (Full em curso): a conferência é exigida. */
+  fullRunning: boolean;
+  /** Última etiqueta de teste: situação na fila. */
+  lastTest: { id: string; status: 'PENDING' | 'PRINTING' | 'PRINTED' | 'ERROR'; error: string | null; at: string } | null;
+}

@@ -142,6 +142,13 @@ export function wmsRoutes(
         .send(zpl);
     });
     app.get('/wms/agent', auth, async (req) => service.agentStatus(await person(req)));
+    // conferência da impressora na tela do operador (agente ligado + etiqueta de teste do dia)
+    app.get('/wms/printer', auth, async (req) => service.printerStatus(await person(req)));
+    app.post('/wms/printer/test', fast, async (req) => service.printTest(await actor(req)));
+    app.post('/wms/printer/confirm', auth, async (req, reply) => {
+      await service.confirmPrinter(await actor(req));
+      return reply.code(204).send();
+    });
     app.post('/wms/agent/key', auth, async (req) => service.newAgentKey(await actor(req)));
 
     // ---- Master Data

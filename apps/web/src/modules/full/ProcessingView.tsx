@@ -97,7 +97,7 @@ export function ProcessingView({ onDone }: { onDone: (batchId: string, marketpla
 }
 
 /** Script do agente já configurado (Windows: CRLF e só ASCII). */
-function startBat(site: string, key: string, machine: string) {
+function startBat(site: string, key: string, machine: string, printer: string) {
   return [
     '@echo off',
     'setlocal',
@@ -106,8 +106,9 @@ function startBat(site: string, key: string, machine: string) {
     'rem Gerado pelo NVS Tech (Supervisao Full > Processamento). Nao compartilhe: contem a chave da empresa.',
     `set BACKEND_URL=${site}/api`,
     `set MACHINE_ID=${key}.${machine}`,
-    'rem Opcional: nome exato da impressora (ex.: ZDesigner ZD421-203dpi ZPL)',
-    'set PRINTER_NAME=',
+    'rem Nome exato da impressora como aparece no Windows. Vazio = procura uma Zebra (Zebra/ZD/ZDesigner).',
+    'rem Outras marcas (Elgin, Argox, TSC, Honeywell...) precisam do nome aqui e de aceitar ZPL.',
+    `set PRINTER_NAME=${printer}`,
     'set RECONNECT_BASE=2',
     'set RECONNECT_MAX=60',
     `echo  NVS Zebra Agent - maquina ${machine}`,
@@ -130,6 +131,7 @@ function AgentSetup() {
   const [status, setStatus] = useState<WmsAgentStatusDto | null>(null);
   const [key, setKey] = useState('');
   const [machine, setMachine] = useState('CAIXA1');
+  const [printerName, setPrinterName] = useState('');
   const [error, setError] = useState('');
   const load = () => fullApi.agent().then(setStatus).catch(() => undefined);
   useEffect(() => {
@@ -139,9 +141,11 @@ function AgentSetup() {
   }, []);
   const site = window.location.origin;
   const cleanMachine = machine.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30) || 'CAIXA1';
+  // só ASCII seguro para o .bat (sem & | < > % ^ ")
+  const cleanPrinter = printerName.replace(/[^\w .()\-/]/g, '').slice(0, 80).trim();
 
   function downloadBat() {
-    const blob = new Blob([startBat(site, key, cleanMachine)], { type: 'application/octet-stream' });
+    const blob = new Blob([startBat(site, key, cleanMachine, cleanPrinter)], { type: 'application/octet-stream' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `iniciar_operacao_${cleanMachine}.bat`;
@@ -165,7 +169,7 @@ function AgentSetup() {
       <header>
         <span className="full-tool-icon" aria-hidden="true">🖨️</span>
         <div>
-          <h2>Impressora de etiquetas (Zebra)</h2>
+          <h2>Impressora de etiquetas</h2>
           <p>
             As etiquetas saem sozinhas quando o operador termina de bipar um item. Para isso, o computador ligado na Zebra precisa estar com o{' '}
             <b>agente</b> aberto. Configure uma vez por computador:
@@ -194,6 +198,13 @@ function AgentSetup() {
           {key ? (
             <span className="full-inline full-machine">
               <input value={machine} maxLength={30} onChange={(e) => setMachine(e.target.value)} aria-label="Nome do computador" placeholder="Nome do computador" />
+              <input
+                value={printerName}
+                maxLength={80}
+                onChange={(e) => setPrinterName(e.target.value)}
+                aria-label="Nome da impressora no Windows"
+                placeholder="Impressora (vazio = Zebra)"
+              />
               <button type="button" className="act act-strong" onClick={downloadBat}>⬇ iniciar_operacao_{cleanMachine}.bat</button>
             </span>
           ) : (
@@ -203,7 +214,7 @@ function AgentSetup() {
           )}
           <small>
             {key
-              ? 'Um nome diferente para cada computador (CAIXA1, CAIXA2…). Baixe um .bat por computador agora: a chave não aparece de novo.'
+              ? 'Um nome diferente para cada computador (CAIXA1, CAIXA2…). Impressora de outra marca: escreva o nome exato como aparece em Configurações → Impressoras do Windows (ela precisa aceitar ZPL). Baixe um .bat por computador agora: a chave não aparece de novo.'
               : status?.keys.length
                 ? `Já existe uma chave (${status.keys[0]!.hint}${status.keys[0]!.lastSeenAt ? `, último contato ${new Date(status.keys[0]!.lastSeenAt).toLocaleString('pt-BR')}` : ''}). Gerar outra desliga os computadores configurados com a anterior.`
                 : 'A chave identifica a sua empresa: não compartilhe o .bat.'}

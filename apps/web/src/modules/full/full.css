@@ -602,3 +602,34 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
   .oph-cards, .oph-sec[data-tone='blue'] .oph-cards { grid-template-columns: 1fr; }
   .oph-head { padding: 20px; }
 }
+
+/* ============ Conferência da impressora (tela do operador) ============ */
+.pgate {
+  --tone: var(--danger); --bg: var(--danger-soft);
+  display: flex; gap: 14px; align-items: flex-start; padding: 16px 20px; border-radius: 22px; background: var(--bg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tone) 30%, transparent);
+}
+.pgate[data-tone='ok'] { --tone: var(--ok); --bg: var(--ok-soft); padding: 12px 18px; align-items: center; }
+.pgate[data-tone='check'] { --tone: #d99a00; --bg: var(--yellow-soft); }
+.pgate-dot { width: 14px; height: 14px; margin-top: 4px; border-radius: 50%; flex: none; background: var(--tone); box-shadow: 0 0 0 5px color-mix(in srgb, var(--tone) 22%, transparent); }
+.pgate[data-tone='off'] .pgate-dot, .pgate[data-tone='check'] .pgate-dot { animation: pulse 1.2s ease-in-out infinite; }
+.pgate[data-tone='ok'] .pgate-dot { margin-top: 0; }
+.pgate-body { flex: 1; min-width: 0; display: grid; gap: 6px; color: var(--navy); }
+.pgate-body > b { font-size: 1.02rem; }
+.pgate-body p { margin: 0; color: var(--ink); font-size: .88rem; line-height: 1.45; }
+.pgate-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.pgate-row span { font-weight: 650; font-size: .88rem; }
+.pgate-row small { color: var(--gray-500); font-size: .8rem; }
+.pgate-lock { font-weight: 700; color: var(--navy) !important; }
+.pgate-steps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; }
+.pgate-steps li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-radius: 16px; background: var(--surface);
+  box-shadow: 0 0 0 1px var(--gray-100);
+}
+.pgate-steps li > span:first-child { flex: 1; min-width: 200px; font-weight: 700; font-size: .9rem; }
+.pgate-steps li[data-done] > span:first-child::after { content: ' ✓'; color: var(--ok); }
+.pgate-steps small { flex-basis: 100%; color: var(--gray-500); font-size: .8rem; }
+.pgate-steps small[data-error] { color: var(--danger-ink); font-weight: 650; }
+.pgate-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.pgate-help { margin: 0; padding: 10px 14px 10px 30px; border-radius: 14px; background: var(--surface); color: var(--ink); font-size: .84rem; line-height: 1.5; }
+.pgate-skip { justify-self: start; font-size: .82rem; }

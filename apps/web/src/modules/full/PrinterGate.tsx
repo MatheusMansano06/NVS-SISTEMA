@@ -17,21 +17,31 @@ export const printerBlocks = (s: WmsPrinterStatusDto | null) => Boolean(s && s.f
 /** Situação da impressora no topo da tela do operador (atualiza a cada 10 s). */
 export function usePrinterStatus() {
   const [status, setStatus] = useState<WmsPrinterStatusDto | null>(null);
+  // depois de "Iniciar o agente", confere a cada 2 s por um minuto (a faixa fica verde assim que ele conectar)
+  const [fastUntil, setFastUntil] = useState(0);
   const load = useCallback(() => fullApi.printer().then(setStatus).catch(() => undefined), []);
   useEffect(() => {
     void load();
-    const t = window.setInterval(() => document.visibilityState === 'visible' && void load(), 10_000);
+    const fast = fastUntil > Date.now();
+    const t = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+      if (fast && Date.now() > fastUntil) setFastUntil(0);
+    }, fast ? 2_000 : 10_000);
     return () => window.clearInterval(t);
-  }, [load]);
-  return { status, reload: load };
+  }, [load, fastUntil]);
+  return { status, reload: load, watchStart: () => setFastUntil(Date.now() + 60_000) };
 }
+
+/** Endereço registrado pelo instalador do agente (Windows): abre o agente neste computador. */
+const AGENT_URL = 'nvs-agente://iniciar';
 
 /**
  * Conferência da impressora: o agente precisa estar ligado e, no 1º uso do dia com Full em andamento, alguém do turno
  * imprime a etiqueta de teste e confirma que saiu legível. Vale para todos que entrarem no computador naquele dia.
  */
-export function PrinterGate({ status, reload }: { status: WmsPrinterStatusDto | null; reload: () => Promise<unknown> }) {
+export function PrinterGate({ status, reload, watchStart }: { status: WmsPrinterStatusDto | null; reload: () => Promise<unknown>; watchStart: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [tried, setTried] = useState(false);
   const [error, setError] = useState('');
   const [help, setHelp] = useState(false);
   if (!status) return null;
@@ -59,8 +69,27 @@ export function PrinterGate({ status, reload }: { status: WmsPrinterStatusDto | 
           <p>
             {status.agents.length
               ? `O computador ${status.agents[0]!.machine} está conectado, mas nenhuma impressora de etiquetas foi detectada. Confira se ela está ligada e no cabo, e reabra o agente.`
-              : 'Neste computador, abra o arquivo iniciar_operacao (a janela preta do agente) e deixe-a aberta. Em alguns segundos esta faixa fica verde.'}
+              : 'O programa de impressão (agente) precisa estar aberto neste computador antes de começar. Ligue pelo botão abaixo e deixe a janela dele aberta.'}
           </p>
+          {!status.agents.length && (
+            <div className="pgate-start">
+              <a
+                className="btn btn-primary btn-sm"
+                href={AGENT_URL}
+                onClick={() => {
+                  setTried(true);
+                  watchStart();
+                }}
+              >
+                ▶ Iniciar o agente
+              </a>
+              <small>
+                {tried
+                  ? 'Abriu a janela do agente? Em alguns segundos esta faixa fica verde. Não abriu nada: este computador ainda não tem o agente instalado — peça à Análise o instalador (Supervisão Full → Processamento).'
+                  : 'Abre o programa de impressão neste computador. Na primeira vez o navegador pergunta se pode abrir: marque “sempre permitir”.'}
+              </small>
+            </div>
+          )}
           {status.fullRunning && <p className="pgate-lock">🔒 A separação fica bloqueada até a impressora estar pronta.</p>}
         </div>
       </section>

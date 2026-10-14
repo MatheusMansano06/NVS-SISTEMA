@@ -136,7 +136,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
         <p>Gerencie suas listas de trabalho: retome as suas, pegue uma da fila ou bipe um produto para ir direto nele.</p>
       </section>
 
-      <PrinterGate status={printer.status} reload={printer.reload} />
+      <PrinterGate status={printer.status} reload={printer.reload} watchStart={printer.watchStart} />
       {blocked && me.master && (
         <button type="button" className="link pgate-skip" onClick={skipCheck}>Sou MASTER: separar hoje sem conferir a impressora</button>
       )}

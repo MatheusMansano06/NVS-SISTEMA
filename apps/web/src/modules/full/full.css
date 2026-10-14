@@ -682,3 +682,5 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 }
 .dock-item:hover .dock-tip { opacity: 1; }
 @media (hover: none) { .dock-item { width: 52px !important; height: 52px !important; } }
+.pgate-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 2px; }
+.pgate-start small { flex: 1; min-width: 220px; color: var(--gray-500); font-size: .8rem; line-height: 1.4; }

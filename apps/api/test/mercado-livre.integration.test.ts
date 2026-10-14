@@ -15,6 +15,8 @@ try {
   /* CI */
 }
 const TEST_DB = process.env.TEST_DATABASE_URL;
+/** Teto de paginação da busca de pedidos no ML simulado (o real é 10 mil). */
+const ORDERS_CAP = 60;
 
 function randomCnpj(): string {
   const b = Array.from({ length: 12 }, () => randomInt(0, 10));
@@ -248,7 +250,8 @@ function fakeMl(sellerId: number) {
         const d = Date.parse(o.date_created);
         return d >= f && d <= t;
       });
-      return { results: inRange.slice(offset, offset + 50), paging: { total: inRange.length, offset, limit: 50 } };
+      // como o ML: além do teto de paginação não vem nada (o teste usa teto 60; o real é 10 mil)
+      return { results: offset >= ORDERS_CAP ? [] : inRange.slice(offset, offset + 50), paging: { total: inRange.length, offset, limit: 50 } };
     },
     async order(_t, id) {
       calls.orderFetch[id] = (calls.orderFetch[id] ?? 0) + 1;
@@ -368,6 +371,7 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
         TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
       }),
       mlApi: fake.api,
+      mlOrdersOffsetCap: ORDERS_CAP,
     });
   });
   afterAll(() => app.close());
@@ -704,6 +708,7 @@ describe.skipIf(!TEST_DB)('Central de Devoluções (pós-venda do ML)', () => {
         TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
       }),
       mlApi: fake.api,
+      mlOrdersOffsetCap: ORDERS_CAP,
     });
   });
   afterAll(() => app.close());
@@ -800,6 +805,7 @@ describe.skipIf(!TEST_DB)('Central de Devoluções — contrato das telas origin
         TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
       }),
       mlApi: fake.api,
+      mlOrdersOffsetCap: ORDERS_CAP,
     });
   });
   afterAll(() => app.close());

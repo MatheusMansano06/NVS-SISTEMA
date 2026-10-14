@@ -70,7 +70,7 @@ export class MlIntegrationService {
     private readonly sales: SalesIngestion,
     private readonly events: EventBus,
     private readonly log: Logger,
-    private readonly opts: { clientId: string; usePkce: boolean },
+    private readonly opts: { clientId: string; usePkce: boolean; ordersOffsetCap?: number },
   ) {}
 
   // ================= OAuth
@@ -254,7 +254,8 @@ export class MlIntegrationService {
       await this.fillMissingListings(tenantId, connectionId, conn);
 
       // 4. fretes (comprador/vendedor), cupons e devoluções de todo o período importado
-      await this.enrichFinance(tenantId, connectionId, runId, conn, d90, true);
+      // frete e cupom de cada venda dos 90 dias (contas grandes passam de 30 mil pedidos por mês)
+      await this.enrichFinance(tenantId, connectionId, runId, conn, d90, true, undefined, 40_000);
 
       // 5. últimos ajustes (longos: até 2 mil envios e a fatura do ML, que limita rajadas)
       await this.run(tenantId, runId, { phase: 'finishing', progress: SYNC_PHASE_END.shipping_costs });
@@ -287,16 +288,35 @@ export class MlIntegrationService {
   ): Promise<void> {
     const start = PHASE_START[phase];
     const end = SYNC_PHASE_END[phase];
-    for (let offset = 0; offset < MAX_OFFSET; offset += ORDERS_PAGE_SIZE) {
+    // A busca de pedidos do ML não pagina além de 10 mil resultados: período com mais pedidos que isso é
+    // dividido ao meio (de novo, se preciso) até cada parte caber — senão os pedidos mais antigos ficavam de fora.
+    const totalMs = Math.max(1, to.getTime() - from.getTime());
+    let doneMs = 0;
+    const windows: [Date, Date][] = [[from, to]];
+    while (windows.length) {
+      const [wFrom, wTo] = windows.shift()!;
       const { token } = await this.accessToken(tenantId, connectionId);
-      const page = await this.api.searchOrders(token, conn.ml_user_id, mlDate(from), mlDate(to), offset);
-      const orders = page.results.map(mapMlOrder).filter((o) => o !== null);
-      await this.db.withTenant(tenantId, async (db) => {
-        await this.sales.upsertOrders(db, tenantId, conn.account_id, 'mercado_livre', orders);
-        const done = Math.min(1, (offset + page.results.length) / Math.max(1, page.paging.total));
-        await this.repo.updateRun(db, runId, { progress: Math.round(start + (end - start) * done), addOrders: orders.length });
-      });
-      if (page.results.length < ORDERS_PAGE_SIZE || offset + ORDERS_PAGE_SIZE >= page.paging.total) break;
+      const first = await this.api.searchOrders(token, conn.ml_user_id, mlDate(wFrom), mlDate(wTo), 0);
+      const cap = this.opts.ordersOffsetCap ?? MAX_OFFSET;
+      if (first.paging.total > cap - ORDERS_PAGE_SIZE && wTo.getTime() - wFrom.getTime() > 60_000) {
+        const mid = new Date(Math.floor((wFrom.getTime() + wTo.getTime()) / 2));
+        windows.unshift([wFrom, mid], [new Date(mid.getTime() + 1), wTo]);
+        continue;
+      }
+      for (let offset = 0, page = first; ; ) {
+        const orders = page.results.map(mapMlOrder).filter((o) => o !== null);
+        const winDone = Math.min(1, (offset + page.results.length) / Math.max(1, page.paging.total));
+        await this.db.withTenant(tenantId, async (db) => {
+          await this.sales.upsertOrders(db, tenantId, conn.account_id, 'mercado_livre', orders);
+          const done = (doneMs + (wTo.getTime() - wFrom.getTime()) * winDone) / totalMs;
+          await this.repo.updateRun(db, runId, { progress: Math.round(start + (end - start) * Math.min(1, done)), addOrders: orders.length });
+        });
+        offset += ORDERS_PAGE_SIZE;
+        if (page.results.length < ORDERS_PAGE_SIZE || offset >= page.paging.total || offset >= cap) break;
+        const { token: t } = await this.accessToken(tenantId, connectionId);
+        page = await this.api.searchOrders(t, conn.ml_user_id, mlDate(wFrom), mlDate(wTo), offset);
+      }
+      doneMs += wTo.getTime() - wFrom.getTime();
     }
   }
 
@@ -389,9 +409,10 @@ export class MlIntegrationService {
     since: Date,
     reportProgress: boolean,
     onlyExternalId?: string,
+    limit = 5000,
   ): Promise<void> {
     const pending = await this.db.withTenant(tenantId, (db: Queryable) =>
-      this.sales.pendingEnrichment(db, conn.account_id, since.toISOString(), 5000, onlyExternalId),
+      this.sales.pendingEnrichment(db, conn.account_id, since.toISOString(), limit, onlyExternalId),
     );
     const start = PHASE_START.shipping_costs;
     const sellerId = Number(conn.ml_user_id);
@@ -543,6 +564,8 @@ export class MlIntegrationService {
       await this.importRange(tenantId, connectionId, runId, conn, since, now, 'orders_recent');
       await this.syncListings(tenantId, connectionId, null, conn, 'paused');
       await this.enrichFinance(tenantId, connectionId, null, conn, since, false);
+      // e completa aos poucos o que ainda faltar de frete/cupom nos últimos 90 dias
+      await this.enrichFinance(tenantId, connectionId, null, conn, new Date(now.getTime() - 90 * DAY), false, undefined, 2_000);
       await this.backfillAddresses(tenantId, connectionId, conn);
       await this.backfillPaidFreight(tenantId, connectionId, conn);
       await this.syncBilling(tenantId, connectionId, conn);

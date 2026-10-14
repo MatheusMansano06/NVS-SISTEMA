@@ -84,10 +84,12 @@ export interface AppDeps {
   cache?: Cache;
   /** Substitui a API do Mercado Livre (testes). */
   mlApi?: MlApi;
+  /** Teto de paginação da busca de pedidos do ML (testes usam um teto baixo para exercitar a divisão de período). */
+  mlOrdersOffsetCap?: number;
 }
 
 /** Composition root: monta os módulos e injeta dependências. */
-export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<FastifyInstance> {
+export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: AppDeps): Promise<FastifyInstance> {
   const database = db ?? new Database(env.DATABASE_URL);
   const events = new EventBus();
   const app = Fastify({
@@ -176,7 +178,7 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
         new SalesIngestion(),
         events,
         app.log,
-        { clientId: env.ML_CLIENT_ID!, usePkce: env.ML_USE_PKCE },
+        { clientId: env.ML_CLIENT_ID!, usePkce: env.ML_USE_PKCE, ordersOffsetCap: mlOrdersOffsetCap },
       )
     : null;
   app.decorate('ml', ml);

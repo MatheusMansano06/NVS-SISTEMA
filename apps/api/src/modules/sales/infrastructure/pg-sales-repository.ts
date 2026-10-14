@@ -38,6 +38,39 @@ export class PgSalesRepository {
     return { orders: num(r.orders), units: num(r.units), revenue: num(r.revenue), fees: num(r.fees), cost: num(r.cost), tax: num(r.tax) };
   }
 
+  /** Investido em Mercado Ads no período (só Mercado Livre; respeita o filtro de conta). */
+  async adSpend(db: Queryable, f: SalesFilter): Promise<number> {
+    if (f.marketplace && f.marketplace !== 'mercado_livre') return 0;
+    const { rows } = await db.query(
+      `SELECT coalesce(sum(cost), 0) AS cost FROM ad_spend_daily
+        WHERE day BETWEEN $1::date AND $2::date AND ($3::uuid IS NULL OR account_id = $3)`,
+      [f.range.from, f.range.to, f.accountId ?? null],
+    );
+    return num(rows[0]?.cost);
+  }
+
+  /** Situação do Mercado Ads nas contas do filtro: a pior manda (falta de permissão aparece). */
+  async adsInfo(db: Queryable, accountId?: string) {
+    const { rows } = await db.query<{ status: string; error: string | null }>(
+      `SELECT status, error FROM ad_accounts WHERE ($1::uuid IS NULL OR account_id = $1)`,
+      [accountId ?? null],
+    );
+    return rows;
+  }
+
+  /** Ciclo da fatura do ML aberto hoje (e o anterior), das faturas já lidas. */
+  async invoicePeriods(db: Queryable, today: string, accountId?: string) {
+    const { rows } = await db.query<{ from: string; to: string }>(
+      `SELECT DISTINCT to_char(date_from, 'YYYY-MM-DD') AS from, to_char(date_to, 'YYYY-MM-DD') AS to
+         FROM ml_billing_periods
+        WHERE date_from IS NOT NULL AND date_to IS NOT NULL AND date_from <= $1::date
+          AND ($2::uuid IS NULL OR account_id = $2)
+        ORDER BY 1 DESC LIMIT 2`,
+      [today, accountId ?? null],
+    );
+    return rows;
+  }
+
   /** Série completa (intervalos sem venda vêm zerados) por hora ou por dia. */
   async series(db: Queryable, f: SalesFilter, granularity: 'hour' | 'day'): Promise<SeriesPoint[]> {
     const { rows } = await db.query(

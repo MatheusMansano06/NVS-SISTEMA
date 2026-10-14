@@ -1,4 +1,4 @@
-import type { DashboardDto, DashboardQuery } from '@nvs/shared';
+import type { AdsInfoDto, DashboardDto, DashboardQuery } from '@nvs/shared';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import type { Database } from '../../../shared/infrastructure/database.js';
 import { computeKpis } from '../domain/kpis.js';
@@ -6,6 +6,14 @@ import { granularityOf, previousRange, resolvePeriod, todayIn } from '../domain/
 import type { PgSalesRepository, SalesFilter } from '../infrastructure/pg-sales-repository.js';
 
 const CACHE_TTL_SECONDS = 30;
+const brDate = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+const ADS_MESSAGE: Record<Exclude<AdsInfoDto['status'], 'ok'>, string> = {
+  sem_permissao: 'O Mercado Livre não liberou a leitura de publicidade para o NVS: o investimento em Ads não entra na conta.',
+  sem_anunciante: 'Esta conta não tem campanhas no Mercado Ads.',
+  erro: 'Não foi possível ler o Mercado Ads agora; tentamos de novo na próxima atualização.',
+  sem_dados: 'O investimento em Ads aparece depois da próxima sincronização com o Mercado Livre.',
+};
 
 export class DashboardService {
   constructor(
@@ -15,8 +23,20 @@ export class DashboardService {
   ) {}
 
   async summary(tenantId: string, q: DashboardQuery, now = new Date()): Promise<DashboardDto> {
-    const range = resolvePeriod(q.period, todayIn(undefined, now));
-    const prev = previousRange(q.period, range);
+    const today = todayIn(undefined, now);
+    let range = resolvePeriod(q.period, today);
+    let prev = previousRange(q.period, range);
+    let invoiceLabel: string | null = null;
+    if (q.period === 'invoice') {
+      // ciclo real da fatura do ML (as contas fecham em dias diferentes): o aberto hoje e o anterior
+      const periods = await this.db.withTenant(tenantId, (db) => this.repo.invoicePeriods(db, today, q.accountId));
+      const cur = periods[0];
+      if (cur) {
+        range = { from: cur.from, to: cur.to < today ? cur.to : today };
+        prev = periods[1] ? { from: periods[1].from, to: periods[1].to } : previousRange('30d', range);
+        invoiceLabel = `Fatura ${brDate(cur.from)} a ${brDate(cur.to)}`;
+      }
+    }
     // versão muda quando custos são alterados (cadastro de SKUs) → cache invalidado na hora
     const version = (await this.cache.get<number>(`dash-version:${tenantId}`)) ?? 0;
     const key = `dash:${tenantId}:${version}:${q.period}:${range.from}:${q.marketplace ?? '*'}:${q.accountId ?? '*'}`;
@@ -31,8 +51,10 @@ export class DashboardService {
 
     // uma transação (RLS do tenant) e consultas independentes em sequência no mesmo client
     const dto = await this.db.withTenant(tenantId, async (db) => {
-      const current = await this.repo.totals(db, filter);
-      const previous = await this.repo.totals(db, { ...filter, range: prev });
+      const current = { ...(await this.repo.totals(db, filter)), ads: await this.repo.adSpend(db, filter) };
+      const prevFilter = { ...filter, range: prev };
+      const previous = { ...(await this.repo.totals(db, prevFilter)), ads: await this.repo.adSpend(db, prevFilter) };
+      const adRows = await this.repo.adsInfo(db, q.accountId);
       const series = await this.repo.series(db, filter, granularity);
       const topProducts = await this.repo.topProducts(db, filter, current.revenue);
       const paused = await this.repo.paused(db, filter);
@@ -50,6 +72,8 @@ export class DashboardService {
         accounts,
         isDemo,
         missingCosts,
+        ads: adsInfo(adRows, q.marketplace),
+        invoiceLabel,
         generatedAt: now.toISOString(),
       } satisfies DashboardDto;
     });
@@ -57,4 +81,14 @@ export class DashboardService {
     await this.cache.set(key, dto, CACHE_TTL_SECONDS);
     return dto;
   }
+}
+
+/** A pior situação entre as contas manda: falta de permissão precisa aparecer para a margem não enganar. */
+function adsInfo(rows: { status: string }[], marketplace?: string): AdsInfoDto {
+  if (marketplace && marketplace !== 'mercado_livre') return { status: 'ok', message: null };
+  const order: AdsInfoDto['status'][] = ['sem_permissao', 'erro', 'sem_anunciante', 'ok'];
+  if (!rows.length) return { status: 'sem_dados', message: ADS_MESSAGE.sem_dados };
+  const worst = order.find((st) => rows.some((r) => r.status === st)) ?? 'ok';
+  if (worst === 'sem_anunciante' && rows.some((r) => r.status === 'ok')) return { status: 'ok', message: null };
+  return { status: worst, message: worst === 'ok' ? null : ADS_MESSAGE[worst] };
 }

@@ -40,6 +40,9 @@ export function resolvePeriod(period: Period, today: string): DateRange {
       const lastPrev = addDays(firstThis, -1);
       return { from: `${lastPrev.slice(0, 7)}-01`, to: lastPrev };
     }
+    case 'invoice':
+      // sem a fatura do ML lida ainda: o mês corrente (o dashboard troca pelo ciclo real da fatura)
+      return { from: `${today.slice(0, 7)}-01`, to: today };
   }
 }
 

@@ -21,6 +21,14 @@ import { navigate } from '../../app/router';
 import './dashboard.css';
 
 const HIDE_KEY = 'nvs.hideValues';
+const ADS_KEY = 'nvs.discountAds';
+const readAds = () => {
+  try {
+    return localStorage.getItem(ADS_KEY) !== '0'; // padrão: margem já descontando os Ads
+  } catch {
+    return true;
+  }
+};
 const readHidden = () => {
   try {
     return localStorage.getItem(HIDE_KEY) === '1';
@@ -38,6 +46,16 @@ export function Dashboard() {
   const { session } = useAuth();
   const [filters, setFilters] = useState<DashboardFilters>({ period: 'today' });
   const [hidden, setHidden] = useState(readHidden);
+  const [discountAds, setDiscountAds] = useState(readAds);
+  const toggleAds = () =>
+    setDiscountAds((v) => {
+      try {
+        localStorage.setItem(ADS_KEY, v ? '0' : '1');
+      } catch {
+        /* vale só para esta sessão */
+      }
+      return !v;
+    });
   const { data, loading, error, refresh } = useDashboard(filters);
   const [mlReturn] = useState(consumeMlReturn);
   // referência estável: o acompanhamento da sincronização pede atualização a cada avanço
@@ -70,7 +88,7 @@ export function Dashboard() {
           </div>
           {data && (
             <p className="dash-range">
-              {PERIOD_LABELS[filters.period]} ·{' '}
+              {data.invoiceLabel ?? PERIOD_LABELS[filters.period]} ·{' '}
               {new Date(`${data.range.from}T12:00:00`).toLocaleDateString('pt-BR')}
               {data.range.to !== data.range.from && ` a ${new Date(`${data.range.to}T12:00:00`).toLocaleDateString('pt-BR')}`}
             </p>
@@ -137,25 +155,53 @@ export function Dashboard() {
                 info="Faturamento menos tarifas de venda e frete pagos ao marketplace: o que efetivamente cai na sua conta."
               />
               <KpiCard
-                label="Lucro bruto"
+                label={discountAds ? 'Lucro depois dos Ads' : 'Lucro bruto'}
                 tone="amber"
-                value={k.grossProfit}
-                previous={p.grossProfit}
+                value={discountAds ? k.profitAfterAds : k.grossProfit}
+                previous={discountAds ? p.profitAfterAds : p.grossProfit}
                 format={money}
-                info="Líquido do marketplace menos o custo dos produtos e o imposto (Cadastro de SKUs)."
+                info={discountAds
+                  ? 'Líquido do marketplace menos o custo dos produtos, o imposto (Cadastro de SKUs) e o investido em Mercado Ads no período.'
+                  : 'Líquido do marketplace menos o custo dos produtos e o imposto (Cadastro de SKUs).'}
               />
               <KpiCard
-                label="Margem"
+                label={discountAds ? 'Margem depois dos Ads' : 'Margem'}
                 tone="teal"
-                value={k.margin}
-                previous={p.margin}
+                value={discountAds ? k.marginAfterAds : k.margin}
+                previous={discountAds ? p.marginAfterAds : p.margin}
                 format={(n) => pct(n)}
                 deltaMode="points"
-                info="Lucro bruto dividido pelo faturamento."
+                info={discountAds ? 'Lucro depois dos Ads dividido pelo faturamento (margem − TACOS).' : 'Lucro bruto dividido pelo faturamento.'}
               >
-                <MarginRing margin={k.margin} />
+                <MarginRing margin={discountAds ? k.marginAfterAds : k.margin} />
               </KpiCard>
             </section>
+
+            <section className="ads-bar" aria-label="Mercado Ads">
+              <div className="ads-bar-title">
+                <strong>Mercado Ads</strong>
+                <small>{data.invoiceLabel ?? PERIOD_LABELS[filters.period]}</small>
+              </div>
+              <div className="ads-num">
+                <span>Investido em Ads</span>
+                <strong className="money">{money(k.adSpend)}</strong>
+              </div>
+              <div className="ads-num ads-tacos" title="TACOS = investimento em Ads ÷ faturamento bruto × 100">
+                <span>TACOS</span>
+                <strong>{pct(k.tacos)}</strong>
+                <small>Ads ÷ faturamento</small>
+              </div>
+              <div className="ads-num">
+                <span>Margem antes → depois</span>
+                <strong>{pct(k.margin)} → {pct(k.marginAfterAds)}</strong>
+              </div>
+              <label className="ads-toggle">
+                <input type="checkbox" checked={discountAds} onChange={toggleAds} />
+                <span className="ads-switch" aria-hidden="true" />
+                Descontar Ads da margem
+              </label>
+            </section>
+            {data.ads.message && <p className="costs-note" role="note">{data.ads.message}</p>}
 
             <section className="minis" aria-label="Outros indicadores">
               <div><span>Pedidos</span><strong>{int(k.orders)}</strong></div>

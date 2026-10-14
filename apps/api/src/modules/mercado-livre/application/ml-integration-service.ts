@@ -4,7 +4,7 @@ import { SYNC_PHASE_END } from '@nvs/shared';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js';
 import type { EventBus } from '../../../shared/kernel/event-bus.js';
-import type { SalesIngestion } from '../../sales/index.js';
+import { todayIn, type SalesIngestion } from '../../sales/index.js';
 import { feeBonusOf, mapMlItem, mapMlOrder, type MlOrder } from '../domain/ml-order.js';
 import { billedDifal, sellerCoupon, sellerPaidFreight, shipmentAddress, shipmentFreight } from '../domain/ml-finance.js';
 import { MlApiError, ORDERS_PAGE_SIZE, type MlApi } from '../infrastructure/ml-api.js';
@@ -263,6 +263,7 @@ export class MlIntegrationService {
       await this.backfillPaidFreight(tenantId, connectionId, conn, 2000);
       await this.run(tenantId, runId, { progress: 97 });
       await this.syncBilling(tenantId, connectionId, conn);
+      await this.syncAdSpend(tenantId, connectionId, conn);
       await this.run(tenantId, runId, { progress: 99 });
       await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
 
@@ -545,12 +546,69 @@ export class MlIntegrationService {
       await this.backfillAddresses(tenantId, connectionId, conn);
       await this.backfillPaidFreight(tenantId, connectionId, conn);
       await this.syncBilling(tenantId, connectionId, conn);
+      await this.syncAdSpend(tenantId, connectionId, conn);
       await this.db.withTenant(tenantId, (db) => this.sales.refreshListingSalesStats(db, conn.account_id));
       await this.run(tenantId, runId, { status: 'done', progress: 100 });
     } catch (err) {
       const message = err instanceof MlApiError ? `Mercado Livre respondeu: ${err.message}` : 'Erro inesperado na atualização';
       await this.run(tenantId, runId, { status: 'failed', error: message }).catch(() => undefined);
       throw err;
+    }
+  }
+
+  /**
+   * Investimento em Mercado Ads por dia (para o TACOS e a margem depois dos Ads). O ML guarda 90 dias: busca os dias
+   * que ainda não temos e relê os 3 últimos (o ML ainda ajusta). Sem permissão de publicidade ou sem anunciante,
+   * registra a situação para a tela avisar — nunca derruba a sincronização.
+   */
+  async syncAdSpend(tenantId: string, connectionId: string, conn: ConnectionRow, days = 90): Promise<void> {
+    if (!this.api.adAdvertisers || !this.api.adCost) return;
+    const save = (status: 'ok' | 'sem_anunciante' | 'sem_permissao' | 'erro', advertiserId: string | null, error: string | null) =>
+      this.db.withTenant(tenantId, (db) =>
+        db.query(
+          `INSERT INTO ad_accounts (tenant_id, account_id, advertiser_id, status, error) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (tenant_id, account_id) DO UPDATE SET advertiser_id = EXCLUDED.advertiser_id, status = EXCLUDED.status,
+             error = EXCLUDED.error, checked_at = now()`,
+          [tenantId, conn.account_id, advertiserId, status, error],
+        ),
+      );
+    let adv: { advertiserId: string; siteId: string } | undefined;
+    try {
+      const { token } = await this.accessToken(tenantId, connectionId);
+      const list = await this.api.adAdvertisers(token);
+      adv = list.find((a) => a.siteId === 'MLB') ?? list[0];
+    } catch (err) {
+      const denied = err instanceof MlApiError && (err.status === 401 || err.status === 403);
+      await save(denied ? 'sem_permissao' : 'erro', null, (err as Error).message.slice(0, 200)).catch(() => undefined);
+      return;
+    }
+    if (!adv) {
+      await save('sem_anunciante', null, null);
+      return;
+    }
+    const today = todayIn();
+    const all = Array.from({ length: days }, (_, i) => new Date(Date.parse(`${today}T12:00:00Z`) - i * DAY).toISOString().slice(0, 10));
+    const have = await this.db.withTenant(tenantId, async (db) =>
+      new Set((await db.query<{ d: string }>(`SELECT to_char(day, 'YYYY-MM-DD') AS d FROM ad_spend_daily WHERE account_id = $1`, [conn.account_id])).rows.map((x) => x.d)),
+    );
+    const todo = all.filter((d, i) => i < 3 || !have.has(d));
+    try {
+      for (const day of todo) {
+        const { token } = await this.accessToken(tenantId, connectionId);
+        const cost = await this.api.adCost(token, adv.advertiserId, adv.siteId, day);
+        await this.db.withTenant(tenantId, (db) =>
+          db.query(
+            `INSERT INTO ad_spend_daily (tenant_id, account_id, day, cost) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (tenant_id, account_id, day) DO UPDATE SET cost = EXCLUDED.cost, fetched_at = now()`,
+            [tenantId, conn.account_id, day, Math.round(cost * 100) / 100],
+          ),
+        );
+      }
+      await save('ok', adv.advertiserId, null);
+    } catch (err) {
+      const denied = err instanceof MlApiError && (err.status === 401 || err.status === 403);
+      await save(denied ? 'sem_permissao' : 'erro', adv.advertiserId, (err as Error).message.slice(0, 200)).catch(() => undefined);
+      this.log.error({ err, tenantId }, 'Mercado Ads: leitura do investimento falhou');
     }
   }
 

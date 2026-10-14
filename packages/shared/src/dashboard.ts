@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { MARKETPLACES, type Marketplace } from './onboarding.js';
 
-export const PERIODS = ['today', 'yesterday', '7d', '30d', 'this_month', 'last_month'] as const;
+export const PERIODS = ['today', 'yesterday', '7d', '30d', 'this_month', 'last_month', 'invoice'] as const;
 export type Period = (typeof PERIODS)[number];
 
 export const PERIOD_LABELS: Record<Period, string> = {
@@ -11,6 +11,7 @@ export const PERIOD_LABELS: Record<Period, string> = {
   '30d': '30 dias',
   this_month: 'Este mês',
   last_month: 'Mês passado',
+  invoice: 'Fatura atual',
 };
 
 export const dashboardQuerySchema = z.object({
@@ -30,6 +31,19 @@ export interface KpiSet {
   orders: number;
   units: number;
   avgTicket: number;
+  /** Investido em Mercado Ads no período. */
+  adSpend: number;
+  /** TACOS: investimento em Ads / faturamento bruto (0..1). */
+  tacos: number;
+  /** Lucro bruto depois de descontar o investimento em Ads. */
+  profitAfterAds: number;
+  marginAfterAds: number;
+}
+
+/** Situação da leitura do Mercado Ads nas contas do filtro. */
+export interface AdsInfoDto {
+  status: 'ok' | 'sem_anunciante' | 'sem_permissao' | 'erro' | 'sem_dados';
+  message: string | null;
 }
 
 export interface SeriesPoint {
@@ -77,5 +91,8 @@ export interface DashboardDto {
   isDemo: boolean;
   /** Há pedidos reais sem custo de produto cadastrado (lucro/margem consideram custo zero). */
   missingCosts: boolean;
+  ads: AdsInfoDto;
+  /** Fatura atual: período real do ciclo da fatura do ML (quando o filtro é "Fatura atual"). */
+  invoiceLabel: string | null;
   generatedAt: string;
 }

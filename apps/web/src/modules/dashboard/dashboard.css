@@ -211,3 +211,31 @@ a.top5-row:hover { background: #fff; transform: translateX(4px); box-shadow: 0 0
   .thumb { width: 52px; height: 52px; }
   .carousel { grid-auto-columns: 62%; }
 }
+
+/* ============ Mercado Ads: investimento, TACOS e margem depois dos Ads ============ */
+.ads-bar {
+  display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)) auto; gap: 18px; align-items: center; padding: 16px 22px;
+  border-radius: 28px 28px 28px 10px; background: linear-gradient(120deg, #fff 55%, var(--yellow-soft));
+  box-shadow: 0 0 0 1px var(--gray-100), 0 16px 34px -28px rgba(11,28,77,.4); animation: rise .5s .1s both;
+}
+.ads-bar-title { display: grid; }
+.ads-bar-title strong { color: var(--navy); font-size: 1.05rem; }
+.ads-bar-title small { color: var(--gray-500); font-size: .8rem; }
+.ads-num { display: grid; gap: 2px; padding-left: 18px; border-left: 1px solid var(--gray-100); }
+.ads-num span { color: var(--gray-500); font-size: .84rem; font-weight: 550; }
+.ads-num strong { color: var(--navy); font-size: 1.3rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ads-num small { color: var(--gray-500); font-size: .74rem; }
+.ads-tacos strong { color: #7a5600; font-size: 1.6rem; }
+.ads-toggle { display: flex; align-items: center; gap: 10px; font-weight: 650; color: var(--navy); font-size: .9rem; cursor: pointer; white-space: nowrap; }
+.ads-toggle input { position: absolute; opacity: 0; }
+.ads-switch { width: 44px; height: 26px; border-radius: 99px; background: var(--gray-300); position: relative; flex: none; transition: background .2s; }
+.ads-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 3px rgba(11,28,77,.3); }
+.ads-toggle input:checked + .ads-switch { background: var(--blue); }
+.ads-toggle input:checked + .ads-switch::after { left: 21px; }
+.ads-toggle input:focus-visible + .ads-switch { outline: 3px solid color-mix(in srgb, var(--blue) 45%, transparent); outline-offset: 2px; }
+.dash[data-hidden] .ads-num strong { filter: blur(8px); }
+@media (max-width: 1000px) {
+  .ads-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ads-bar-title, .ads-toggle { grid-column: 1 / -1; }
+  .ads-num { border-left: 0; padding-left: 0; }
+}

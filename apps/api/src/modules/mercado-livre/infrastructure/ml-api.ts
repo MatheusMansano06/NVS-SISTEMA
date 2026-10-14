@@ -106,6 +106,10 @@ export interface MlApi {
   ): Promise<{ results: MlPromotionItem[]; searchAfter: string | null }>;
   /** Inscreve o anúncio na campanha (escreve no ML). */
   enrollPromotion(token: string, itemId: string, body: { promotion_id: string; promotion_type: string; deal_price?: number }): Promise<void>;
+  /** Mercado Ads (Product Ads): anunciante da conta. Lança 401/403 sem permissão de publicidade. */
+  adAdvertisers?(token: string): Promise<{ advertiserId: string; siteId: string }[]>;
+  /** Mercado Ads: custo total das campanhas num dia (YYYY-MM-DD). O ML guarda 90 dias para trás. */
+  adCost?(token: string, advertiserId: string, siteId: string, day: string): Promise<number>;
 }
 
 export interface MlFlexSubscription {
@@ -566,6 +570,48 @@ export class HttpMlApi implements MlApi, MlRawApi {
       },
       false,
     );
+  }
+
+  // ---- Mercado Ads (Product Ads)
+  async adAdvertisers(token: string): Promise<{ advertiserId: string; siteId: string }[]> {
+    try {
+      const r = await this.request<{ advertisers?: { advertiser_id: number | string; site_id: string }[] }>('/advertising/advertisers?product_id=PADS', {
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json', 'api-version': '1' },
+      });
+      return (r.advertisers ?? []).map((a) => ({ advertiserId: String(a.advertiser_id), siteId: a.site_id }));
+    } catch (err) {
+      if (err instanceof MlApiError && err.status === 404) return []; // conta que nunca anunciou
+      throw err; // 401/403 = o app não tem permissão de publicidade
+    }
+  }
+
+  async adCost(token: string, advertiserId: string, siteId: string, day: string): Promise<number> {
+    type Page = { metrics_summary?: { cost?: number }; results?: { metrics?: { cost?: number } }[]; paging?: { total?: number } };
+    const headers = { authorization: `Bearer ${token}`, accept: 'application/json', 'api-version': '2' };
+    const q = (offset: number) => `date_from=${day}&date_to=${day}&metrics=cost&metrics_summary=true&limit=50&offset=${offset}`;
+    // rota nova (com o site) e, se não existir, a antiga
+    const paths = [
+      (o: number) => `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search?${q(o)}`,
+      (o: number) => `/advertising/advertisers/${advertiserId}/product_ads/campaigns?${q(o)}`,
+    ];
+    for (const path of paths) {
+      let first: Page;
+      try {
+        first = await this.request<Page>(path(0), { headers });
+      } catch (err) {
+        if (err instanceof MlApiError && err.status === 404) continue;
+        throw err;
+      }
+      if (typeof first.metrics_summary?.cost === 'number') return first.metrics_summary.cost;
+      // sem resumo: soma as campanhas de todas as páginas
+      let total = (first.results ?? []).reduce((s, c) => s + Number(c.metrics?.cost ?? 0), 0);
+      for (let o = 50; o < (first.paging?.total ?? 0); o += 50) {
+        const page = await this.request<Page>(path(o), { headers });
+        total += (page.results ?? []).reduce((s, c) => s + Number(c.metrics?.cost ?? 0), 0);
+      }
+      return total;
+    }
+    return 0;
   }
 
   // ---- chamadas genéricas (pós-venda: reclamações, devoluções, revisões, mediação) — ver MlRawApi

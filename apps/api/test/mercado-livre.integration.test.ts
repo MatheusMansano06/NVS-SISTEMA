@@ -31,7 +31,7 @@ function randomCnpj(): string {
 
 /** API falsa do Mercado Livre: 120 pedidos nos últimos 90 dias (1 a cada 18h). */
 function fakeMl(sellerId: number) {
-  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null, catCalls: 0, lastFreight: '', billing: 0, orderFetch: {} as Record<string, number> };
+  const calls = { refresh: 0, exchange: 0, verifier: '' as string | null, desc: '', created: null as Record<string, unknown> | null, catCalls: 0, lastFreight: '', billing: 0, adCost: 0, orderFetch: {} as Record<string, number> };
   const now = Date.now();
   const orders: MlOrder[] = Array.from({ length: 120 }, (_, i) => ({
     id: 9_000_000 + i,
@@ -153,7 +153,16 @@ function fakeMl(sellerId: number) {
     },
     async billingPeriods() {
       const m = new Date().toISOString().slice(0, 7);
-      return [{ key: `${m}-01`, period_status: 'OPEN', amount: 900 }];
+      // ciclo da fatura: do dia 1 até o fim do mês (o "Fatura atual" do dashboard usa estas datas)
+      return [{ key: `${m}-01`, period_status: 'OPEN', amount: 900, period: { date_from: `${m}-01`, date_to: `${m}-28` } }];
+    },
+    // Mercado Ads: R$ 10 investidos por dia
+    async adAdvertisers() {
+      return [{ advertiserId: '777', siteId: 'MLB' }];
+    },
+    async adCost() {
+      calls.adCost++;
+      return 10;
     },
     async billingSummary() {
       calls.billing++;
@@ -394,6 +403,17 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     // líquido = faturamento - tarifas (12 por pedido) - frete pago pelo vendedor (20 por pedido)
     expect(dash.kpis.net).toBe(paid30 * (100 - 12 - 20));
     expect(dash.missingCosts).toBe(true);
+    // Mercado Ads: 30 dias × R$ 10; TACOS = Ads / faturamento; sai do lucro e da margem
+    expect(dash.ads).toEqual({ status: 'ok', message: null });
+    expect(dash.kpis.adSpend).toBe(300);
+    expect(dash.kpis.tacos).toBeCloseTo(300 / (paid30 * 100), 6);
+    expect(dash.kpis.profitAfterAds).toBeCloseTo(dash.kpis.grossProfit - 300, 2);
+    expect(dash.kpis.marginAfterAds).toBeCloseTo(dash.kpis.margin - dash.kpis.tacos, 6);
+    expect(fake.calls.adCost).toBe(90); // 90 dias na primeira sincronização
+    // fatura atual: o ciclo vem da fatura do ML
+    const inv = (await app.inject({ method: 'GET', url: '/api/v1/dashboard/summary?period=invoice&fresh=1', cookies })).json();
+    expect(inv.range.from).toBe(`${todayIn().slice(0, 7)}-01`);
+    expect(inv.invoiceLabel).toMatch(/^Fatura 01\/\d\d a 28\/\d\d$/);
 
     // cadastro de SKUs já mostra todos os SKUs (anúncios + vendas) sem custo
     const skus = (await app.inject({ method: 'GET', url: '/api/v1/skus', cookies })).json();

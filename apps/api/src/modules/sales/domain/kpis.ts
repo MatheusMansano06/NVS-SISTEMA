@@ -7,6 +7,7 @@ export interface KpiTotals {
   tax: number; // impostos (imposto % do cadastro de SKU sobre o valor vendido)
   orders: number;
   units: number;
+  ads?: number; // investido em Mercado Ads
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -23,5 +24,9 @@ export function computeKpis(t: KpiTotals): KpiSet {
     orders: t.orders,
     units: t.units,
     avgTicket: t.orders > 0 ? round2(t.revenue / t.orders) : 0,
+    adSpend: round2(t.ads ?? 0),
+    tacos: t.revenue > 0 ? (t.ads ?? 0) / t.revenue : 0,
+    profitAfterAds: round2(grossProfit - (t.ads ?? 0)),
+    marginAfterAds: t.revenue > 0 ? (grossProfit - (t.ads ?? 0)) / t.revenue : 0,
   };
 }

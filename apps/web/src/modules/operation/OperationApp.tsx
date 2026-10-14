@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FullRouter } from '../full/FullRouter';
 import { navigate, usePath } from '../../app/router';
-import { ReturnsScanView } from '../returns/ReturnsViews';
-import '../returns/returns.css';
+import { CentralDevolucoes } from '../central/CentralDevolucoes';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../../shared/ui/Modal';
 import { PinChange } from './PinChange';
@@ -24,6 +23,9 @@ export function OperationApp() {
     if (!window.location.pathname.startsWith('/op')) navigate('/op');
   }, []);
 
+  // Central de Devoluções em tela cheia, como no original; a Operação vê só a parte do bipe
+  if (onReturns) return <CentralDevolucoes telas={['operacao', 'historico', 'full']} onVoltar={() => navigate('/op')} />;
+
   return (
     <div className="station">
       <header className="station-top">
@@ -44,7 +46,7 @@ export function OperationApp() {
         {view === 'pin' ? (
           <PinChange person={ctx.person} onCancel={() => setView('home')} onDone={(p) => { ctx.update(p); setView('home'); }} />
         ) : (
-          <div className="op-full">{onReturns ? <div className="skus full"><ReturnsScanView /></div> : <FullRouter mode="operacao" />}</div>
+          <div className="op-full"><FullRouter mode="operacao" /></div>
         )}
       </main>
       <Modal open={team} onClose={() => setTeam(false)} label="Equipe" wide>

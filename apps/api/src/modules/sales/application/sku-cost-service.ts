@@ -40,6 +40,34 @@ export class SkuCostService {
     return result;
   }
 
+  /**
+   * Custo novo valendo a partir de `since` (Central de Devoluções → Quebrados): o que veio antes mantém o custo da época.
+   * Primeira mudança de um SKU sem histórico guarda antes o custo atual "desde sempre". O custo atual passa a ser o da
+   * vigência mais recente. Retorna esse custo atual.
+   */
+  async saveFrom(tenantId: string, userId: string, sku: string, custoUnit: number, since: string, byName: string | null): Promise<number> {
+    const current = await this.db.withTenant(tenantId, async (db) => {
+      const cur = await this.repo.current(db, sku);
+      const hasHistory = (await db.query('SELECT 1 FROM sku_cost_history WHERE sku = $1 LIMIT 1', [sku])).rowCount;
+      if (!hasHistory && cur) await this.repo.addHistory(db, { tenantId, sku, custoUnit: cur.custoUnit, since: SINCE_ALWAYS, origem: 'cadastro', userId });
+      await db.query(
+        `INSERT INTO sku_cost_history (tenant_id, sku, custo_unit, vigente_desde, origem, registrado_por, registrado_por_nome)
+         VALUES ($1, $2, $3, $4, 'cadastro', $5, $6)`,
+        [tenantId, sku, custoUnit, since, userId, byName],
+      );
+      const { rows } = await db.query<{ custo_unit: string | null }>(
+        'SELECT custo_unit FROM sku_cost_history WHERE sku = $1 ORDER BY vigente_desde DESC, registrado_em DESC LIMIT 1',
+        [sku],
+      );
+      const latest = rows[0]?.custo_unit == null ? custoUnit : Number(rows[0].custo_unit);
+      await this.repo.upsert(db, tenantId, userId, sku, latest);
+      await this.repo.applyCosts(db, { skus: [sku] });
+      return latest;
+    });
+    await this.invalidate(tenantId);
+    return current;
+  }
+
   async remove(tenantId: string, userId: string, sku: string, today = todayIn()): Promise<boolean> {
     const removed = await this.db.withTenant(tenantId, async (db) => {
       if (!(await this.repo.remove(db, sku))) return false;

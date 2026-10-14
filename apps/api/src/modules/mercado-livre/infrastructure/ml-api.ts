@@ -19,6 +19,7 @@ export interface MlRawApi {
   /** GET; 404/403 viram null (recurso indisponível para este vendedor/pedido). */
   rawGet<T>(token: string, path: string): Promise<T | null>;
   rawPost<T>(token: string, path: string, body: unknown): Promise<T>;
+  rawPut<T>(token: string, path: string, body: unknown): Promise<T>;
   rawUpload<T>(token: string, path: string, file: { name: string; type: string; bytes: Buffer }): Promise<T>;
 }
 
@@ -574,6 +575,10 @@ export class HttpMlApi implements MlApi, MlRawApi {
 
   rawPost<T>(token: string, path: string, body: unknown): Promise<T> {
     return this.send('POST', path, token, body) as Promise<T>;
+  }
+
+  rawPut<T>(token: string, path: string, body: unknown): Promise<T> {
+    return this.send('PUT', path, token, body) as Promise<T>;
   }
 
   async rawUpload<T>(token: string, path: string, file: { name: string; type: string; bytes: Buffer }): Promise<T> {

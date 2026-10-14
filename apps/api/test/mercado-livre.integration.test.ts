@@ -298,6 +298,8 @@ function fakeMl(sellerId: number) {
     '/post-purchase/v1/returns/R1/reviews': null,
     '/post-purchase/v1/claims/5001': claim,
     '/post-purchase/v1/returns/reasons?flow=seller_return_failed&claim_id=5001': [{ id: 'SRF2', detail: 'O produto chegou com defeito' }],
+    '/shipments/7001': { id: 7_001, logistic_type: 'fulfillment' }, // venda de ida pelo Full
+    '/items/MLB1': { id: 'MLB1', available_quantity: 3, shipping: { logistic_type: 'drop_off' } },
   };
   Object.assign(api, {
     async rawGet(_t: string, path: string) {
@@ -310,6 +312,10 @@ function fakeMl(sellerId: number) {
       return raw[path] ?? null;
     },
     async rawPost(_t: string, path: string, body: unknown) {
+      post.posts.push({ path, body });
+      return {};
+    },
+    async rawPut(_t: string, path: string, body: unknown) {
       post.posts.push({ path, body });
       return {};
     },
@@ -756,5 +762,188 @@ describe.skipIf(!TEST_DB)('Central de Devoluções (pós-venda do ML)', () => {
     // outra empresa não vê nada
     const other = await account();
     expect((await app.inject({ method: 'GET', url: `/api/v1/returns/${ret.id}`, cookies: other })).statusCode).toBe(401); // sem PIN
+  });
+});
+
+describe.skipIf(!TEST_DB)('Central de Devoluções — contrato das telas originais (/central)', () => {
+  let app: FastifyInstance;
+  const fake = fakeMl(randomInt(1_000_000, 9_999_999));
+  beforeAll(async () => {
+    app = await buildApp({
+      env: loadEnv({
+        ...process.env,
+        DATABASE_URL: TEST_DB,
+        AUTH_RATE_LIMIT_MAX: '1000',
+        ML_CLIENT_ID: 'app-teste',
+        ML_CLIENT_SECRET: 'segredo-teste',
+        ML_REDIRECT_URI: 'https://exemplo.test/api/v1/integrations/mercado-livre/callback',
+        TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+      }),
+      mlApi: fake.api,
+    });
+  });
+  afterAll(() => app.close());
+
+  /** multipart com o arquivo no campo "arquivo", como o navegador manda. */
+  const multipart = (type: string, bytes: Buffer) => {
+    const b = 'limite-teste';
+    const payload = Buffer.concat([
+      Buffer.from(`--${b}\r\nContent-Disposition: form-data; name="arquivo"; filename="x"\r\nContent-Type: ${type}\r\n\r\n`),
+      bytes,
+      Buffer.from(`\r\n--${b}--\r\n`),
+    ]);
+    return { payload, headers: { 'content-type': `multipart/form-data; boundary=${b}` } };
+  };
+  const NAIVE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+
+  it('opera a Central no formato do NOVAES-ESTOQUE: bipe, conferência, provas, contestação, estoque, B.I, custos e Retorno Full', async () => {
+    const cnpj = randomCnpj();
+    const email = `central-${cnpj}@teste.dev`;
+    await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload: { email, phone: '11912345678', cnpj, team: [{ name: 'Ana', area: 'ambos', master: true }] } });
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: cnpj } });
+    const base = { nvs_session: login.cookies.find((c) => c.name === 'nvs_session')!.value };
+    const tenantId = login.json().tenant.id as string;
+    const team = (await app.inject({ method: 'GET', url: '/api/v1/team', cookies: base })).json();
+    const pin = await app.inject({ method: 'POST', url: '/api/v1/team/login', cookies: base, payload: { operatorId: team.members[0].id, pin: '1234', mode: 'operacao' } });
+    const cookies = { ...base, nvs_person: pin.cookies.find((c) => c.name === 'nvs_person')!.value };
+    const state = new URL((await app.inject({ method: 'GET', url: '/api/v1/integrations/mercado-livre/connect', cookies: base })).json().url).searchParams.get('state')!;
+    await app.inject({ method: 'GET', url: `/api/v1/integrations/mercado-livre/callback?code=codigo-bom&state=${state}` });
+    await app.ml!.whenIdle();
+    await app.returnsSync!.syncTenant(tenantId, { days: 30, allOpen: true });
+    const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: object, c: Record<string, string> = cookies) =>
+      app.inject({ method, url: `/api/v1/central${url}`, cookies: c, ...(payload ? { payload: payload as Record<string, unknown> } : {}) });
+
+    // operação: só o que volta para a empresa (destino vendedor), com contagens, a caminho por plataforma e prejuízo
+    const op = (await call('GET', '/operacao')).json();
+    expect(op).toMatchObject({ total: 1, contagens: { aguardando_conferencia: 1 }, a_caminho: { mercado_livre: { postado: 0 }, shopee: { postado: 0 } } });
+    expect(op.itens[0]).toMatchObject({
+      plataforma: 'mercado_livre', id_externo: '5001', pedido: '9000001', pacote: '2000009', motivo: 'defeito', responsavel: 'vendedor',
+      custo_plataforma: 25, prejuizo: 25, produto: 'Peça 1', imagem: 'https://http2.mlstatic.com/foto-1.jpg', status: 'aguardando_conferencia',
+      pendencias: [], conferencia: null, itens: [{ item_id: 'MLB1', sku: 'SKU-1', quantidade: 1, nome: 'Peça 1' }],
+    });
+    expect(op.itens[0].aberta_em).toMatch(NAIVE); // UTC sem fuso: a tela acrescenta o "Z"
+    expect(op.itens[0].prazo_vendedor).toMatch(NAIVE);
+    expect((await call('GET', '/operacao/atencao')).json()).toEqual({ contestar: 0, chamados_manuais: 0, lancar_estoque: 0, aguardando_conferencia: 1, prazo_em_24h: 0 });
+    expect((await call('GET', '/operacao/ultimas?limite=5')).json()[0]).toMatchObject({ id_externo: '5001', status: 'aguardando_conferencia' });
+
+    // bipe pelo QR da etiqueta: a tela da conferência (Olist não conectada aparece como aviso)
+    const telas = (await call('GET', `/conferencia/${encodeURIComponent('{"id":"43215678901","t":"lm"}')}`)).json();
+    expect(telas).toHaveLength(1);
+    expect(telas[0]).toMatchObject({
+      devolucao: { id_externo: '5001', aguarda_revisao: true, pode_contestar: true }, conferencia: null, evidencias: [],
+      midia: { anuncio: [{ nome: 'Peça 1', imagem: 'https://http2.mlstatic.com/foto-1.jpg' }], link: 'https://www.mercadolivre.com.br/vendas/2000009/detalhe' },
+      olist: { pedidos: [] },
+    });
+    expect(telas[0].olist.erro).toBeTruthy();
+    const id = telas[0].devolucao.id as string;
+    expect((await call('GET', '/conferencia/NADA-A-VER-999')).json()).toEqual([]);
+
+    // conferência: precisa da pessoa (PIN); avariado → B, contestar
+    const constatacao = { produto_correto: true, completo: true, sem_uso: false, revendavel: false, observacao: 'Lateral quebrada' };
+    expect((await call('POST', `/conferencia/${id}`, constatacao, base)).statusCode).toBe(401);
+    expect((await call('POST', `/conferencia/${id}`, { ...constatacao, revendavel: 'não' })).statusCode).toBe(400);
+    const decisao = (await call('POST', `/conferencia/${id}`, constatacao)).json();
+    expect(decisao).toMatchObject({
+      classe: 'B', contestar: true, chamado_manual: false, lancamentos: [{ sku: 'vendido', deposito: 'avaria', tipo: 'E' }],
+      evidencias_exigidas: ['foto'], frete_reverso: 25, perda_produto: null, plataforma: 'mercado_livre', pedido: '9000001',
+    });
+    const tela = (await call('GET', '/conferencia/9000001')).json()[0];
+    expect(tela.conferencia).toMatchObject({ classe: 'B', revendavel: false, observacao: 'Lateral quebrada', estoque_lancado_em: null, evidencias_exigidas: ['foto'] });
+    expect(tela.conferencia.conferida_em).toMatch(NAIVE);
+
+    // provas: foto e vídeo em multipart; tipo desconhecido é recusado
+    const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(32)]);
+    const up = (type: string, bytes: Buffer) => app.inject({ method: 'POST', url: `/api/v1/central/conferencia/${id}/evidencias`, cookies, ...multipart(type, bytes) });
+    expect((await up('application/x-msdownload', Buffer.from('MZ'))).statusCode).toBe(400);
+    const foto = (await up('image/png', png)).json();
+    expect(foto).toMatchObject({ devolucao_id: id, tipo: 'foto', tamanho: png.length });
+    expect((await up('video/mp4', Buffer.alloc(64, 1))).json()).toMatchObject({ tipo: 'video' });
+    expect((await call('GET', `/conferencia/evidencias/${foto.id}`)).rawPayload.equals(png)).toBe(true);
+
+    // contestação: motivos oficiais do ML; só a foto vai pela API, com aviso do vídeo
+    expect((await call('GET', `/mediacoes/${id}/motivos`)).json()).toEqual([{ id: 'SRF2', texto: 'O produto chegou com defeito' }]);
+    expect((await call('POST', `/mediacoes/${id}/contestar`, { motivo: 'SRF2', texto: 'curto' })).statusCode).toBe(400);
+    const uploadsAntes = fake.post.uploads;
+    const contestacao = (await call('POST', `/mediacoes/${id}/contestar`, { motivo: 'SRF2', texto: 'Produto voltou com a lateral quebrada.' })).json();
+    expect(contestacao).toMatchObject({ ok: true, caminho: 'revisao_com_falha', motivo: 'SRF2', erro: null });
+    expect(contestacao.aviso).toMatch(/Vídeos/);
+    expect(fake.post.uploads - uploadsAntes).toBe(1);
+    expect((await call('GET', `/mediacoes/${id}`)).json()).toHaveLength(1);
+    expect((await call('POST', `/mediacoes/${id}/aceitar`)).statusCode).toBe(409);
+
+    // estoque: um clique só
+    const lancado = (await call('POST', `/conferencia/${id}/lancar-estoque`, { via_olist: false })).json();
+    // sem ERP: avaria vai para o estoque virtual do sistema
+    expect(lancado).toEqual([expect.objectContaining({ sku: 'vendido', deposito: 'avaria', tipo: 'E', ok: true, quantidade: 1, destino: 'Estoque virtual · avaria SKU-1 (saldo 1)' })]);
+    expect((await call('POST', `/conferencia/${id}/lancar-estoque`, {})).statusCode).toBe(409);
+    expect((await call('GET', '/operacao?status=em_mediacao')).json()).toMatchObject({ total: 1, contagens: { em_mediacao: 1 } });
+
+    // operadores: quem conferiu hoje
+    const atv = (await call('GET', '/operadores/atividade')).json();
+    expect(atv).toMatchObject({ total: 1, por_operador: { Ana: { total: 1, por_plataforma: { mercado_livre: 1 } } } });
+    expect(atv.itens[0]).toMatchObject({ operador: 'Ana', classe: 'B', contestar: true, status: 'em_mediacao', pedido: '9000001' });
+    expect((await call('GET', '/operadores/atividade?dia=2099-01-01')).statusCode).toBe(400);
+
+    // B.I: dinheiro, quebrados, Full x orgânica (consultado no envio de ida)
+    const bi = (await call('GET', '/bi/resumo?dias=30')).json();
+    expect(bi).toMatchObject({
+      total: 1, dias: 30, status: { em_mediacao: 1 }, motivos: [{ motivo: 'defeito', quantidade: 1, pct: 100 }],
+      dinheiro: { frete_reverso: 25, frete_cobrado: 25, perda_bancada: 0, sem_custo: 1, custo_total: 25 },
+      quebrados: { por_origem: { bancada: { quantidade: 1, sem_custo: 1 } } },
+      logistica_total: { mercado_livre: { full: 1, organica: 0, sem_info: 0 } },
+      produtos: { mercado_livre: [{ sku: 'SKU-1', quantidade: 1, pct: 100, imagem: 'https://http2.mlstatic.com/foto-1.jpg' }], shopee: [] },
+      por_plataforma: { mercado_livre: { devolucoes: 1 } },
+    });
+    expect(bi.serie).toHaveLength(30);
+    expect((await call('GET', '/bi/resumo?fatura=2026-13-01')).statusCode).toBe(400);
+    expect((await call('GET', '/bi/mensal')).json().meses).toHaveLength(3);
+
+    // quebrados: sem custo → cadastra o custo valendo desde hoje e a conferência é recalculada
+    expect((await call('GET', '/produtos-quebrados?dias=30')).json()).toMatchObject({ produtos: [{ sku: 'SKU-1', quantidade: 1, sem_custo: 1, valor: 0 }], total: { quantidade: 1 } });
+    const hoje = todayIn();
+    expect((await call('POST', '/custos/SKU-1', { custo: 0, desde: hoje })).statusCode).toBe(400);
+    expect((await call('POST', '/custos/SKU-1', { custo: 40, desde: '2000-01-02' })).json()).toEqual({ sku: 'SKU-1', custo_atual: 40, conferencias_recalculadas: 1 });
+    expect((await call('GET', '/produtos-quebrados?dias=30')).json().produtos[0]).toMatchObject({ valor: 40, sem_custo: 0, custo_atual: 40 });
+    expect((await call('GET', '/custos/SKU-1/historico')).json()[0]).toMatchObject({ custo: 40, vigente_desde: '2000-01-02', registrado_por: 'Ana' });
+    expect((await call('GET', '/bi/resumo?dias=30')).json().dinheiro).toMatchObject({ perda_bancada: 40, custo_total: 65 });
+
+    // respostas prontas
+    const rp = (await call('POST', '/respostas-prontas', { texto: '  Caixa amassada  ' })).json();
+    expect(rp).toMatchObject({ texto: 'Caixa amassada' });
+    expect((await call('PUT', `/respostas-prontas/${rp.id}`, { texto: 'Caixa rasgada' })).json()).toEqual({ id: rp.id, texto: 'Caixa rasgada' });
+    expect((await call('POST', '/respostas-prontas', { texto: ' ' })).statusCode).toBe(400);
+    expect((await call('GET', '/respostas-prontas')).json()).toEqual([{ id: rp.id, texto: 'Caixa rasgada' }]);
+    await call('DELETE', `/respostas-prontas/${rp.id}`);
+    expect((await call('GET', '/respostas-prontas')).json()).toEqual([]);
+
+    // Retorno do Full: etiqueta do Full → SKU pelo Master Data
+    const db = new Database(TEST_DB!);
+    await db.withTenant(tenantId, (c) => c.query(`INSERT INTO wms_barcodes (tenant_id, barcode, sku) VALUES ($1, 'ABCD12345', 'SKU-1')`, [tenantId]));
+    await db.close();
+    expect((await call('GET', '/retirada-full/XX1')).statusCode).toBe(400);
+    expect((await call('GET', '/retirada-full/ZZZZ99999')).statusCode).toBe(404);
+    expect((await call('GET', '/retirada-full/abcd12345')).json()).toMatchObject({ codigo: 'ABCD12345', sku: 'SKU-1', item_id: 'MLB1', custo: 40 });
+    expect((await call('POST', '/retirada-full/ABCD12345/entrada', { quantidade: 0 })).statusCode).toBe(400);
+    // o que volta do Full soma no estoque do anúncio orgânico no ML
+    expect((await call('POST', '/retirada-full/ABCD12345/entrada', { quantidade: 2 })).json()).toMatchObject({
+      quantidade: 2, lancados: [{ sku: 'SKU-1', quantidade: 2, destino: 'Mercado Livre MLB1 (estoque 3 → 5)' }],
+    });
+    expect(fake.post.posts.at(-1)).toEqual({ path: '/items/MLB1', body: { available_quantity: 5 } });
+    const full = (await call('GET', '/retiradas-full?dias=30')).json();
+    expect(full.total).toEqual({ quantidade: 2, bipes: 1, valor: 80, skus: 1 });
+    expect(full.bipes[0]).toMatchObject({ operador: 'Ana', codigo: 'ABCD12345' });
+
+    // sincronização: ML conectado, Shopee não integrada; barra parada em 100%
+    expect((await call('GET', '/sincronizacao')).json()).toMatchObject({ mercado_livre: { ok: true }, logistica_venda: { ok: true }, shopee: { ok: false } });
+    expect((await call('GET', '/sincronizacao/progresso')).json()).toMatchObject({ rodando: false, percentual: 100, pendentes: { mediacao_origem: 0, mediacao_atuacao: 0 } });
+    expect((await call('GET', '/triagens-full')).json()).toEqual([]);
+
+    // outra empresa não vê nada
+    const cnpj2 = randomCnpj();
+    await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload: { email: `central2-${cnpj2}@teste.dev`, phone: '11912345678', cnpj: cnpj2 } });
+    const l2 = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: `central2-${cnpj2}@teste.dev`, password: cnpj2 } });
+    const other = { nvs_session: l2.cookies.find((c) => c.name === 'nvs_session')!.value };
+    expect((await call('GET', '/operacao', undefined, other)).json()).toMatchObject({ total: 0, itens: [] });
+    expect((await call('GET', '/conferencia/9000001', undefined, other)).json()).toEqual([]);
   });
 });

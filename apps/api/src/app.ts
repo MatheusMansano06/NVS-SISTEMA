@@ -20,6 +20,7 @@ import {
   PgSkuRepository,
   SalesIngestion,
   SkuCostService,
+  todayIn,
   FinanceService,
   financeRoutes,
   PgSalesAnalyticsRepository,
@@ -51,7 +52,7 @@ import {
 import { TokenCipher } from './shared/infrastructure/token-cipher.js';
 import { serveWeb } from './shared/infrastructure/web-static.js';
 import { healthRoutes } from './modules/health/presentation/routes.js';
-import { PgReturnsRepository, ReturnsService, ReturnsSync, returnsRoutes } from './modules/returns/index.js';
+import { CentralService, PgReturnsRepository, ReturnStock, ReturnsService, ReturnsSync, centralRoutes, returnsRoutes } from './modules/returns/index.js';
 import { PgWmsRepository, PrintHub, WmsService, wmsAgentSocket, wmsRoutes } from './modules/wms/index.js';
 import { OperatorService, PERSON_COOKIE, PgOperatorRepository, operationRoutes } from './modules/operation/index.js';
 
@@ -223,7 +224,16 @@ export async function buildApp({ env, db, cache, mlApi }: AppDeps): Promise<Fast
   const returnsRepo = new PgReturnsRepository();
   const returnsSync = ml && raw ? new ReturnsSync(database, returnsRepo, ml, raw, app.log) : null;
   app.decorate('returnsSync', returnsSync);
-  if (ml) await app.register(returnsRoutes(new ReturnsService(database, returnsRepo, ml, raw, returnsSync)), { prefix: '/api/v1' });
+  if (ml) {
+    const returnsService = new ReturnsService(database, returnsRepo, ml, raw, returnsSync);
+    await app.register(returnsRoutes(returnsService), { prefix: '/api/v1' });
+    const central = new CentralService(database, returnsRepo, returnsService, returnsSync, {
+      saveCost: (tenantId, userId, sku, custo, since, byName) => skuCosts.saveFrom(tenantId, userId, sku, custo, since, byName),
+      today: () => todayIn(),
+      stock: new ReturnStock(database, ml, raw),
+    });
+    await app.register(centralRoutes(central), { prefix: '/api/v1' });
+  }
   const onboarding = new OnboardingService(database, new PgOnboardingRepository(), events);
   await app.register(onboardingRoutes(onboarding), { prefix: '/api/v1' });
   await app.register(identityRoutes(identity, {

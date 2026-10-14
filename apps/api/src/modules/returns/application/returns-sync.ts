@@ -4,10 +4,16 @@ import type { Database } from '../../../shared/infrastructure/database.js';
 import type { MlIntegrationService, MlRawApi } from '../../mercado-livre/index.js';
 import { normalizeClaim, normalizeNotDelivered, type ReturnRecord } from '../domain/normalize.js';
 import type { PgReturnsRepository } from '../infrastructure/pg-returns-repository.js';
+import { ReturnsEnrichment, type MlGet } from './returns-enrichment.js';
+import { SyncProgress } from './sync-progress.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any;
 const MAX_OFFSET = 9_900;
+const TASKS = ['mercado_livre', 'logistica_venda', 'mediacao_origem', 'mediacao_atuacao', 'fatura_ml'];
+const TICK_MS = 10 * 60_000;
+/** Varredura do dia (23h em São Paulo = 02h UTC): toda reclamação aberta + últimos 2 dias. */
+const SWEEP_UTC_HOUR = 2;
 
 /**
  * Sincronização das devoluções do ML (portada de central/mercado_livre/sincronizar.py): reclamações com devolução
@@ -18,6 +24,8 @@ export class ReturnsSync {
   /** rules_engine_triage por motivo do ML (muda raramente: cache do processo). */
   private readonly triage = new Map<string, string | null>();
   private readonly running = new Set<string>();
+  readonly progress = new SyncProgress();
+  readonly enrichment: ReturnsEnrichment;
 
   constructor(
     private readonly db: Database,
@@ -25,20 +33,54 @@ export class ReturnsSync {
     private readonly ml: MlIntegrationService,
     private readonly api: MlRawApi,
     private readonly log: FastifyBaseLogger,
-  ) {}
+  ) {
+    this.enrichment = new ReturnsEnrichment(db);
+  }
 
-  /** Todas as contas ML ativas da empresa. Uma sincronização por empresa de cada vez. */
-  async syncTenant(tenantId: string, opts: { days: number; allOpen: boolean }): Promise<ReturnSyncDto> {
+  isRunning(tenantId: string) {
+    return this.running.has(tenantId);
+  }
+
+  /**
+   * Todas as contas ML ativas da empresa: reclamações e, depois, o que o B.I consulta uma vez por devolução (Full x
+   * orgânica, quem abriu a mediação, se a empresa atuou) e a fatura. Uma rodada por empresa de cada vez; cada tarefa
+   * que falha fica registrada e não segura as outras.
+   */
+  async syncTenant(
+    tenantId: string,
+    opts: { days: number; allOpen: boolean; sweep?: boolean; redo?: string; after?: () => Promise<void> },
+  ): Promise<ReturnSyncDto> {
     if (this.running.has(tenantId)) return { claims: 0, saved: 0, failures: 0 };
     this.running.add(tenantId);
+    const tasks = opts.redo ? ['refazer_ml', 'refazer_fatura', 'fechamento'] : TASKS;
+    this.progress.start(tenantId, tasks, { sweep: opts.sweep, redoing: opts.redo ?? null });
     try {
       const st = await this.ml.status(tenantId);
       const total: ReturnSyncDto = { claims: 0, saved: 0, failures: 0 };
-      for (const c of st.connections.filter((x) => x.status === 'active')) {
-        const r = await this.syncConnection(tenantId, c.id, opts);
-        total.claims += r.claims;
-        total.saved += r.saved;
-        total.failures += r.failures;
+      const conns = st.connections.filter((x) => x.status === 'active');
+      this.progress.task(tenantId, tasks[0]!);
+      let erro: string | null = conns.length ? null : 'Mercado Livre não conectado';
+      for (const [i, c] of conns.entries()) {
+        try {
+          const r = await this.syncConnection(tenantId, c.id, opts, (f) => this.progress.partial(tenantId, (i + f) / conns.length));
+          total.claims += r.claims;
+          total.saved += r.saved;
+          total.failures += r.failures;
+        } catch (err) {
+          erro = (err as Error).message.slice(0, 200);
+          this.log.warn({ err, tenantId }, 'Devoluções: conta do ML falhou na sincronização');
+        }
+      }
+      this.progress.record(tenantId, 'mercado_livre', { ok: !erro, erro, resultado: { ...total } });
+      for (const c of conns) {
+        const { conn } = await this.ml.accessToken(tenantId, c.id).catch(() => ({ conn: null }));
+        if (!conn) continue;
+        const get: MlGet = async (path) => this.api.rawGet((await this.ml.accessToken(tenantId, c.id)).token, path);
+        await this.enrich(tenantId, conn.account_id, get, opts.redo);
+      }
+      if (opts.after) {
+        this.progress.task(tenantId, 'fechamento');
+        await opts.after();
       }
       await this.db.withTenant(tenantId, (db) =>
         db.query(
@@ -49,11 +91,38 @@ export class ReturnsSync {
       );
       return total;
     } finally {
+      this.progress.finish(tenantId);
       this.running.delete(tenantId);
     }
   }
 
-  async syncConnection(tenantId: string, connectionId: string, opts: { days: number; allOpen: boolean }): Promise<ReturnSyncDto> {
+  private async enrich(tenantId: string, accountId: string, get: MlGet, redo?: string) {
+    const run = async (task: string, fn: () => Promise<Record<string, unknown>>) => {
+      this.progress.task(tenantId, task);
+      try {
+        const r = await fn();
+        this.progress.record(tenantId, task, { ok: !r.erro, erro: (r.erro as string) ?? null, resultado: r });
+      } catch (err) {
+        this.progress.record(tenantId, task, { ok: false, erro: (err as Error).message.slice(0, 200) });
+      }
+    };
+    const part = (f: number) => this.progress.partial(tenantId, f);
+    if (redo) {
+      await run('refazer_fatura', () => this.enrichment.billing(tenantId, get, part, { only: redo }));
+      return;
+    }
+    await run('logistica_venda', () => this.enrichment.logistics(tenantId, accountId, get, part) as never);
+    await run('mediacao_origem', () => this.enrichment.mediationOrigin(tenantId, accountId, get, part) as never);
+    await run('mediacao_atuacao', () => this.enrichment.mediationActions(tenantId, accountId, get, part) as never);
+    await run('fatura_ml', () => this.enrichment.billing(tenantId, get, part));
+  }
+
+  async syncConnection(
+    tenantId: string,
+    connectionId: string,
+    opts: { days: number; allOpen: boolean },
+    onProgress: (fraction: number) => void = () => undefined,
+  ): Promise<ReturnSyncDto> {
     const since = new Date(Date.now() - opts.days * 86_400_000).toISOString().replace('Z', '+00:00');
     const out: ReturnSyncDto = { claims: 0, saved: 0, failures: 0 };
     const { conn } = await this.ml.accessToken(tenantId, connectionId);
@@ -71,6 +140,7 @@ export class ReturnsSync {
         if (!page) break;
         total = page.paging?.total ?? 0;
         offset += 100;
+        onProgress((status === 'opened' ? 0 : 0.5) + Math.min(1, offset / Math.max(1, Math.min(total, MAX_OFFSET))) / 2);
         const records: ReturnRecord[] = [];
         for (const claim of page.data ?? []) {
           try {
@@ -125,15 +195,19 @@ export class ReturnsSync {
     return this.triage.get(reasonId) ?? null;
   }
 
-  /** De hora em hora: últimos 2 dias; a cada 6 h também toda reclamação ainda aberta. */
-  async hourlyTick(now = new Date()): Promise<void> {
-    const slot = new Date(now);
-    slot.setUTCMinutes(0, 0, 0);
-    if (!(await this.ml.claimSlot('returns_hourly_sync', slot))) return;
-    const allOpen = slot.getUTCHours() % 6 === 0;
+  /**
+   * A cada 10 min: o incremental leve (últimas 3 h). Em hh:20, os últimos 2 dias; e 1x por dia (23h em São Paulo) a
+   * varredura: toda reclamação aberta, de qualquer data — as antigas sem movimento não aparecem na janela de datas.
+   */
+  async tick(now = new Date()): Promise<void> {
+    const slot = new Date(Math.floor(now.getTime() / TICK_MS) * TICK_MS);
+    if (!(await this.ml.claimSlot('returns_sync', slot))) return;
+    const minute = slot.getUTCMinutes();
+    const sweep = minute === 20 && slot.getUTCHours() === SWEEP_UTC_HOUR;
+    const opts = minute === 20 ? { days: 2, allOpen: sweep || slot.getUTCHours() % 6 === 0, sweep } : { days: 0.125, allOpen: false };
     const tenants = [...new Set((await this.ml.activeConnections()).map((c) => c.tenantId))];
     for (const tenantId of tenants) {
-      await this.syncTenant(tenantId, { days: 2, allOpen }).catch((err) => this.log.error({ err, tenantId }, 'Devoluções: sincronização falhou'));
+      await this.syncTenant(tenantId, opts).catch((err) => this.log.error({ err, tenantId }, 'Devoluções: sincronização falhou'));
     }
   }
 
@@ -141,11 +215,10 @@ export class ReturnsSync {
     let timer: NodeJS.Timeout;
     const schedule = () => {
       const now = Date.now();
-      // próximo hh:20 (fora do pico da atualização das vendas, que roda em hh:00)
-      let next = Math.floor(now / 3_600_000) * 3_600_000 + 20 * 60_000;
-      if (next <= now) next += 3_600_000;
+      // próximo múltiplo de 10 min (+30 s, fora do pico da atualização das vendas em hh:00)
+      const next = Math.floor(now / TICK_MS) * TICK_MS + TICK_MS + 30_000;
       timer = setTimeout(() => {
-        this.hourlyTick().catch((err) => this.log.error({ err }, 'Devoluções: agendador falhou'));
+        this.tick().catch((err) => this.log.error({ err }, 'Devoluções: agendador falhou'));
         schedule();
       }, next - now);
       timer.unref();

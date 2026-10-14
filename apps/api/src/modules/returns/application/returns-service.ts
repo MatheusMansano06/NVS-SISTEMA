@@ -46,7 +46,7 @@ class Locked extends AppError {
   }
 }
 
-function checkState(r: ReturnRow): CheckState | null {
+export function checkState(r: ReturnRow): CheckState | null {
   if (!r.c_class) return null;
   return {
     stockMoves: r.c_stock_moves ?? [],
@@ -368,6 +368,12 @@ export class ReturnsService {
    * identificou digitando a venda — fica vinculado para o próximo bipe.
    */
   async find(tenantId: string, code: string, label?: string): Promise<ReturnDetailDto[]> {
+    const ids = await this.resolveIds(tenantId, code, label);
+    return this.db.withTenant(tenantId, async (db) => Promise.all(ids.map((id) => this.detailIn(db, id))));
+  }
+
+  /** Bipe → ids das devoluções (índice de códigos; senão pergunta ao ML de que pedido é o nº de envio). */
+  async resolveIds(tenantId: string, code: string, label?: string): Promise<string[]> {
     const candidates = extractCodes(code);
     let ids = await this.db.withTenant(tenantId, (db) => this.repo.idsByCodes(db, candidates));
     if (!ids.length && this.api) {
@@ -388,7 +394,7 @@ export class ReturnsService {
         for (const id of ids) await this.repo.addCodes(db, tenantId, id, extractCodes(label), 'bipe');
       });
     }
-    return this.db.withTenant(tenantId, async (db) => Promise.all(ids.map((id) => this.detailIn(db, id))));
+    return ids;
   }
 
   private async orderOfShipment(tenantId: string, shipmentId: string): Promise<string | null> {
@@ -530,9 +536,13 @@ export class ReturnsService {
       if (!r.c_class) throw new ValidationError('Confira o produto antes de contestar.');
       if (!r.c_dispute) throw new Locked(`A conferência concluiu que não vale contestar: ${r.c_decision}`);
       if (r.disputed) throw new Locked('Esta devolução já foi contestada ou aceita.');
-      const photos = (await db.query<{ id: string; mime: string; bytes: Buffer }>('SELECT id, mime, bytes FROM return_evidence WHERE return_id = $1 ORDER BY added_at', [id])).rows;
+      const files = (await db.query<{ id: string; mime: string; bytes: Buffer; kind: string }>(
+        'SELECT id, mime, bytes, kind FROM return_evidence WHERE return_id = $1 ORDER BY added_at',
+        [id],
+      )).rows;
+      const photos = files.filter((f) => f.kind === 'foto');
       if (!photos.length) throw new ValidationError('Anexe ao menos uma foto do produto e da embalagem antes de contestar.');
-      return { perfect: r.c_class === 'A', photos };
+      return { perfect: r.c_class === 'A', photos, videos: files.length - photos.length };
     });
     const { token, claimId, api } = await this.session(a.tenantId, id);
     const official = await this.disputeReasons(a.tenantId, id);
@@ -569,11 +579,12 @@ export class ReturnsService {
     } catch (err) {
       result = { ok: false, path: null, attachments: [], error: (err as Error).message.slice(0, 500) };
     }
+    const warning = result.ok && prep.videos ? 'Vídeos não são enviados pela API do ML: anexe pelo painel se precisar.' : null;
     return this.db.withTenant(a.tenantId, async (db) => {
       await db.query(
-        `INSERT INTO return_disputes (tenant_id, return_id, reason, message, ok, path, attachments, error, sent_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [a.tenantId, id, input.reason, input.message, result.ok, result.path, JSON.stringify(result.attachments), result.error, a.operatorId],
+        `INSERT INTO return_disputes (tenant_id, return_id, reason, message, ok, path, attachments, warning, error, sent_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [a.tenantId, id, input.reason, input.message, result.ok, result.path, JSON.stringify(result.attachments), warning, result.error, a.operatorId],
       );
       if (result.ok) await db.query('DELETE FROM return_evidence WHERE return_id = $1', [id]); // o ML já recebeu as fotos
       return this.detailIn(db, id);

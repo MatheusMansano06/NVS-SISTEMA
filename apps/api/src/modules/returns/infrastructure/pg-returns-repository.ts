@@ -57,6 +57,10 @@ export interface ReturnRow {
   c_stock_done_at: Date | null;
   c_checked_by: string | null;
   c_checked_at: Date | null;
+  c_stock_result: unknown[] | null;
+  sale_logistic: string | null;
+  mediation_opened_by: string | null;
+  mediation_actions: string | null;
   disputed: boolean;
   accepted: boolean;
 }
@@ -70,6 +74,7 @@ const SELECT = `
          c.stock_moves AS c_stock_moves, c.dispute AS c_dispute, c.decision AS c_decision, c.manual_ticket AS c_manual_ticket,
          c.ticket_opened_at AS c_ticket_opened_at, c.ticket_protocol AS c_ticket_protocol, c.product_loss AS c_product_loss,
          c.reverse_freight AS c_reverse_freight, c.stock_done_at AS c_stock_done_at, o.name AS c_checked_by, c.checked_at AS c_checked_at,
+         c.stock_result AS c_stock_result, r.sale_logistic, r.mediation_opened_by, r.mediation_actions,
          EXISTS (SELECT 1 FROM return_disputes d WHERE d.return_id = r.id AND d.ok) AS disputed,
          EXISTS (SELECT 1 FROM return_disputes d WHERE d.return_id = r.id AND d.ok AND d.path = 'aceite') AS accepted
     FROM returns r

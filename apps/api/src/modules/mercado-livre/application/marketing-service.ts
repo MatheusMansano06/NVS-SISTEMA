@@ -28,6 +28,7 @@ const PROBE_LIMIT = 5;
 
 /** Quantidade alta o bastante para cair na maior faixa de atacado cadastrada. */
 const WHOLESALE_PROBE_QTY = 1000;
+const COUPON_TYPE = 'SELLER_COUPON_CAMPAIGN';
 const ACTIVE_PROMO = new Set(['started', 'pending', 'active']);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -201,6 +202,7 @@ export class MarketingService {
     if (!due.length) return 0;
     const pace = this.opts.paceMs ?? PACE_MS;
     const ads = await this.adsByItem(tenantId, connectionId);
+    const coupons = await this.couponScope(tenantId, connectionId, conn.ml_user_id);
     const misses = { clips: 0 };
     let done = 0;
     for (const id of due) {
@@ -229,9 +231,12 @@ export class MarketingService {
         if (r === null) misses.clips++;
         else clips = (Array.isArray(r) ? r : (r.results ?? r.clips ?? [])).length > 0;
       }
+      const active = list.filter((p) => ACTIVE_PROMO.has(String(p.status ?? '').toLowerCase())).map((p) => String(p.type));
+      // cupom da conta (loja inteira, seguidores) não aparece na consulta do anúncio
+      if (coupons.storeWide || coupons.items.has(id)) active.push(COUPON_TYPE);
       const row: Row = {
         item_id: id,
-        promos_active: [...new Set(list.filter((p) => ACTIVE_PROMO.has(String(p.status ?? '').toLowerCase())).map((p) => String(p.type)))],
+        promos_active: [...new Set(active)],
         promos_candidate: [...new Set(list.filter((p) => String(p.status ?? '').toLowerCase() === 'candidate').map((p) => String(p.type)))],
         wholesale,
         clips,
@@ -319,6 +324,35 @@ export class MarketingService {
     }
     const out = [...counts.entries()].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count);
     await this.cache.set(key, out, CAMPAIGNS_TTL);
+    return out;
+  }
+
+  /**
+   * Cupons ativos da conta: os anúncios de cada cupom e se algum vale para a loja inteira (cupom de seguidor ou de
+   * todos os produtos não lista anúncios). Lido uma vez por lote, não por anúncio.
+   */
+  private async couponScope(tenantId: string, connectionId: string, userId: string): Promise<{ storeWide: boolean; items: Set<string> }> {
+    const out = { storeWide: false, items: new Set<string>() };
+    const { token } = await this.ml.accessToken(tenantId, connectionId);
+    const r = await this.api.rawGet<Json>(token, `/seller-promotions/users/${encodeURIComponent(userId)}?app_version=v2`).catch(() => null);
+    const coupons = ((r?.results ?? []) as Json[]).filter(
+      (p) => String(p.type ?? '').toUpperCase().includes('COUPON') && ACTIVE_PROMO.has(String(p.status ?? '').toLowerCase()),
+    );
+    for (const c of coupons) {
+      let after: string | null = null;
+      let found = 0;
+      for (let page = 0; page < 40; page++) {
+        const qs = new URLSearchParams({ promotion_type: String(c.type), app_version: 'v2', status: 'started', limit: '50' });
+        if (after) qs.set('search_after', after);
+        const res = await this.api.rawGet<Json>(token, `/seller-promotions/promotions/${encodeURIComponent(String(c.id))}/items?${qs}`).catch(() => null);
+        const items = (res?.results ?? []) as Json[];
+        for (const it of items) if (it.id) out.items.add(String(it.id));
+        found += items.length;
+        after = res?.paging?.searchAfter ?? res?.paging?.search_after ?? null;
+        if (!items.length || !after) break;
+      }
+      if (!found) out.storeWide = true; // cupom sem lista de anúncios = vale para a loja toda
+    }
     return out;
   }
 

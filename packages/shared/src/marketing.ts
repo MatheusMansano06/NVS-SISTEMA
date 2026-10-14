@@ -21,7 +21,7 @@ export const MARKETING_TOOL_INFO: Record<MarketingTool, { label: string; hint: s
   clips: { label: 'Clips', hint: 'Vídeos curtos publicados no anúncio.' },
   video: { label: 'Vídeo no anúncio', hint: 'Vídeo cadastrado na ficha do anúncio.' },
   ads: { label: 'Mercado Ads', hint: 'Anúncio patrocinado ativo no Product Ads.' },
-  coupon: { label: 'Cupom', hint: 'Participa de um cupom do vendedor.', promoTypes: ['SELLER_COUPON_CAMPAIGN'] },
+  coupon: { label: 'Cupom', hint: 'Cupom do vendedor no anúncio, na loja inteira ou para seguidores.', promoTypes: ['SELLER_COUPON_CAMPAIGN'] },
   volume: { label: 'Desconto por quantidade', hint: 'Desconto comprando 2 ou mais unidades.', promoTypes: ['VOLUME'] },
   price_discount: { label: 'Desconto no preço', hint: 'Desconto por porcentagem definido por você.', promoTypes: ['PRICE_DISCOUNT', 'SELLER_CAMPAIGN'] },
   lightning: { label: 'Oferta relâmpago', hint: 'Promoção que dura poucas horas.', promoTypes: ['LIGHTNING'] },

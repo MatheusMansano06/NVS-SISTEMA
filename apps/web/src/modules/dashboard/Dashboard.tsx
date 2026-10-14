@@ -8,6 +8,7 @@ import { int, money, pct } from '../../shared/format';
 import { Button } from '../../shared/ui/Button';
 import { FilterBar } from './components/FilterBar';
 import { FinanceBreakdown } from './components/FinanceBreakdown';
+import { LowMarginAlert } from './components/LowMarginAlert';
 import { KpiCard } from './components/KpiCard';
 import { MarginRing } from './components/MarginRing';
 import { RevenueChart } from './components/RevenueChart';
@@ -234,6 +235,9 @@ export function Dashboard() {
               <TopFive products={data.topProducts} />
               <PausedCarousel paused={data.paused} />
             </div>
+            {!data.isDemo && (
+              <LowMarginAlert range={data.range} marketplace={filters.marketplace} accountId={filters.accountId} stamp={data.generatedAt} />
+            )}
           </>
         ) : null}
       </div>

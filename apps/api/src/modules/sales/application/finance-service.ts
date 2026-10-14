@@ -1,5 +1,7 @@
 import {
+  DEFAULT_LOW_MARGIN_PCT,
   marginBand,
+  type LowMarginDto,
   type FinanceCards,
   type FinanceLineDto,
   type FinanceLinesDto,
@@ -174,6 +176,53 @@ export class FinanceService {
       enriquecimentoPendente: pendente,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  /** Alerta do Dashboard: vendas aprovadas com custo e margem de contribuição abaixo do mínimo da empresa. */
+  async lowMargin(tenantId: string, q: FinanceQuery, limit = 50): Promise<LowMarginDto> {
+    const minPct = await this.lowMarginPct(tenantId);
+    const orders = await this.computed(tenantId, q);
+    const approved = orders.filter((o) => o.status === 'aprovada');
+    const low = approved.filter((o) => o.certified && o.mcPct < minPct).sort((a, b) => a.mcPct - b.mcPct);
+    const gap = low.reduce((s, o) => s + Math.max(0, (minPct / 100) * o.produto - o.mc), 0);
+    return {
+      minPct,
+      total: low.length,
+      gap: q2(gap),
+      semCusto: approved.filter((o) => !o.certified).length,
+      items: low.slice(0, limit).map((o) => {
+        const first = o.row.items[0];
+        return {
+          orderId: o.row.external_id,
+          date: o.row.day,
+          title: first ? (o.row.items.length > 1 ? `${first.title} (+${o.row.items.length - 1})` : first.title) : '—',
+          sku: first?.sku ?? '—',
+          pictureUrl: (first?.listing_id && o.row.pictures?.[first.listing_id]) || null,
+          bucket: o.row.bucket,
+          faturamento: q2(o.faturamentoLinha),
+          mc: q2(o.mc),
+          mcPct: o.mcPct,
+        };
+      }),
+    };
+  }
+
+  async lowMarginPct(tenantId: string): Promise<number> {
+    const { rows } = await this.db.withTenant(tenantId, (db) =>
+      db.query<{ pct: string }>('SELECT low_margin_pct AS pct FROM dashboard_settings'),
+    );
+    return rows[0] ? Number(rows[0].pct) : DEFAULT_LOW_MARGIN_PCT;
+  }
+
+  async setLowMarginPct(tenantId: string, pct: number): Promise<{ pct: number }> {
+    await this.db.withTenant(tenantId, (db) =>
+      db.query(
+        `INSERT INTO dashboard_settings (tenant_id, low_margin_pct) VALUES ($1, $2)
+         ON CONFLICT (tenant_id) DO UPDATE SET low_margin_pct = EXCLUDED.low_margin_pct, updated_at = now()`,
+        [tenantId, pct],
+      ),
+    );
+    return { pct };
   }
 
   /** Tabela linha a linha (item de pedido), com valores do pedido rateados pela quantidade. */

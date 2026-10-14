@@ -298,3 +298,33 @@ a.top5-row:hover { background: #fff; transform: translateX(4px); box-shadow: 0 0
   .fb-grid > .fb-card[data-tone] { grid-column: 1 / -1; }
   .fb-head, .fb-body { padding-left: 16px; padding-right: 16px; }
 }
+
+/* ============ Alerta: vendas com margem baixa ============ */
+.lowm {
+  display: grid; gap: 12px; padding: 20px 22px; border-radius: 28px 28px 28px 10px; background: #fff;
+  box-shadow: 0 0 0 1px var(--gray-100), 0 16px 34px -28px rgba(11,28,77,.4); animation: rise .5s .15s both;
+}
+.lowm[data-alert] { box-shadow: 0 0 0 1px #f7c9cf, 0 16px 34px -28px rgba(214,41,62,.45); background: linear-gradient(120deg, #fff 60%, #fff3f4); }
+.lowm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lowm-head h2 { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--navy); font-size: 1.05rem; }
+.lowm-head small { color: var(--gray-500); font-size: .8rem; }
+.lowm-count { padding: 1px 9px; border-radius: 99px; background: var(--gray-100); color: var(--navy); font-size: .78rem; }
+.lowm[data-alert] .lowm-count { background: var(--danger); color: #fff; }
+.lowm-form { display: flex; align-items: center; gap: 8px; }
+.lowm-form label { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--navy); font-size: .86rem; }
+.lowm-form input { width: 64px; height: 36px; padding: 0 10px; border-radius: 12px; border: 0; box-shadow: 0 0 0 1px var(--gray-300); font: inherit; text-align: right; }
+.lowm-form input:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--blue); }
+.lowm-gap, .lowm-ok, .lowm-foot { margin: 0; color: var(--gray-500); font-size: .84rem; }
+.lowm-gap b { color: var(--danger); }
+.lowm-ok { color: var(--ok); font-weight: 600; }
+.lowm-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.lowm-list li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 16px; background: var(--gray-50, #f6f7f9); }
+.lowm-title { flex: 1; min-width: 0; display: grid; }
+.lowm-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--navy); font-size: .88rem; }
+.lowm-title small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gray-500); font-size: .74rem; }
+.lowm-num { display: grid; text-align: right; font-variant-numeric: tabular-nums; }
+.lowm-num b { color: var(--navy); font-size: .88rem; }
+.lowm-num small { color: var(--gray-500); font-size: .74rem; }
+.lowm-pct { min-width: 64px; text-align: center; padding: 4px 8px; border-radius: 99px; background: #fff1d6; color: #8a5a00; font-weight: 750; font-size: .84rem; font-variant-numeric: tabular-nums; }
+.lowm-pct[data-neg] { background: #fde3e6; color: var(--danger); }
+@media (max-width: 640px) { .lowm-num { display: none; } }

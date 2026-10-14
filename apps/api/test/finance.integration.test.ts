@@ -143,6 +143,18 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     expect(comFc).toBe(normal + 15); // pedido A (Full) passa a contar o frete comprador de 15
   });
 
+  it('alerta de margem baixa: mínimo da empresa (padrão 8%), as piores primeiro, sem custo fora', async () => {
+    const cookies = await setup();
+    const def = (await get(cookies, 'low-margin')).json();
+    expect(def).toMatchObject({ minPct: 8, total: 0, semCusto: 1 }); // A 23,5% e B 68%; C sem custo; E é devolução
+    const put = (pct: unknown) => app.inject({ method: 'PUT', url: '/api/v1/finance/low-margin/settings', cookies, payload: { pct } });
+    expect((await put(500)).statusCode).toBe(400);
+    expect((await put(30)).json()).toEqual({ pct: 30 });
+    const low = (await get(cookies, 'low-margin')).json();
+    expect(low).toMatchObject({ minPct: 30, total: 1, gap: 13 }); // A: 30% de 200 = 60 − MC 47
+    expect(low.items[0]).toMatchObject({ orderId: 'A', sku: 'SKU-A', mc: 47, mcPct: 23.5, bucket: 'full' });
+  });
+
   it('valida o período', async () => {
     const cookies = await setup();
     const bad = await app.inject({ method: 'GET', url: '/api/v1/finance/summary?from=2026-10-10&to=2026-01-01', cookies });

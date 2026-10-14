@@ -134,3 +134,30 @@ export interface TaxRateDto {
   ratePct: number | null;
   vigenteDesde: string | null;
 }
+
+/** Alerta de margem baixa (Dashboard): margem mínima da empresa, de 0 a 100%. */
+export const DEFAULT_LOW_MARGIN_PCT = 8;
+export const lowMarginSettingsSchema = z.object({ pct: z.coerce.number().min(-100).max(100) });
+
+export interface LowMarginSaleDto {
+  orderId: string;
+  date: string;
+  title: string;
+  sku: string;
+  pictureUrl: string | null;
+  bucket: LogisticBucketId;
+  faturamento: number;
+  mc: number;
+  mcPct: number;
+}
+
+export interface LowMarginDto {
+  minPct: number;
+  /** Vendas aprovadas com custo e margem abaixo do mínimo (as piores primeiro). */
+  items: LowMarginSaleDto[];
+  total: number;
+  /** Quanto a mais teria sobrado se todas tivessem batido o mínimo. */
+  gap: number;
+  /** Vendas aprovadas sem custo cadastrado (ficam fora do alerta). */
+  semCusto: number;
+}

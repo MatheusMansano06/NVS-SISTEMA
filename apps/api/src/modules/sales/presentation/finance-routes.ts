@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { financeLinesQuerySchema, financeQuerySchema } from '@nvs/shared';
+import { financeLinesQuerySchema, financeQuerySchema, lowMarginSettingsSchema } from '@nvs/shared';
 import type { z } from 'zod';
 import { ValidationError } from '../../../shared/kernel/errors.js';
 import type { FinanceService } from '../application/finance-service.js';
@@ -17,6 +17,11 @@ export function financeRoutes(service: FinanceService) {
     app.get('/finance/summary', read, async (req) => service.summary(req.user.tenantId, parse(financeQuerySchema, req.query)));
     app.get('/finance/lines', read, async (req) =>
       service.lines(req.user.tenantId, parse(financeQuerySchema, req.query), parse(financeLinesQuerySchema, req.query)),
+    );
+    // alerta de margem baixa do Dashboard (mínimo configurável pela empresa)
+    app.get('/finance/low-margin', read, async (req) => service.lowMargin(req.user.tenantId, parse(financeQuerySchema, req.query)));
+    app.put('/finance/low-margin/settings', { preHandler: app.requirePermission('costs:manage') }, async (req) =>
+      service.setLowMarginPct(req.user.tenantId, parse(lowMarginSettingsSchema, req.body).pct),
     );
     app.get('/finance/export', read, async (req, reply) =>
       reply

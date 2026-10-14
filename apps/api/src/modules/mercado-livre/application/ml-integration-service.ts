@@ -611,7 +611,12 @@ export class MlIntegrationService {
         const closed = (p.period_status ?? '').toUpperCase() === 'CLOSED';
         const fresh = k && (k.status === 'CLOSED' ? true : !closed && Date.now() - k.fetchedAt.getTime() < 20 * 3_600_000);
         if (fresh) continue;
-        const s = await this.api.billingSummary(token, p.key);
+        // uma fatura que o ML recusar não impede as outras
+        const s = await this.api.billingSummary(token, p.key).catch((err) => {
+          this.log.error({ err, tenantId, key: p.key }, 'Mercado Livre: fatura do período indisponível');
+          return null;
+        });
+        if (!s) continue;
         await this.db.withTenant(tenantId, (db) =>
           this.repo.saveBilling(db, {
             tenantId,

@@ -454,7 +454,7 @@ export class HttpMlApi implements MlApi, MlRawApi {
   }
 
   billingSummary(token: string, key: string) {
-    return this.get<MlBillingSummary>(`/billing/integration/periods/key/${encodeURIComponent(key)}/summary/details?group=ML`, token);
+    return this.get<MlBillingSummary>(`/billing/integration/periods/key/${encodeURIComponent(key)}/summary/details?group=ML&document_type=BILL`, token);
   }
 
   async siteCategories(token: string) {

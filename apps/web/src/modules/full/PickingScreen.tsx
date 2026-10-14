@@ -6,6 +6,7 @@ import { Modal } from '../../shared/ui/Modal';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
 import { usePerson } from '../operation/PersonContext';
 import { fullApi } from './full-api';
+import { ProductDock } from './ProductDock';
 
 type Dialog =
   | { kind: 'box'; code: string; remaining: number }
@@ -249,6 +250,8 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
           ))}
         </section>
       )}
+
+      <ProductDock items={detail.items} currentId={item?.id ?? null} onPick={(sku) => setFocus(sku)} />
 
       <Modal open={dialog !== null} onClose={() => setDialog(null)} label="Separação" wide>
         {dialog && item && (

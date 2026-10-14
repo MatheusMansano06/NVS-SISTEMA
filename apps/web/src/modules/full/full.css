@@ -641,3 +641,44 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .pk-recent span { padding: 1px 7px; border-radius: 6px; background: var(--gray-100); color: var(--gray-500); font-weight: 750; font-size: .72rem; white-space: nowrap; }
 .pk-recent em { font-style: normal; padding: 1px 7px; border-radius: 6px; background: var(--danger-soft); color: var(--danger-ink); font-weight: 750; font-size: .72rem; white-space: nowrap; }
 .pk-recent .pk-link { margin-left: auto; color: var(--blue); font-size: .74rem; white-space: nowrap; }
+
+/* ============ Dock de produtos (como a Dock do Mac) ============ */
+.pk { padding-bottom: 150px; }
+.dock { position: fixed; left: 0; right: 0; bottom: 10px; z-index: 30; display: flex; justify-content: center; pointer-events: none; padding: 0 12px; }
+.dock-shelf {
+  /* área transparente em cima para a foto crescer e o nome aparecer; a "prateleira" é só a faixa de baixo */
+  pointer-events: none; display: flex; align-items: flex-end; gap: 10px; max-width: min(100%, 1100px); padding: 44px 16px 12px;
+  overflow-x: auto; scrollbar-width: none; border-radius: 0 0 24px 24px;
+  background:
+    linear-gradient(to top, color-mix(in srgb, var(--surface) 88%, transparent) 80px, transparent 80px) local,
+    linear-gradient(to top, transparent 80px, color-mix(in srgb, var(--gray-300) 70%, transparent) 80px, transparent 81px) local;
+}
+.dock-item { pointer-events: auto; }
+.dock-shelf::-webkit-scrollbar { display: none; }
+.dock-item {
+  --ring: var(--gray-300);
+  position: relative; flex: none; padding: 0; border: 0; cursor: pointer; border-radius: 16px; background: var(--surface);
+  box-shadow: 0 0 0 2px var(--ring), 0 8px 16px -10px rgba(11,28,77,.6);
+  transition: width .12s ease-out, height .12s ease-out, transform .2s;
+}
+.dock-item:active { transform: translateY(-6px); }
+.dock-item[data-item='complete'] { --ring: var(--ok); }
+.dock-item[data-item='in_progress'] { --ring: var(--blue); }
+.dock-item[data-item='partial'], .dock-item[data-item='out_of_stock'] { --ring: var(--danger); }
+.dock-item img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
+.dock-ph { display: grid; place-items: center; width: 100%; height: 100%; border-radius: inherit; background: var(--gray-50); color: var(--gray-500); font-size: .7rem; font-weight: 900; }
+.dock-item[data-item='complete'] img, .dock-item[data-item='complete'] .dock-ph { opacity: .55; }
+.dock-qty {
+  position: absolute; right: -6px; top: -6px; padding: 1px 6px; border-radius: 99px; background: var(--navy-solid); color: #fff;
+  font-size: .58rem; font-weight: 850; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.dock-item[data-item='complete'] .dock-qty { background: var(--ok); }
+.dock-item[aria-current]::after {
+  content: ''; position: absolute; left: 50%; bottom: -9px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--navy);
+}
+.dock-tip {
+  position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); padding: 4px 10px; border-radius: 8px;
+  background: var(--navy-solid); color: #fff; font-size: .72rem; font-weight: 750; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.dock-item:hover .dock-tip { opacity: 1; }
+@media (hover: none) { .dock-item { width: 52px !important; height: 52px !important; } }

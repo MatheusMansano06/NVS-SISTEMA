@@ -12,7 +12,7 @@ import { SalesPage } from './modules/sales/SalesPage';
 import { PricingPage } from './modules/pricing/PricingPage';
 import { FreightPage } from './modules/freight/FreightPage';
 import { FinancePage } from './modules/finance/FinancePage';
-import { navigate, usePath } from './app/router';
+import { usePath } from './app/router';
 import { AppShell } from './app/AppShell';
 import { FullRouter } from './modules/full/FullRouter';
 import { CentralDevolucoes } from './modules/central/CentralDevolucoes';
@@ -43,7 +43,7 @@ function Pages() {
   if (path.startsWith('/precificador')) return <PricingPage />;
   if (path.startsWith('/radar-frete')) return <FreightPage />;
   if (path.startsWith('/equipe')) return <TeamPage />;
-  if (path.startsWith('/devolucoes')) return <CentralDevolucoes onVoltar={() => navigate('/')} />;
+  if (path.startsWith('/devolucoes')) return <AppShell><CentralDevolucoes /></AppShell>;
   if (path.startsWith('/full')) return <AppShell><FullRouter mode="analise" /></AppShell>;
   if (path.startsWith('/anuncios/promocoes')) return <PromotionsPage />;
   if (path.startsWith('/anuncios')) return <ListingsPage />;

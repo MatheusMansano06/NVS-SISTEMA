@@ -1117,6 +1117,92 @@ export class CentralService {
     });
   }
 
+  // ================= estoque virtual (sem ERP: avaria, divergente e vendável sem anúncio próprio)
+  async estoqueVirtual(tenantId: string) {
+    return this.db.withTenant(tenantId, async (db) => {
+      const { rows } = await db.query<{ sku: string; vendavel: number; avaria: number; ultimo: Date }>(
+        `SELECT sku, coalesce(sum(quantity) FILTER (WHERE deposit = 'vendavel'), 0)::int AS vendavel,
+                coalesce(sum(quantity) FILTER (WHERE deposit = 'avaria'), 0)::int AS avaria, max(created_at) AS ultimo
+           FROM virtual_stock_moves GROUP BY sku ORDER BY max(created_at) DESC`,
+      );
+      const skus = rows.map((r) => r.sku);
+      const { rows: an } = await db.query<{ sku: string; title: string; picture_url: string | null }>(
+        `SELECT DISTINCT ON (upper(sku)) upper(sku) AS sku, title, picture_url FROM listings
+          WHERE upper(sku) = ANY(SELECT upper(x) FROM unnest($1::text[]) x) ORDER BY upper(sku), (status = 'active') DESC`,
+        [skus],
+      );
+      const { rows: wp } = await db.query<{ sku: string; description: string | null }>(
+        'SELECT upper(sku) AS sku, description FROM wms_products WHERE upper(sku) = ANY(SELECT upper(x) FROM unnest($1::text[]) x)',
+        [skus],
+      );
+      const anuncio = new Map(an.map((a) => [a.sku, a]));
+      const descricao = new Map(wp.map((w) => [w.sku, w.description]));
+      const custos = await Custos.load(db);
+      const lista = rows.map((r) => {
+        const a = anuncio.get(r.sku.toUpperCase());
+        const custo = custos.de(r.sku);
+        return {
+          sku: r.sku, nome: a?.title ?? descricao.get(r.sku.toUpperCase()) ?? null, imagem: a?.picture_url ?? null,
+          vendavel: r.vendavel, avaria: r.avaria, custo,
+          valor_vendavel: custo === null ? null : r2(custo * r.vendavel), valor_avaria: custo === null ? null : r2(custo * r.avaria), ultimo_em: r.ultimo,
+        };
+      });
+      const { rows: mv } = await db.query<Json>(
+        `SELECT id, sku, deposit, quantity, origin, reference, operator_name, created_at FROM virtual_stock_moves ORDER BY created_at DESC LIMIT 150`,
+      );
+      return {
+        skus: lista.filter((x) => x.vendavel !== 0 || x.avaria !== 0),
+        zerados: lista.filter((x) => x.vendavel === 0 && x.avaria === 0).length,
+        total: {
+          vendavel: sum(lista.map((x) => x.vendavel)), avaria: sum(lista.map((x) => x.avaria)),
+          valor_vendavel: r2(sum(lista.map((x) => x.valor_vendavel ?? 0))), valor_avaria: r2(sum(lista.map((x) => x.valor_avaria ?? 0))),
+          sem_custo: lista.filter((x) => x.custo === null && (x.vendavel || x.avaria)).length,
+        },
+        movimentos: mv.map((m: Json) => ({
+          id: m.id, sku: m.sku, deposito: m.deposit, quantidade: m.quantity, origem: m.origin, referencia: m.reference,
+          operador: m.operator_name, criado_em: m.created_at,
+        })),
+      };
+    });
+  }
+
+  private async saldoVirtual(db: Queryable, sku: string, deposito: string) {
+    return (await db.query<{ n: number }>('SELECT coalesce(sum(quantity), 0)::int AS n FROM virtual_stock_moves WHERE sku = $1 AND deposit = $2', [sku, deposito])).rows[0]!.n;
+  }
+
+  /** Ajuste manual (descarte, venda da avaria, contagem) ou transferência entre depósitos (ex.: consertou → vendável). */
+  async ajusteVirtual(a: ReturnActor, dados: Json) {
+    const sku = typeof dados?.sku === 'string' ? dados.sku.trim() : '';
+    const motivo = typeof dados?.motivo === 'string' ? dados.motivo.trim() : '';
+    const qtd = dados?.quantidade;
+    const de = dados?.deposito;
+    const para = dados?.para ?? null;
+    if (!sku) throw new ValidationError('Informe o SKU.');
+    if (!['vendavel', 'avaria'].includes(de) || (para !== null && (!['vendavel', 'avaria'].includes(para) || para === de))) throw new ValidationError('Depósito inválido.');
+    if (typeof qtd !== 'number' || !Number.isInteger(qtd) || qtd === 0 || Math.abs(qtd) > 9999 || (para !== null && qtd < 0)) {
+      throw new ValidationError('Quantidade deve ser um número inteiro diferente de zero.');
+    }
+    if (motivo.length < 3 || motivo.length > 200) throw new ValidationError('Diga o motivo do ajuste (3 a 200 letras).');
+    const nome = await this.nomeOperador(a);
+    const saida = para !== null ? -qtd : qtd;
+    const saldo = await this.db.withTenant(a.tenantId, (db) => this.saldoVirtual(db, sku, de));
+    if (saida < 0 && saldo + saida < 0) throw new ValidationError(`Saldo insuficiente de ${sku} no ${de === 'avaria' ? 'estoque de avaria' : 'estoque vendável'}.`);
+    // transferência: o vendável volta para o anúncio próprio no ML quando existe (senão, vendável virtual).
+    // Primeiro o destino: se o ML recusar, a avaria continua como estava.
+    const destino = para === null ? null : await this.deps.stock.move(a.tenantId, {
+      sku, deposit: para, delta: qtd, origin: 'ajuste', reference: motivo, operatorName: nome,
+    });
+    await this.db.withTenant(a.tenantId, (db) =>
+      db.query(
+        `INSERT INTO virtual_stock_moves (tenant_id, sku, deposit, quantity, origin, reference, operator_name) VALUES ($1,$2,$3,$4,'ajuste',$5,$6)`,
+        [a.tenantId, sku, de, saida, motivo, nome],
+      ),
+    );
+    return this.db.withTenant(a.tenantId, async (db) => ({
+      sku, destino, vendavel: await this.saldoVirtual(db, sku, 'vendavel'), avaria: await this.saldoVirtual(db, sku, 'avaria'),
+    }));
+  }
+
   // ================= sincronização
   async sincronizacao(tenantId: string) {
     const estado = this.sync?.progress.state(tenantId) ?? {};

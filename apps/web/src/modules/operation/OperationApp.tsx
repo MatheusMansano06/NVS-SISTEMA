@@ -4,12 +4,15 @@ import { navigate, usePath } from '../../app/router';
 import { CentralDevolucoes } from '../central/CentralDevolucoes';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../../shared/ui/Modal';
+import { OperationHome } from './OperationHome';
 import { PinChange } from './PinChange';
 import { usePerson } from './PersonContext';
 import { TeamManager } from './TeamManager';
 import './operation.css';
 
-/** Operação: as funções da expedição entram aqui (todos da Operação veem o mesmo). */
+type Area = 'inicio' | 'full' | 'devolucoes';
+
+/** Operação: abre no início (a pessoa escolhe a tarefa); Supervisão Full em /op/full e Devoluções em /op/devolucoes. */
 export function OperationApp() {
   const ctx = usePerson()!;
   const { session } = useAuth();
@@ -17,23 +20,24 @@ export function OperationApp() {
   const [view, setView] = useState<'home' | 'pin'>('home');
   const [team, setTeam] = useState(false);
   const path = usePath();
-  const onReturns = path.startsWith('/op/devolucoes');
-  // a Operação abre direto no painel de separação da Supervisão Full
+  const area: Area = path.startsWith('/op/devolucoes') ? 'devolucoes' : path.startsWith('/op/full') ? 'full' : 'inicio';
   useEffect(() => {
     if (!window.location.pathname.startsWith('/op')) navigate('/op');
   }, []);
 
-  // Central de Devoluções em tela cheia, como no original; a Operação vê só a parte do bipe
-  if (onReturns) return <CentralDevolucoes telas={['operacao', 'historico', 'full']} onVoltar={() => navigate('/op')} />;
+  const tab = (a: Area, to: string, label: string) => (
+    <button type="button" role="tab" aria-checked={area === a} onClick={() => { setView('home'); navigate(to); }}>{label}</button>
+  );
 
   return (
-    <div className="station">
+    <div className="station" data-area={area}>
       <header className="station-top">
         <img src="/nvs-logo.webp" alt="NVS Tech" height="40" />
         <span className="station-tag">Operação · {session?.tenant.name}</span>
         <nav className="seg op-switch" aria-label="Área da operação">
-          <button type="button" role="tab" aria-checked={!onReturns} onClick={() => navigate('/op')}>📦 Supervisão Full</button>
-          <button type="button" role="tab" aria-checked={onReturns} onClick={() => navigate('/op/devolucoes')}>↩︎ Devoluções</button>
+          {tab('inicio', '/op', 'Início')}
+          {tab('full', '/op/full', '📦 Supervisão Full')}
+          {tab('devolucoes', '/op/devolucoes', '↩︎ Devoluções')}
         </nav>
         <span className="station-user">
           <b>{me.name}</b>
@@ -45,8 +49,12 @@ export function OperationApp() {
       <main className="station-main">
         {view === 'pin' ? (
           <PinChange person={ctx.person} onCancel={() => setView('home')} onDone={(p) => { ctx.update(p); setView('home'); }} />
-        ) : (
+        ) : area === 'full' ? (
           <div className="op-full"><FullRouter mode="operacao" /></div>
+        ) : area === 'devolucoes' ? (
+          <div className="op-full"><CentralDevolucoes modo="operacao" telas={['operacao', 'historico', 'full']} /></div>
+        ) : (
+          <OperationHome />
         )}
       </main>
       <Modal open={team} onClose={() => setTeam(false)} label="Equipe" wide>

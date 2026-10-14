@@ -876,6 +876,16 @@ describe.skipIf(!TEST_DB)('Central de Devoluções — contrato das telas origin
     // sem ERP: avaria vai para o estoque virtual do sistema
     expect(lancado).toEqual([expect.objectContaining({ sku: 'vendido', deposito: 'avaria', tipo: 'E', ok: true, quantidade: 1, destino: 'Estoque virtual · avaria SKU-1 (saldo 1)' })]);
     expect((await call('POST', `/conferencia/${id}/lancar-estoque`, {})).statusCode).toBe(409);
+
+    // estoque virtual: a avaria aparece com saldo; "consertou" volta para o anúncio próprio no ML
+    expect((await call('GET', '/estoque-virtual')).json()).toMatchObject({
+      total: { avaria: 1, vendavel: 0 }, skus: [{ sku: 'SKU-1', avaria: 1, vendavel: 0, nome: 'Peça 1' }],
+      movimentos: [{ sku: 'SKU-1', deposito: 'avaria', quantidade: 1, origem: 'devolucao', operador: 'Ana' }],
+    });
+    expect((await call('POST', '/estoque-virtual/ajuste', { sku: 'SKU-1', deposito: 'avaria', quantidade: -5, motivo: 'descarte' })).statusCode).toBe(400);
+    expect((await call('POST', '/estoque-virtual/ajuste', { sku: 'SKU-1', deposito: 'avaria', para: 'vendavel', quantidade: 1, motivo: 'Consertado' })).json())
+      .toEqual({ sku: 'SKU-1', destino: 'Mercado Livre MLB1 (estoque 3 → 4)', vendavel: 0, avaria: 0 });
+    expect((await call('GET', '/estoque-virtual')).json()).toMatchObject({ skus: [], total: { avaria: 0 } });
     expect((await call('GET', '/operacao?status=em_mediacao')).json()).toMatchObject({ total: 1, contagens: { em_mediacao: 1 } });
 
     // operadores: quem conferiu hoje

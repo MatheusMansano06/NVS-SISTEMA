@@ -1,0 +1,130 @@
+/* Central de Devoluções com a cara do NVS: mesma estrutura das telas do NOVAES-ESTOQUE, com as cores, a fonte, os
+   cartões e os botões do sistema. Carregado depois de estilo.css (mesma especificidade: este vence). */
+.central-dev {
+  --fundo: var(--gray-50);
+  --papel: #fff;
+  --linha: var(--gray-100);
+  --linha-forte: var(--gray-300);
+  --tinta: var(--ink);
+  --suave: var(--gray-500);
+  --fraco: #9aa2b4;
+  --azul: var(--blue);
+  --azul-fundo: var(--blue-soft);
+  --vermelho: var(--danger);
+  --verde: var(--ok);
+  --raio: 24px;
+  --sombra: 0 0 0 1px var(--gray-100), 0 16px 34px -28px rgba(11, 28, 77, .4);
+  font-family: var(--font);
+  background: transparent;
+}
+
+/* ---------- Estrutura: página que rola dentro do menu do sistema (não mais a janela inteira) ---------- */
+.central-dev .cd-app { height: auto; min-height: 0; display: grid; grid-template-rows: none; gap: 18px; overflow: visible; max-width: 1360px; margin: 0 auto; }
+.central-dev .conteudo { padding: 0; overflow: visible; min-height: 0; }
+.central-dev .tela { height: auto; } /* sem animação: transform prenderia os modais (position: fixed) dentro da tela */
+.central-dev .cd-head h1 { font-size: clamp(1.7rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -0.035em; color: var(--navy); }
+.central-dev .cd-head .dash-kicker { margin: 0 0 4px; color: var(--gray-500); font-weight: 550; }
+.central-dev .cd-head-acoes { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.central-dev .cd-tour { color: var(--blue); font-weight: 600; }
+.central-dev .cd-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; animation: rise .5s .04s both; }
+.central-dev .cd-abas { overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.central-dev .cd-abas::-webkit-scrollbar { display: none; }
+.central-dev .seg button { color: var(--gray-500); font: inherit; font-weight: 600; font-size: .86rem; }
+.central-dev .seg button[aria-checked='true'] { color: #fff; }
+.central-dev .cd-busca { max-width: 380px; }
+.central-dev .cd-busca kbd { font: inherit; font-size: .7rem; color: var(--gray-500); border-radius: 6px; padding: 1px 6px; background: var(--gray-100); }
+.central-dev .resumo, .central-dev .bi, .central-dev .operacao, .central-dev .operadores, .central-dev .quebrados-pg, .central-dev .full-pg { overflow: visible; grid-template-rows: none; }
+.central-dev .fila-operador { overflow: visible; }
+.central-dev .tabela-area { overflow-x: auto; overflow-y: visible; }
+
+/* ---------- Títulos das telas ---------- */
+.central-dev .cabecalho h1, .central-dev .hero h1, .central-dev .bipe-topo h1 { color: var(--navy); letter-spacing: -0.03em; font-size: 1.35rem; }
+.central-dev .hero-saudacao { color: var(--blue); }
+.central-dev .cartao h2 { color: var(--navy); font-size: .95rem; font-weight: 650; }
+
+/* ---------- Cartões no formato do sistema ---------- */
+.central-dev .cartao, .central-dev .kpi, .central-dev .marketplace, .central-dev .motivo-bloco, .central-dev .abas-operador button {
+  border: 0; border-radius: 28px 28px 28px 10px; box-shadow: var(--sombra);
+}
+.central-dev .cartao { padding: 1.1rem 1.25rem; }
+.central-dev .kpi { transition: transform .25s cubic-bezier(.2, .7, .2, 1), box-shadow .25s; }
+.central-dev .kpi:hover { transform: translateY(-2px); box-shadow: 0 0 0 1.5px var(--blue), 0 18px 34px -24px rgba(31, 95, 255, .45); }
+.central-dev .kpi strong { color: var(--navy); letter-spacing: -0.03em; }
+.central-dev .kpi-icone, .central-dev .funil-icone { border-radius: 16px; }
+.central-dev .financeiro { border-radius: 28px 28px 28px 10px; background: linear-gradient(150deg, var(--navy) 0%, #13307a 70%, #1f5fff 140%);
+  box-shadow: 0 22px 40px -26px rgba(11, 28, 77, .8); }
+.central-dev .abas-operador button[aria-selected="true"] { box-shadow: 0 0 0 2px var(--blue), 0 0 0 6px rgba(31, 95, 255, .12); }
+.central-dev .abas-operador button[aria-selected="true"] .contagem { background: var(--navy); }
+.central-dev .motivo-bloco.destaque { box-shadow: 0 0 0 1.5px #f2b8a6, 0 16px 34px -28px rgba(11, 28, 77, .4); }
+.central-dev .qb-alerta { box-shadow: 0 0 0 1.5px #f2d27a, 0 16px 34px -28px rgba(11, 28, 77, .4); background: #fffdf5; }
+.central-dev .aviso { border-radius: 16px 16px 16px 6px; }
+.central-dev .aviso.forte { background: var(--blue-soft); color: var(--navy); }
+
+/* ---------- Botões e campos do sistema ---------- */
+.central-dev .botao { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); min-height: 42px; padding: 0 1.15rem;
+  transition: transform .2s cubic-bezier(.2, .7, .2, 1), box-shadow .25s, background .2s; }
+.central-dev .botao:hover:not(:disabled) { background: #e3e7f0; }
+.central-dev .botao.principal { color: #fff; background: linear-gradient(115deg, var(--blue-deep), var(--blue) 55%, #4a82ff);
+  box-shadow: 0 12px 24px -12px rgba(31, 95, 255, .7); }
+.central-dev .botao.principal:hover:not(:disabled) { background: linear-gradient(115deg, var(--blue-deep), var(--blue) 55%, #4a82ff); transform: translateY(-1px);
+  box-shadow: 0 18px 30px -14px rgba(31, 95, 255, .75); }
+.central-dev .botao.alerta { background: linear-gradient(115deg, #b3132b, var(--danger)); color: #fff; }
+.central-dev .botao-linha { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); padding: .35rem .85rem; }
+.central-dev .botao-linha:hover { background: #e3e7f0; }
+.central-dev .botao-linha.destaque { background: var(--blue); color: #fff; }
+.central-dev .icone-botao { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); }
+.central-dev .seletor { border: 0; border-radius: 999px; box-shadow: 0 0 0 1px var(--gray-100); padding-left: 1rem; height: 40px; }
+.central-dev .campo input, .central-dev .campo textarea, .central-dev .campo select, .central-dev .vincular input {
+  border: 0; border-radius: 14px; box-shadow: 0 0 0 1px var(--gray-300); padding: .65rem .85rem; transition: box-shadow .2s; }
+.central-dev .campo input:focus, .central-dev .campo textarea:focus, .central-dev .campo select:focus, .central-dev .vincular input:focus {
+  outline: none; box-shadow: 0 0 0 2px var(--blue), 0 0 0 6px rgba(31, 95, 255, .12); }
+.central-dev .segmentos { gap: 4px; padding: 4px; border-radius: 999px; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); }
+.central-dev .segmentos button { border: 0; border-radius: 999px; padding: .4rem .85rem; color: var(--gray-500); font-weight: 600; background: none; }
+.central-dev .segmentos button[aria-pressed="true"], .central-dev .segmentos button[aria-selected="true"] { background: var(--navy); color: #fff; }
+.central-dev .paginacao button { border: 0; border-radius: 999px; background: var(--gray-100); color: var(--navy); padding: .3rem .85rem; }
+
+/* ---------- Bancada (bipe) ---------- */
+.central-dev .bipe { border: 0; border-radius: 999px; box-shadow: 0 0 0 1.5px var(--gray-300); padding: .4rem .4rem .4rem 1.2rem; }
+.central-dev .bipe:focus-within { box-shadow: 0 0 0 2px var(--blue), 0 0 0 7px rgba(31, 95, 255, .12); }
+.central-dev .bipe .botao { min-height: 48px; }
+.central-dev .passos span { background: var(--navy); color: #fff; }
+
+/* ---------- Tabelas e listas ---------- */
+.central-dev .tabela th { color: var(--gray-500); font-weight: 600; letter-spacing: .01em; }
+.central-dev .tabela tbody tr:hover td, .central-dev .linha-operador:hover, .central-dev .lista-mov button:hover { background: var(--gray-50); }
+.central-dev .linha-operador > img, .central-dev .foto-vazia, .central-dev .qb-produto img, .central-dev .qb-sem-foto { border: 0; border-radius: 14px; box-shadow: 0 0 0 1px var(--gray-100); }
+
+/* ---------- Modal da conferência ---------- */
+.central-dev .modal-fundo { background: rgba(11, 28, 77, .28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.central-dev .modal { border-radius: 30px 30px 30px 12px; box-shadow: 0 40px 80px -30px rgba(11, 28, 77, .55); }
+.central-dev .modal-topo h2 { color: var(--navy); letter-spacing: -0.02em; }
+.central-dev .modal.ev-modal { width: min(520px, 100%); height: auto; grid-template-rows: auto auto; }
+.central-dev .ev-corpo { padding: 1rem 1.25rem 1.25rem; background: #fff; display: grid; gap: .2rem; }
+.central-dev .ev-corpo .linha-botoes { justify-content: flex-end; margin-top: 1rem; }
+
+/* ---------- Selo da sincronização ---------- */
+.central-dev .sinc-selo { border-radius: 999px; }
+
+/* ---------- Estoque virtual ---------- */
+.central-dev .ev-pg { grid-template-columns: minmax(0, 1fr); align-content: start; }
+.central-dev .ev-pg > .cabecalho, .central-dev .ev-pg > .op-cartoes, .central-dev .ev-pg > .aviso { grid-column: 1 / -1; }
+.central-dev .ev-cartao-avaria .op-numero { color: var(--classe-b); }
+.central-dev .ev-avaria { color: var(--classe-b); }
+.central-dev .ev-acoes { display: flex; gap: 6px; justify-content: flex-end; }
+.central-dev .ev-movimentos td .sub { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Operação (posto): a Central embaixo do topo do posto ---------- */
+.central-dev[data-modo='operacao'] .cd-app { max-width: 1400px; }
+.central-dev h1, .central-dev h2 { text-align: left; }
+
+/* ---------- Resumo: cartões com o acento do Dashboard na cor do indicador ---------- */
+.central-dev .kpi { min-height: 0; padding: 1.1rem 1.15rem; }
+.central-dev .kpi:has(.cor-azul) { --tone: var(--blue); } .central-dev .kpi:has(.cor-vermelho) { --tone: var(--danger); }
+.central-dev .kpi:has(.cor-roxo) { --tone: #5925dc; } .central-dev .kpi:has(.cor-verde) { --tone: var(--ok); }
+.central-dev .kpi:has(.cor-amarelo) { --tone: #d99a00; }
+.central-dev .hero h1 { white-space: nowrap; font-size: 1.25rem; }
+.central-dev .marketplace { min-width: 250px; }
+.central-dev .a-caminho-plataforma { flex-wrap: nowrap; }
+.central-dev .a-caminho-numero { border: 0; border-radius: 14px; box-shadow: 0 0 0 1px var(--gray-100); white-space: nowrap; }
+.central-dev .a-caminho-numero[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--blue); background: var(--blue-soft); }
+.central-dev .cd-busca { min-width: 300px; }

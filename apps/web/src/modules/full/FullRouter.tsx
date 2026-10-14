@@ -22,7 +22,7 @@ type Tab = { path: string; label: string };
  * Operação (/op): Painel de operação (separar), Visão Geral, Listas e Lotes e Produtos.
  */
 export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
-  const base = mode === 'analise' ? '/full' : '/op';
+  const base = mode === 'analise' ? '/full' : '/op/full';
   const path = usePath();
   const [mp, setMp] = useState<WmsMarketplace>(getFullMarketplace());
   const tour = useGuidedTour('full', TOURS.full, mode === 'analise');

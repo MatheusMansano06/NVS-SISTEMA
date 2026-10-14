@@ -12,7 +12,7 @@ export interface StockMove {
   variationId?: string | null;
   deposit: Deposit;
   delta: number; // entrada positiva, saída negativa
-  origin: 'devolucao' | 'retorno_full';
+  origin: 'devolucao' | 'retorno_full' | 'ajuste';
   reference: string;
   operatorName: string | null;
 }

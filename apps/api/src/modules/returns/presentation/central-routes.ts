@@ -155,6 +155,10 @@ export function centralRoutes(service: CentralService) {
     app.get('/central/retirada-full/:codigo', auth, async (req) => service.identificarFull(tenant(req), param(req, 'codigo')));
     app.post('/central/retirada-full/:codigo/entrada', auth, async (req) => service.entradaFull(actor(req), param(req, 'codigo'), body(req).quantidade));
 
+    // ---------- estoque virtual
+    app.get('/central/estoque-virtual', auth, async (req) => service.estoqueVirtual(tenant(req)));
+    app.post('/central/estoque-virtual/ajuste', auth, async (req) => service.ajusteVirtual(actor(req), body(req)));
+
     // ---------- sincronização
     app.get('/central/sincronizacao', auth, async (req) => service.sincronizacao(tenant(req)));
     app.get('/central/sincronizacao/progresso', auth, async (req) => service.progresso(tenant(req)));

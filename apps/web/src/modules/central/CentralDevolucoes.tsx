@@ -1,7 +1,10 @@
-import { Component, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 
+import { useGuidedTour } from "../../shared/tour/Tour";
+import { TOURS } from "../../shared/tour/tours";
 import { BiPage } from "./modules/bi/BiPage";
 import { ConferenciaModal } from "./modules/conferencia/ConferenciaModal";
+import { EstoqueVirtualPage } from "./modules/estoque-virtual/EstoqueVirtualPage";
 import { HistoricoPage } from "./modules/historico/HistoricoPage";
 import { OperacaoPage } from "./modules/operacao/OperacaoPage";
 import { OperadoresPage } from "./modules/operadores/OperadoresPage";
@@ -13,7 +16,9 @@ import { BarraSincronizacao } from "./shared/BarraSincronizacao";
 import type { Plataforma } from "./shared/devolucao";
 import { Icone } from "./shared/Icone";
 import type { Envio } from "./shared/operacao";
+import "../skus/skus.css";
 import "./shared/estilo.css";
+import "./shared/nvs.css";
 
 const TELAS = [
   { id: "resumo", nome: "Resumo" },
@@ -21,6 +26,7 @@ const TELAS = [
   { id: "bi", nome: "B.I" },
   { id: "historico", nome: "Histórico" },
   { id: "quebrados", nome: "Quebrados" },
+  { id: "estoque", nome: "Estoque virtual" },
   { id: "full", nome: "Retorno Full" },
   { id: "operadores", nome: "Operadores" },
 ] as const;
@@ -38,8 +44,11 @@ export interface Navegacao {
   filtroInicial?: FiltroOperacao;
 }
 
-function Central({ onVoltar, telas }: { onVoltar: () => void; telas?: IdTela[] }) {
-  const visiveis = telas ? TELAS.filter((t) => telas.includes(t.id)) : TELAS;
+type Modo = "analise" | "operacao";
+
+function Central({ telas, modo }: { telas?: IdTela[]; modo: Modo }) {
+  const chave = telas?.join(","); // `telas` muda de referência a cada render; a chave é o conteúdo
+  const visiveis = useMemo(() => (telas ? TELAS.filter((t) => telas.includes(t.id)) : [...TELAS]), [chave]);
   const [tela, setTela] = useState<IdTela>(visiveis[0]!.id);
   const [statusInicial, setStatusInicial] = useState<string | undefined>();
   const [filtroInicial, setFiltroInicial] = useState<FiltroOperacao | undefined>();
@@ -47,9 +56,17 @@ function Central({ onVoltar, telas }: { onVoltar: () => void; telas?: IdTela[] }
   const [versao, setVersao] = useState(0);
   const [busca, setBusca] = useState("");
   const campoBusca = useRef<HTMLInputElement>(null);
+  const tour = useGuidedTour(
+    modo === "analise" ? "central-devolucoes" : "central-devolucoes-op",
+    modo === "analise" ? TOURS["central-devolucoes"] : TOURS["central-devolucoes-op"],
+    true,
+  );
 
   const abrir = useCallback((c: string) => setCodigo(c.trim()), []);
-  const irPara = useCallback((t: IdTela, s?: string, f?: FiltroOperacao) => { setStatusInicial(s); setFiltroInicial(f); setTela(t); }, []);
+  const irPara = useCallback((t: IdTela, s?: string, f?: FiltroOperacao) => {
+    if (!visiveis.some((v) => v.id === t)) return; // a Operação não tem todas as abas
+    setStatusInicial(s); setFiltroInicial(f); setTela(t);
+  }, [visiveis]);
   const fechar = useCallback(() => { setCodigo(null); setVersao((v) => v + 1); }, []);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
@@ -82,25 +99,30 @@ function Central({ onVoltar, telas }: { onVoltar: () => void; telas?: IdTela[] }
 
   return (
     <div className="cd-app">
-      <header className="topo">
-        <button className="voltar" onClick={onVoltar} aria-label="Voltar para o início">←</button>
-        <div className="marca" aria-label="NVS Tech, Central de Devolução">
-          <img className="marca-logo" src="/assets/nvs-tech-logo.jpeg" alt="NVS Tech" />
-          <span className="marca-produto">Central de<strong>Devolução</strong></span>
+      <header className="skus-head cd-head">
+        <div>
+          <p className="dash-kicker">Mercado Livre · pós-venda</p>
+          <h1>Central de Devoluções</h1>
         </div>
-        <nav aria-label="Telas">
+        <div className="cd-head-acoes">
+          <BarraSincronizacao onTerminou={recarregar} />
+          <button type="button" className="link cd-tour" onClick={tour.start}>Rever com a Gertrudez</button>
+        </div>
+      </header>
+
+      <div className="cd-barra">
+        <nav className="seg cd-abas" role="tablist" aria-label="Telas da Central">
           {visiveis.map((t) => (
-            <button key={t.id} aria-current={tela === t.id ? "page" : undefined} onClick={() => irPara(t.id)}>{t.nome}</button>
+            <button key={t.id} type="button" role="tab" aria-checked={tela === t.id} onClick={() => irPara(t.id)}>{t.nome}</button>
           ))}
         </nav>
-        <form className="busca-global" onSubmit={buscar} role="search">
+        <form className="search cd-busca" onSubmit={buscar} role="search">
           <Icone nome="lupa" tamanho={18} />
           <input ref={campoBusca} value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar devolução"
                  placeholder="Bipar ou buscar rastreio, pedido…" autoComplete="off" />
           <kbd>Ctrl K</kbd>
         </form>
-        <BarraSincronizacao onTerminou={recarregar} />
-      </header>
+      </div>
 
       <main className="conteudo">
         {tela === "resumo" && <ResumoPage nav={nav} />}
@@ -108,6 +130,7 @@ function Central({ onVoltar, telas }: { onVoltar: () => void; telas?: IdTela[] }
         {tela === "bi" && <BiPage nav={nav} />}
         {tela === "historico" && <HistoricoPage nav={nav} />}
         {tela === "quebrados" && <QuebradosPage nav={nav} />}
+        {tela === "estoque" && <EstoqueVirtualPage nav={nav} />}
         {tela === "full" && <RetornoFullPage nav={nav} />}
         {tela === "operadores" && <OperadoresPage nav={nav} />}
       </main>
@@ -115,6 +138,7 @@ function Central({ onVoltar, telas }: { onVoltar: () => void; telas?: IdTela[] }
       {codigo && (ehEtiquetaFull(codigo)
         ? <RetiradaFullModal codigo={codigo} onFechar={fechar} />
         : <ConferenciaModal codigo={codigo} onFechar={fechar} onMudou={() => setVersao((v) => v + 1)} />)}
+      {tour.element}
     </div>
   );
 }
@@ -131,12 +155,14 @@ class Protecao extends Component<{ children: ReactNode }, { erro: Error | null }
   }
 }
 
-/** Central de Devoluções: página própria do estoque. `.central-dev` isola o CSS da Central do resto do app. */
-/** `telas`: só estas abas (a Operação vê a parte do bipe; a Análise vê tudo). */
-export function CentralDevolucoes({ onVoltar, telas }: { onVoltar: () => void; telas?: IdTela[] }) {
+/**
+ * Central de Devoluções (arquitetura do NOVAES-ESTOQUE com a cara do NVS). `.central-dev` isola o CSS da Central;
+ * `telas`: só estas abas (a Operação vê a parte do bipe; a Análise vê tudo).
+ */
+export function CentralDevolucoes({ telas, modo = "analise" }: { telas?: IdTela[]; modo?: Modo }) {
   return (
-    <div className="central-dev">
-      <Protecao><Central onVoltar={onVoltar} telas={telas} /></Protecao>
+    <div className="central-dev" data-modo={modo}>
+      <Protecao><Central telas={telas} modo={modo} /></Protecao>
     </div>
   );
 }

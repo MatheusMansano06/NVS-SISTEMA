@@ -155,4 +155,58 @@ export const TOURS = {
     { title: 'Processamento', text: 'Baixe no ML o PDF “Lista de produtos e instruções de preparação” do envio e envie em Processamento: o sistema monta as listas de até 1.000 unidades e cadastra o Código ML e o EAN de cada produto.' },
     { title: 'Na Operação 🎉', text: 'Quem entra na Operação pega uma lista (ou bipa um produto no atalho) e separa. Ao terminar cada item, as etiquetas com o Código ML vão para a impressora.' },
   ],
+  'central-devolucoes': [
+    {
+      title: 'Central de Devoluções ↩︎',
+      text:
+        'Aqui chega tudo que o comprador devolveu no Mercado Livre: o que está a caminho, o que chegou para conferir e o que vale contestar.\n' +
+        'O sistema busca no ML sozinho a cada 10 minutos e mostra quanto cada devolução custou — frete reverso e produto quebrado.\n' +
+        'Vou te mostrar as partes em menos de 1 minuto.',
+    },
+    { target: '.cd-abas', title: 'As abas', text: 'Resumo (o panorama), Operação (a bancada do bipe), B.I (custos, motivos, Full × orgânica e a fatura do ML), Histórico, Quebrados, Estoque virtual, Retorno Full e Operadores (quem conferiu o quê).' },
+    { target: '.cd-busca', title: 'Bipe de qualquer lugar', text: 'Bipe a etiqueta, o QR code ou a nota do pacote — ou digite o pedido ou rastreio. A conferência abre por cima da tela em que você está (atalho Ctrl K).' },
+    { target: '.central-dev .kpis', title: 'O panorama', text: 'Quantas devoluções estão abertas, quantas precisam de ação, quantas vêm a caminho e quantas estão em mediação. Clique em qualquer número para abrir a lista já filtrada.' },
+    { target: '.central-dev .financeiro', title: 'Quanto custou', text: 'Frete reverso já cobrado, frete em mediação (cobra se perder) e o que voltou quebrado — conferido na bancada ou declarado no motivo da devolução.' },
+    { target: '.central-dev .atencao', title: 'O que fazer primeiro', text: 'Pacotes que chegaram e esperam conferência, devoluções para contestar, estoque para lançar, chamados manuais e prazos que vencem em 24 h.' },
+    { target: '.cd-head-acoes', title: 'Sincronização', text: 'O selo mostra a última leitura do Mercado Livre. Se precisar de ajuda de novo, é só clicar em “Rever com a Gertrudez”.' },
+    {
+      title: 'Pronto! 🎉',
+      text:
+        'Sem ERP ligado, o produto bom volta direto para o estoque do anúncio no Mercado Livre; o quebrado e o divergente vão para o Estoque virtual.\n' +
+        'Comece pelo “O que precisa da sua atenção” — é ali que o prazo do ML corre.',
+    },
+  ],
+  'central-devolucoes-op': [
+    {
+      title: 'Bancada de devoluções 📦',
+      text:
+        'Aqui você confere o que o comprador devolveu: bipa o pacote, responde umas perguntas sobre o produto, tira as fotos e o sistema diz o que fazer.\n' +
+        'Vou te mostrar como funciona.',
+    },
+    { target: '.central-dev .bipe-cartao', title: '1. Bipe o pacote', text: 'Bipe a etiqueta, o QR code ou a nota que veio no pacote. Se o leitor não achar, digite o número do pedido — a etiqueta fica vinculada para o próximo bipe.' },
+    { target: '.central-dev .abas-operador', title: '2. O que tem para fazer', text: 'Chegaram (conferir agora), Falta terminar (lançar estoque, contestar ou chamado), A caminho, Em mediação e Concluídas. Clique para ver a lista.' },
+    { target: '.cd-abas', title: 'Outras abas', text: 'Histórico mostra as já resolvidas. Retorno Full é onde entra o que voltou do CD do Full: bipe a etiqueta do Full (4 letras + 5 números) e diga a quantidade.' },
+    {
+      title: 'A conferência em 4 passos ✅',
+      text:
+        'Conferir: é o produto certo? está completo? sem uso? dá para vender de novo?\n' +
+        'Fotos e vídeo: produto e embalagem, para a contestação. Estoque: o bom volta para o anúncio no Mercado Livre; o quebrado vai para o estoque virtual.\n' +
+        'Por último, aceitar ou contestar no ML. Qualquer dúvida, clique em “Rever com a Gertrudez”.',
+    },
+  ],
+  'operacao-inicio': [
+    {
+      title: 'Oi! Eu sou a Gertrudez 👋',
+      text:
+        'Este é o computador da operação. Aqui você escolhe o que vai fazer agora e eu te ajudo em cada tela.\n' +
+        'Vamos ver as opções?',
+    },
+    { target: '.op-choice-full', title: 'Supervisão Full', text: 'Para montar o envio do Full: pegue uma lista, bipe cada produto e as etiquetas saem sozinhas na impressora Zebra.' },
+    { target: '.op-choice-dev', title: 'Devoluções', text: 'Para o que voltou do comprador: bipe o pacote, confira o produto, tire as fotos e lance no estoque.' },
+    { target: '.op-switch', title: 'Trocar de tarefa', text: 'Pelo topo você troca entre Início, Supervisão Full e Devoluções a qualquer momento, sem sair da sua conta.' },
+    {
+      title: 'Bom trabalho! 🎉',
+      text: 'Cada tela tem a sua explicação na primeira vez. Se esquecer de algo, clique em “Rever com a Gertrudez”.',
+    },
+  ],
 } satisfies Record<string, TourStep[]>;

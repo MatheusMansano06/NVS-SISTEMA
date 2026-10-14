@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { WMS_ITEM_STATUS_LABELS, type WmsBatchDto, type WmsItemDto, type WmsListSummaryDto, type WmsShortageDto } from '@nvs/shared';
+import { WMS_ITEM_STATUS_LABELS, type WmsBatchDto, type WmsItemDto, type WmsListSummaryDto } from '@nvs/shared';
 import { int } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
@@ -250,38 +250,3 @@ export function ListRow({ list, onChanged, onOpen }: { list: WmsListSummaryDto; 
 }
 
 /** Relatório de faltas (itens com falta nas listas dos lotes ativos). */
-export function ShortagesView({ onBack }: { onBack: () => void }) {
-  const [rows, setRows] = useState<WmsShortageDto[] | null>(null);
-  useEffect(() => {
-    fullApi.shortages().then(setRows).catch(() => setRows([]));
-  }, []);
-  const total = rows?.reduce((s, r) => s + r.qty, 0) ?? 0;
-  return (
-    <div className="full-batches">
-      <button type="button" className="link full-back" onClick={onBack}>‹ Visão Geral</button>
-      <section className="full-box full-short-head">
-        <div>
-          <h2>Painel de rupturas</h2>
-          <p>Itens não encontrados nas listas dos lotes ativos.</p>
-        </div>
-        <div className="full-deficit"><small>Déficit total</small><b>{int(total)} un.</b></div>
-      </section>
-      {!rows ? (
-        <div className="promo-skel" aria-hidden="true" />
-      ) : !rows.length ? (
-        <div className="skus-empty"><strong>Nenhuma falta 🎉</strong><p>Tudo o que foi pedido nos envios foi encontrado.</p></div>
-      ) : (
-        <div className="full-box">
-          {rows.map((r) => (
-            <div key={`${r.sku}-${r.listCode}`} className="full-item">
-              <span className="full-item-sku"><b>{r.sku}</b><small>{r.description}</small></span>
-              <span className="full-code">{r.listCode}</span>
-              <span className="full-short-qty">−{int(r.qty)}</span>
-              <small className="full-short-note">{r.notes ?? ''}</small>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

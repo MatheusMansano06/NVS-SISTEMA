@@ -156,9 +156,9 @@ export class PgReturnsRepository {
     if (!sku) return null;
     const { rows } = await db.query<{ c: string | null }>(
       `SELECT coalesce(
-         (SELECT custo_unit FROM sku_cost_history WHERE sku = $1 AND vigente_desde <= $2::date ORDER BY vigente_desde DESC, registrado_em DESC LIMIT 1),
-         (SELECT custo_unit FROM sku_cost_history WHERE sku = $1 ORDER BY vigente_desde, registrado_em LIMIT 1),
-         (SELECT custo_unit FROM sku_costs WHERE sku = $1)) AS c`,
+         (SELECT custo_unit FROM sku_cost_history WHERE upper(trim(sku)) = upper(trim($1)) AND vigente_desde <= $2::date ORDER BY vigente_desde DESC, registrado_em DESC LIMIT 1),
+         (SELECT custo_unit FROM sku_cost_history WHERE upper(trim(sku)) = upper(trim($1)) ORDER BY vigente_desde, registrado_em LIMIT 1),
+         (SELECT custo_unit FROM sku_costs WHERE upper(trim(sku)) = upper(trim($1)) LIMIT 1)) AS c`,
       [sku, at],
     );
     return rows[0]?.c == null ? null : Number(rows[0].c);

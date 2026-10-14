@@ -129,6 +129,46 @@ export class ReturnsEnrichment {
     return this.outcome(done, rows.length - done, results);
   }
 
+  /**
+   * Foto (e SKU) dos anúncios das devoluções que não estão no catálogo sincronizado — anúncio finalizado ou antigo.
+   * O multiget do ML aceita até 20 itens por chamada; o que não tem foto fica gravado vazio para não buscar de novo.
+   */
+  async pictures(tenantId: string, get: MlGet, onProgress: (f: number) => void): Promise<TaskOutcome> {
+    const { rows } = await this.db.withTenant(tenantId, (db) =>
+      db.query<{ item_id: string }>(
+        `SELECT DISTINCT i->>'itemId' AS item_id FROM returns r, jsonb_array_elements(r.items) i
+          WHERE i->>'itemId' IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.external_id = i->>'itemId' AND l.picture_url IS NOT NULL)
+            AND NOT EXISTS (SELECT 1 FROM ml_item_pictures p WHERE p.item_id = i->>'itemId')
+          LIMIT ${PER_ROUND + 1}`,
+      ),
+    );
+    const ids = rows.slice(0, PER_ROUND).map((r) => r.item_id);
+    const lots = Array.from({ length: Math.ceil(ids.length / 20) }, (_, i) => ids.slice(i * 20, i * 20 + 20));
+    const results = await inParallel(lots, (lot) => get<Json[]>(`/items?ids=${lot.join(',')}&attributes=id,secure_thumbnail,thumbnail,seller_custom_field,attributes,variations`), onProgress);
+    let done = 0;
+    await this.db.withTenant(tenantId, async (db) => {
+      for (const [lot, res] of results) {
+        if (res instanceof Error) continue; // conexão: tenta na próxima rodada
+        const found = new Map<string, Json>((res ?? []).filter((x) => x?.code === 200 && x.body?.id).map((x) => [String(x.body.id), x.body]));
+        for (const id of lot) {
+          const b = found.get(id);
+          const url = (b?.secure_thumbnail ?? b?.thumbnail ?? null)?.replace('-I.jpg', '-O.jpg') ?? null;
+          const sku = b && !(b.variations ?? []).length
+            ? (b.seller_custom_field ?? (b.attributes ?? []).find((a: Json) => a.id === 'SELLER_SKU')?.value_name ?? null)
+            : null;
+          await db.query(
+            `INSERT INTO ml_item_pictures (tenant_id, item_id, url, sku) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (tenant_id, item_id) DO UPDATE SET url = EXCLUDED.url, sku = EXCLUDED.sku, fetched_at = now()`,
+            [tenantId, id, url, sku],
+          );
+          done++;
+        }
+      }
+    });
+    return this.outcome(done, rows.length - done, results);
+  }
+
   /** Tarifas de devolução da fatura do ML: fechada é lida uma vez; a aberta, de 3 em 3 h. */
   async billing(tenantId: string, get: MlGet, onProgress: (f: number) => void, opts: { months?: number; only?: string } = {}): Promise<Record<string, unknown>> {
     const today = utcDay(new Date());

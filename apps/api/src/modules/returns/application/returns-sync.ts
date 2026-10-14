@@ -10,7 +10,7 @@ import { SyncProgress } from './sync-progress.js';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any;
 const MAX_OFFSET = 9_900;
-const TASKS = ['mercado_livre', 'logistica_venda', 'mediacao_origem', 'mediacao_atuacao', 'fatura_ml'];
+const TASKS = ['mercado_livre', 'fotos_anuncios', 'logistica_venda', 'mediacao_origem', 'mediacao_atuacao', 'fatura_ml'];
 const TICK_MS = 10 * 60_000;
 /** Varredura do dia (23h em São Paulo = 02h UTC): toda reclamação aberta + últimos 2 dias. */
 const SWEEP_UTC_HOUR = 2;
@@ -111,6 +111,7 @@ export class ReturnsSync {
       await run('refazer_fatura', () => this.enrichment.billing(tenantId, get, part, { only: redo }));
       return;
     }
+    await run('fotos_anuncios', () => this.enrichment.pictures(tenantId, get, part) as never);
     await run('logistica_venda', () => this.enrichment.logistics(tenantId, accountId, get, part) as never);
     await run('mediacao_origem', () => this.enrichment.mediationOrigin(tenantId, accountId, get, part) as never);
     await run('mediacao_atuacao', () => this.enrichment.mediationActions(tenantId, accountId, get, part) as never);
@@ -173,12 +174,18 @@ export class ReturnsSync {
       out.claims += Math.min(total, MAX_OFFSET);
     }
 
-    // pacote não entregue que voltou: não abre reclamação (janela de 60 dias)
-    const from = new Date(Date.now() - 60 * 86_400_000).toISOString().replace('Z', '+00:00');
-    const orders = await get<{ results?: Json[] }>(
-      `/orders/search?seller=${conn.ml_user_id}&shipping.substatus=returned&order.date_created.from=${encodeURIComponent(from)}&sort=date_desc&limit=50`,
-    );
-    const notDelivered = (orders?.results ?? []).filter((o) => o.shipping?.id).map(normalizeNotDelivered);
+    // pacote não entregue que voltou: não abre reclamação. Janela de 60 dias (ou a da carga, se maior), todas as páginas
+    const from = new Date(Date.now() - Math.max(60, opts.days) * 86_400_000).toISOString().replace('Z', '+00:00');
+    const notDelivered: ReturnRecord[] = [];
+    for (let offset = 0, total = 1; offset < Math.min(total, MAX_OFFSET); offset += 50) {
+      const orders = await get<{ results?: Json[]; paging?: { total: number } }>(
+        `/orders/search?seller=${conn.ml_user_id}&shipping.substatus=returned&order.date_created.from=${encodeURIComponent(from)}&sort=date_desc&limit=50&offset=${offset}`,
+      );
+      if (!orders) break;
+      total = orders.paging?.total ?? 0;
+      notDelivered.push(...(orders.results ?? []).filter((o) => o.shipping?.id).map(normalizeNotDelivered));
+      if (!(orders.results ?? []).length) break;
+    }
     await this.db.withTenant(tenantId, async (db) => {
       for (const r of notDelivered) await this.repo.upsert(db, tenantId, conn.account_id, r);
     });

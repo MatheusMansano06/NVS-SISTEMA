@@ -52,7 +52,10 @@ export const fullApi = {
   claim: (id: string) => http<void>(`/api/v1/wms/lists/${id}/claim`, { body: {} }),
   release: (id: string) => http<void>(`/api/v1/wms/lists/${id}/release`, { body: {} }),
   deleteList: (id: string) => http<void>(`/api/v1/wms/lists/${id}`, { method: 'DELETE' }),
-  shortages: () => http<WmsShortageDto[]>(`/api/v1/wms/shortages?${q()}`),
+  shortages: () => http<WmsShortageDto[]>('/api/v1/wms/shortages'),
+  shortageStatus: (itemId: string, status: 'pendente' | 'concluido') => http<void>(`/api/v1/wms/shortages/${itemId}/status`, { method: 'PATCH', body: { status } }),
+  removeShortage: (itemId: string) => http<void>(`/api/v1/wms/shortages/${itemId}`, { method: 'DELETE' }),
+  removeAllShortages: () => http<{ removed: number }>('/api/v1/wms/shortages', { method: 'DELETE' }),
   scan: (id: string, b: { barcode: string; focusSku?: string; mode?: 'unit' | 'box'; qty?: number }) =>
     http<WmsScanResultDto>(`/api/v1/wms/lists/${id}/scan`, { body: b }),
   undo: (id: string, sku: string) => http<WmsItemDto>(`/api/v1/wms/lists/${id}/undo`, { body: { sku } }),

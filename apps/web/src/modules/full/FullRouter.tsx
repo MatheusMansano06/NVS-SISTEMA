@@ -3,12 +3,13 @@ import type { WmsMarketplace } from '@nvs/shared';
 import { navigate, usePath } from '../../app/router';
 import { useGuidedTour } from '../../shared/tour/Tour';
 import { TOURS } from '../../shared/tour/tours';
-import { BatchDetail, BatchesView, ShortagesView } from './BatchesView';
+import { BatchDetail, BatchesView } from './BatchesView';
 import { FullOverview } from './FullOverview';
 import { OperatorHome } from './OperatorHome';
 import { PickingScreen } from './PickingScreen';
 import { ProcessingView } from './ProcessingView';
 import { ProductsView } from './ProductsView';
+import { ShortageReport } from './ShortageReport';
 import { getFullMarketplace, setFullMarketplace } from './full-api';
 import '../skus/skus.css';
 import '../listings/listings.css';
@@ -25,7 +26,7 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
   const base = mode === 'analise' ? '/full' : '/op/full';
   const path = usePath();
   const [mp, setMp] = useState<WmsMarketplace>(getFullMarketplace());
-  const tour = useGuidedTour('full', TOURS.full, mode === 'analise');
+  const tour = useGuidedTour(mode === 'analise' ? 'full' : 'full-operacao', mode === 'analise' ? TOURS.full : TOURS['full-operacao'], true);
   const sub = path.startsWith(base) ? path.slice(base.length) || '/' : '/';
   const qs = new URLSearchParams(window.location.search);
   const go = (p: string) => navigate(`${base}${p}`);
@@ -36,6 +37,7 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
       ? [
           { path: '/', label: 'Visão Geral' },
           { path: '/listas', label: 'Listas e Lotes' },
+          { path: '/faltas', label: 'Faltas' },
           { path: '/processamento', label: 'Processamento' },
           { path: '/produtos', label: 'Produtos (Master Data)' },
         ]
@@ -43,10 +45,11 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
           { path: '/', label: 'Separar' },
           { path: '/visao', label: 'Visão Geral' },
           { path: '/listas', label: 'Listas e Lotes' },
+          { path: '/faltas', label: 'Faltas' },
           { path: '/produtos', label: 'Produtos' },
         ];
   const overviewPath = mode === 'analise' ? '/' : '/visao';
-  const active = tabs.find((t) => t.path !== '/' && sub.startsWith(t.path))?.path ?? (sub.startsWith('/lote') ? '/listas' : sub === '/' ? '/' : sub.startsWith('/faltas') ? overviewPath : '');
+  const active = tabs.find((t) => t.path !== '/' && sub.startsWith(t.path))?.path ?? (sub.startsWith('/lote') ? '/listas' : sub === '/' ? '/' : '');
 
   let body;
   const m = (re: RegExp) => re.exec(sub)?.[1];
@@ -57,7 +60,7 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
   } else if (sub.startsWith('/listas')) {
     body = <BatchesView onOpenBatch={(id) => go(`/lote/${id}`)} onOpenList={openList} />;
   } else if (sub.startsWith('/faltas')) {
-    body = <ShortagesView onBack={() => go(overviewPath)} />;
+    body = <ShortageReport onOpenList={openList} />;
   } else if (sub.startsWith('/produtos')) {
     body = <ProductsView />;
   } else if (sub.startsWith('/processamento') && mode === 'analise') {
@@ -102,10 +105,11 @@ export function FullRouter({ mode }: { mode: 'analise' | 'operacao' }) {
               </button>
             ))}
           </nav>
+          <button type="button" className="link full-tour" onClick={tour.start}>Rever com a Gertrudez</button>
         </header>
       )}
       <div key={mp} className="full-body">{body}</div>
-      {mode === 'analise' && tour.element}
+      {tour.element}
     </div>
   );
 }

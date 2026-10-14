@@ -209,4 +209,21 @@ export const TOURS = {
       text: 'Cada tela tem a sua explicação na primeira vez. Se esquecer de algo, clique em “Rever com a Gertrudez”.',
     },
   ],
+  'full-operacao': [
+    {
+      title: 'Separar o Full 📦',
+      text:
+        'Aqui você monta o envio para o Full: pega uma lista, bipa cada produto e as etiquetas saem sozinhas na impressora Zebra.\n' +
+        'Vou te mostrar onde fica cada coisa.',
+    },
+    { target: '.full-op-search', title: 'Atalho: bipe qualquer produto', text: 'Bipe o código de barras (ou digite SKU ou nome) e o sistema abre a lista certa já no produto. Se ele estiver com outra pessoa, oferece transferir para você.' },
+    { target: '.full-op-sec', title: 'Suas listas e a fila', text: 'Primeiro as listas que já estão com você; depois as livres. Clique numa lista para começar a separar.' },
+    { target: '.full-tabs', title: 'As abas', text: 'Visão Geral (o andamento do envio), Listas e Lotes, Faltas (o que não foi achado — marque como resolvida quando repor) e Produtos (os códigos de cada SKU).' },
+    {
+      title: 'Na tela de separar ✅',
+      text:
+        '1. Escolha: caixa fechada (bipa uma vez e diz quantas) ou peça por peça. 2. Bipe o código de barras.\n' +
+        'Achou menos? Use “Achei menos”. Não tem nenhum? “Sem estoque”. Tudo vai para o Relatório de Faltas. Qualquer dúvida, clique em “Rever com a Gertrudez”.',
+    },
+  ],
 } satisfies Record<string, TourStep[]>;

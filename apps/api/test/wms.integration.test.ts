@@ -117,12 +117,26 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     expect(box).toMatchObject({ status: 'complete', item: { status: 'partial', qtyPicked: 1, shortageQty: 1 } });
     const detail = (await call('GET', `/wms/lists/${listId}`, joao)).json();
     expect(detail.list).toMatchObject({ status: 'completed', operatorName: 'João', itemsPicked: 4, itemsTotal: 5 });
-    expect((await call('GET', '/wms/shortages', ana)).json()).toEqual([
-      { sku: 'VARAL', description: 'Varal De Chão Slim', listCode: 'ML-14-10-2026', qty: 1, notes: null },
+    // Relatório de Faltas: quem marcou, quando, lista e marketplace
+    const faltas = (await call('GET', '/wms/shortages', ana)).json();
+    expect(faltas).toEqual([
+      expect.objectContaining({
+        sku: 'VARAL', description: 'Varal De Chão Slim', listCode: 'ML-14-10-2026', listId, marketplace: 'ml', qty: 1, notes: null,
+        operatorName: 'João', status: 'pendente',
+      }),
     ]);
+    expect(faltas[0].at).toBeTruthy();
 
     const ov = (await call('GET', '/wms/overview', joao)).json();
     expect(ov).toMatchObject({ lists: { total: 1, completed: 1 }, units: { total: 5, picked: 4 }, shortage: { units: 1, skus: 1 } });
+    // resolvida sai da conta da Visão Geral; tirar do relatório não mexe no picking
+    expect((await call('PATCH', `/wms/shortages/${faltas[0].itemId}/status`, joao, { status: 'concluido' })).statusCode).toBe(204);
+    expect((await call('GET', '/wms/shortages', ana)).json()[0].status).toBe('concluido');
+    expect((await call('GET', '/wms/overview', joao)).json().shortage).toEqual({ units: 0, skus: 0 });
+    expect((await call('PATCH', `/wms/shortages/${faltas[0].itemId}/status`, joao, { status: 'pendente' })).statusCode).toBe(204);
+    expect((await call('DELETE', `/wms/shortages/${faltas[0].itemId}`, ana)).statusCode).toBe(204);
+    expect((await call('GET', '/wms/shortages', ana)).json()).toEqual([]);
+    expect((await call('GET', `/wms/lists/${listId}`, joao)).json().list).toMatchObject({ itemsPicked: 4 });
     const rank = (await call('GET', '/wms/ranking', ana)).json();
     expect(rank.operators).toEqual([{ name: 'João', total: 4 }]);
     const batch = (await call('GET', '/wms/batches', ana)).json().batches[0];

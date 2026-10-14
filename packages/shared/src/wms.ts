@@ -100,13 +100,23 @@ export interface WmsListDetailDto {
   current: WmsItemDto | null;
 }
 
+/** Uma falta do picking (item da lista que não foi achado inteiro), como no Relatório de Faltas do NVS-WMS. */
 export interface WmsShortageDto {
+  itemId: string;
   sku: string;
   description: string;
+  listId: string;
   listCode: string;
+  batchName: string | null;
+  marketplace: WmsMarketplace;
   qty: number;
   notes: string | null;
+  operatorName: string | null;
+  at: string | null;
+  status: 'pendente' | 'concluido';
 }
+
+export const wmsShortageStatusSchema = z.object({ status: z.enum(['pendente', 'concluido']) });
 
 export interface WmsOverviewDto {
   marketplace: WmsMarketplace;

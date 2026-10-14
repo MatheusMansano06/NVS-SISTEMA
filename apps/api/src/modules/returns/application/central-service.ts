@@ -41,6 +41,8 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+/** O Cadastro de SKUs e o ML nem sempre escrevem o SKU igual (maiúsculas, espaços): a ligação ignora isso. */
+const chaveSku = (sku: string) => sku.trim().toUpperCase();
 
 export class Travada extends AppError {
   constructor(message: string) {
@@ -111,15 +113,15 @@ class Custos {
     );
     const a = await db.query<{ sku: string; custo_unit: string }>('SELECT sku, custo_unit FROM sku_costs');
     const hist = new Map<string, { custo: number | null; desde: string }[]>();
-    for (const r of h.rows) hist.set(r.sku, [...(hist.get(r.sku) ?? []), { custo: num(r.custo_unit), desde: r.desde }]);
-    return new Custos(hist, new Map(a.rows.map((r) => [r.sku, Number(r.custo_unit)])));
+    for (const r of h.rows) hist.set(chaveSku(r.sku), [...(hist.get(chaveSku(r.sku)) ?? []), { custo: num(r.custo_unit), desde: r.desde }]);
+    return new Custos(hist, new Map(a.rows.map((r) => [chaveSku(r.sku), Number(r.custo_unit)])));
   }
 
   /** Antes do primeiro registro vale o primeiro (o histórico começa "desde sempre"). */
   na(sku: string | null | undefined, quando: Date): number | null {
     if (!sku) return null;
-    const vs = this.hist.get(sku);
-    if (!vs?.length) return this.atual.get(sku) ?? null;
+    const vs = this.hist.get(chaveSku(sku));
+    if (!vs?.length) return this.atual.get(chaveSku(sku)) ?? null;
     const dia = utcDay(quando);
     let escolhido = vs[0]!;
     for (const v of vs) if (v.desde <= dia) escolhido = v;
@@ -127,7 +129,7 @@ class Custos {
   }
 
   de(sku: string | null | undefined): number | null {
-    return sku ? (this.atual.get(sku) ?? null) : null;
+    return sku ? (this.atual.get(chaveSku(sku)) ?? null) : null;
   }
 }
 
@@ -233,7 +235,28 @@ export class CentralService {
   private async carregar(db: Queryable, where = 'TRUE', params: unknown[] = []) {
     const rows = await this.repo.rows(db, where, params);
     const extra = new Map<string, Extra>(rows.map((r) => [r.id, { logistica: r.sale_logistic, aberta_por: r.mediation_opened_by, acoes: r.mediation_actions }]));
-    return { linhas: rows.map(linha), extra };
+    const linhas = rows.map(linha);
+    // pedido sem SKU (anúncio sem variação): vale o SKU do anúncio, para ligar o custo do Cadastro de SKUs
+    const semSku = [...new Set(linhas.flatMap((l) => l.itens.filter((i) => !i.sku && i.item_id).map((i) => i.item_id!)))];
+    if (semSku.length) {
+      const { rows: an } = await db.query<{ item_id: string; sku: string }>(
+        `SELECT external_id AS item_id, sku FROM listings WHERE external_id = ANY($1) AND sku IS NOT NULL AND cardinality(variation_skus) <= 1
+         UNION ALL SELECT item_id, sku FROM ml_item_pictures WHERE item_id = ANY($1) AND sku IS NOT NULL`,
+        [semSku],
+      );
+      const skuDe = new Map(an.map((a) => [a.item_id, a.sku]));
+      for (const l of linhas) for (const i of l.itens) if (!i.sku && i.item_id) i.sku = skuDe.get(i.item_id) ?? null;
+    }
+    // o prejuízo da bancada acompanha o Cadastro de SKUs: custo cadastrado depois da conferência já entra na conta
+    const custos = await Custos.load(db);
+    for (const l of linhas) {
+      const c = l.conferencia;
+      if (!c || c.classe === 'A') continue;
+      const perdido = c.classe === 'B' && c.erro_nosso ? c.sku_recebido : l.itens.find((i) => i.sku)?.sku;
+      const unit = custos.na(perdido, c.conferida_em ?? l.aberta_em);
+      if (unit !== null) c.perda_produto = r2(unit * (sum(l.itens.map((i) => i.quantidade || 0)) || 1));
+    }
+    return { linhas, extra, custos };
   }
 
   private async fotos(db: Queryable, itemIds: (string | null | undefined)[], skus: (string | null | undefined)[] = []) {
@@ -241,7 +264,8 @@ export class CentralService {
     const ss = [...new Set(skus.filter((x): x is string => Boolean(x)))];
     if (!ids.length && !ss.length) return { porItem: new Map<string, string>(), porSku: new Map<string, string>() };
     const { rows } = await db.query<{ external_id: string; sku: string | null; picture_url: string }>(
-      `SELECT external_id, sku, picture_url FROM listings WHERE (external_id = ANY($1) OR sku = ANY($2)) AND picture_url IS NOT NULL`,
+      `SELECT external_id, sku, picture_url FROM listings WHERE (external_id = ANY($1) OR sku = ANY($2)) AND picture_url IS NOT NULL
+       UNION ALL SELECT item_id, sku, url FROM ml_item_pictures WHERE (item_id = ANY($1) OR sku = ANY($2)) AND url IS NOT NULL`,
       [ids, ss],
     );
     return {
@@ -423,8 +447,7 @@ export class CentralService {
   async biResumo(tenantId: string, diasPedidos: number, fatura: string | null) {
     return this.db.withTenant(tenantId, async (db) => {
       const [ini, fimDia, iniAnt, fimAnt] = periodo(diasPedidos, fatura);
-      const { linhas: todas, extra } = await this.carregar(db);
-      const custos = await Custos.load(db);
+      const { linhas: todas, extra, custos } = await this.carregar(db);
       const atual = todas.filter((l) => entre(l, ini, fimDia));
       const anterior = todas.filter((l) => entre(l, iniAnt, fimAnt));
       const dias = Math.round((Date.parse(fimDia) - Date.parse(ini)) / 86_400_000) + 1;
@@ -619,8 +642,7 @@ export class CentralService {
   async produtosQuebrados(tenantId: string, dias: number, fatura: string | null) {
     return this.db.withTenant(tenantId, async (db) => {
       const [ini, fim] = periodo(dias, fatura);
-      const { linhas } = await this.carregar(db);
-      const custos = await Custos.load(db);
+      const { linhas, custos } = await this.carregar(db);
       const skus = new Map<string, Json>();
       for (const l of linhas.filter((x) => entre(x, ini, fim))) {
         const c = l.conferencia;
@@ -668,8 +690,7 @@ export class CentralService {
   async quebradosLista(tenantId: string, dias: number, fatura: string | null) {
     return this.db.withTenant(tenantId, async (db) => {
       const [ini, fim] = periodo(dias, fatura);
-      const { linhas } = await this.carregar(db);
-      const custos = await Custos.load(db);
+      const { linhas, custos } = await this.carregar(db);
       const saida = [];
       for (const l of linhas.filter((x) => entre(x, ini, fim))) {
         const [origem, valor] = this.perda(l, custos);
@@ -690,7 +711,7 @@ export class CentralService {
         `SELECT h.custo_unit AS custo, to_char(h.vigente_desde, 'YYYY-MM-DD') AS desde, h.registrado_em,
                 coalesce(h.registrado_por_nome, u.name) AS por
            FROM sku_cost_history h LEFT JOIN users u ON u.id = h.registrado_por
-          WHERE h.sku = $1 AND h.custo_unit IS NOT NULL ORDER BY h.vigente_desde DESC, h.registrado_em DESC`,
+          WHERE upper(trim(h.sku)) = upper(trim($1)) AND h.custo_unit IS NOT NULL ORDER BY h.vigente_desde DESC, h.registrado_em DESC`,
         [sku.trim()],
       );
       // "desde sempre" no NVS é 1900-01-01; a tela marca "antes das mudanças" pelo 2000-01-01
@@ -705,9 +726,12 @@ export class CentralService {
     if (!(custo > 0 && custo < 1_000_000)) throw new ValidationError('custo deve ser maior que zero');
     const desde = this.diaValido(corpo?.desde || this.deps.today(), 'desde');
     const quem = await this.nomeOperador(a);
-    const atual = await this.deps.saveCost(a.tenantId, a.userId, sku.trim(), r2(custo), desde, quem);
-    const recalculadas = await this.reprecificar(a.tenantId, sku.trim(), desde);
-    return { sku: sku.trim(), custo_atual: atual, conferencias_recalculadas: recalculadas };
+    // grava no SKU como ele está no Cadastro de SKUs (o da devolução pode vir com outra caixa de letra)
+    const canonico = await this.db.withTenant(a.tenantId, async (db) =>
+      (await db.query<{ sku: string }>('SELECT sku FROM sku_costs WHERE upper(trim(sku)) = upper(trim($1)) LIMIT 1', [sku])).rows[0]?.sku ?? sku.trim());
+    const atual = await this.deps.saveCost(a.tenantId, a.userId, canonico, r2(custo), desde, quem);
+    const recalculadas = await this.reprecificar(a.tenantId, canonico, desde);
+    return { sku: canonico, custo_atual: atual, conferencias_recalculadas: recalculadas };
   }
 
   /** Refaz o prejuízo gravado das conferências feitas desde `desde` em que esse SKU é o que se perdeu. */
@@ -720,7 +744,7 @@ export class CentralService {
       for (const l of linhas) {
         const c = l.conferencia!;
         const perdido = c.classe === 'B' && c.erro_nosso ? c.sku_recebido : l.itens.find((i) => i.sku)?.sku;
-        if ((perdido ?? '').trim() !== sku) continue;
+        if (chaveSku(perdido ?? '') !== chaveSku(sku)) continue;
         const unit = custos.na(sku, c.conferida_em ?? new Date());
         const qtd = sum(l.itens.map((i) => i.quantidade || 0)) || 1;
         await db.query('UPDATE return_checks SET product_loss = $2 WHERE return_id = $1', [l.id, unit === null ? null : r2(unit * qtd)]);

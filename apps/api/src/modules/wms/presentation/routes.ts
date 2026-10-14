@@ -14,6 +14,7 @@ import {
   wmsProductUpdateSchema,
   wmsScanSchema,
   wmsShortageSchema,
+  wmsShortageStatusSchema,
   wmsSkuSchema,
 } from '@nvs/shared';
 import { z } from 'zod';
@@ -87,7 +88,17 @@ export function wmsRoutes(
       await service.deleteList(await actor(req), params(req));
       return reply.code(204).send();
     });
-    app.get('/wms/shortages', auth, async (req) => service.shortages(await person(req), parse(mpQuery, req.query).marketplace));
+    // Relatório de Faltas (Análise e Operação): ver, marcar como resolvida e tirar do relatório
+    app.get('/wms/shortages', auth, async (req) => service.shortages(await person(req)));
+    app.patch('/wms/shortages/:id/status', auth, async (req, reply) => {
+      await service.setShortageStatus(await person(req), params(req), parse(wmsShortageStatusSchema, req.body).status);
+      return reply.code(204).send();
+    });
+    app.delete('/wms/shortages/:id', auth, async (req, reply) => {
+      await service.removeShortages(await person(req), params(req));
+      return reply.code(204).send();
+    });
+    app.delete('/wms/shortages', auth, async (req) => ({ removed: await service.removeShortages(await person(req)) }));
 
     // ---- Operador: bipar, faltas, transferência
     const fast = { preHandler: app.authenticate, config: { rateLimit: { max: 600, timeWindow: '1 minute' } } };

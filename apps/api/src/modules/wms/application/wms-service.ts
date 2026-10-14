@@ -172,7 +172,7 @@ export class WmsService {
         ? (
             await db.query<{ units: number; skus: number }>(
               `SELECT coalesce(sum(shortage_qty), 0)::int AS units, count(DISTINCT upper(sku)) FILTER (WHERE shortage_qty > 0)::int AS skus
-                 FROM wms_items WHERE list_id = ANY($1)`,
+                 FROM wms_items WHERE list_id = ANY($1) AND shortage_status = 'pendente'`,
               [ids],
             )
           ).rows[0]!
@@ -338,8 +338,10 @@ export class WmsService {
       if (upd.qty_picked >= upd.qty_required || boxShort) {
         const done = (
           await db.query<ItemRow>(
-            `UPDATE wms_items SET status = $2, shortage_qty = qty_required - qty_picked, completed_at = now() WHERE id = $1 RETURNING *`,
-            [upd.id, upd.qty_picked >= upd.qty_required ? 'complete' : 'partial'],
+            `UPDATE wms_items SET status = $2, shortage_qty = qty_required - qty_picked, completed_at = now(),
+                    shortage_status = 'pendente', shortage_at = CASE WHEN qty_required > qty_picked THEN now() END, shortage_by = $3
+              WHERE id = $1 RETURNING *`,
+            [upd.id, upd.qty_picked >= upd.qty_required ? 'complete' : 'partial', a.operatorId],
           )
         ).rows[0]!;
         await this.repo.refreshListStatus(db, listId);
@@ -411,9 +413,10 @@ export class WmsService {
       const r = (
         await db.query<ItemRow>(
           `UPDATE wms_items SET qty_picked = $2, shortage_qty = qty_required - $2, completed_at = now(), notes = coalesce($3, notes),
-                  status = CASE WHEN $2 >= qty_required THEN 'complete' WHEN $2 = 0 THEN 'out_of_stock' ELSE 'partial' END
+                  status = CASE WHEN $2 >= qty_required THEN 'complete' WHEN $2 = 0 THEN 'out_of_stock' ELSE 'partial' END,
+                  shortage_status = 'pendente', shortage_at = now(), shortage_by = $4
             WHERE id = $1 RETURNING *`,
-          [item.id, found, input.notes || null],
+          [item.id, found, input.notes || null, a.operatorId],
         )
       ).rows[0]!;
       await this.repo.takeList(db, listId, a.operatorId);
@@ -439,9 +442,10 @@ export class WmsService {
     const r = (
       await db.query<ItemRow>(
         `UPDATE wms_items SET shortage_qty = qty_required - qty_picked, completed_at = now(), notes = coalesce($2, notes),
-                status = CASE WHEN qty_picked > 0 THEN 'partial' ELSE 'out_of_stock' END
+                status = CASE WHEN qty_picked > 0 THEN 'partial' ELSE 'out_of_stock' END,
+                shortage_status = 'pendente', shortage_at = now(), shortage_by = $3
           WHERE id = $1 RETURNING *`,
-        [item.id, notes || null],
+        [item.id, notes || null, a.operatorId],
       )
     ).rows[0]!;
     await this.repo.takeList(db, list.id, a.operatorId);
@@ -604,17 +608,45 @@ export class WmsService {
     );
   }
 
-  async shortages(tenantId: string, marketplace: WmsMarketplace): Promise<WmsShortageDto[]> {
+  /** Relatório de Faltas: toda falta registrada no picking (dos dois marketplaces), a mais recente primeiro. */
+  async shortages(tenantId: string): Promise<WmsShortageDto[]> {
     return this.db.withTenant(tenantId, async (db) => {
-      const { rows } = await db.query<{ sku: string; description: string; code: string; qty: number; notes: string | null }>(
-        `SELECT i.sku, i.description, l.code, sum(i.shortage_qty)::int AS qty, string_agg(DISTINCT i.notes, ', ') AS notes
+      const { rows } = await db.query<{
+        id: string; sku: string; description: string; list_id: string; code: string; batch: string | null; marketplace: WmsMarketplace;
+        qty: number; notes: string | null; operator: string | null; at: Date | null; status: 'pendente' | 'concluido';
+      }>(
+        `SELECT i.id, i.sku, i.description, l.id AS list_id, l.code, b.name AS batch, l.marketplace, i.shortage_qty AS qty, i.notes,
+                coalesce(o.name, lo.name) AS operator, coalesce(i.shortage_at, i.completed_at) AS at, i.shortage_status AS status
            FROM wms_items i JOIN wms_lists l ON l.id = i.list_id
            LEFT JOIN wms_batches b ON b.id = l.batch_id
-          WHERE i.shortage_qty > 0 AND l.marketplace = $1 AND (b.id IS NULL OR b.status = 'active')
-          GROUP BY i.sku, i.description, l.code ORDER BY 4 DESC, 1`,
-        [marketplace],
+           LEFT JOIN operators o ON o.id = i.shortage_by
+           LEFT JOIN operators lo ON lo.id = l.operator_id
+          WHERE i.shortage_qty > 0 AND i.shortage_status <> 'removido'
+          ORDER BY coalesce(i.shortage_at, i.completed_at) DESC NULLS LAST, i.sku`,
       );
-      return rows.map((r) => ({ sku: r.sku, description: r.description, listCode: r.code, qty: r.qty, notes: r.notes }));
+      return rows.map((r) => ({
+        itemId: r.id, sku: r.sku, description: r.description, listId: r.list_id, listCode: r.code, batchName: r.batch, marketplace: r.marketplace,
+        qty: r.qty, notes: r.notes, operatorName: r.operator, at: r.at ? r.at.toISOString() : null, status: r.status,
+      }));
+    });
+  }
+
+  /** Marca a falta como resolvida (reposta, comprada, ajustada no envio) ou volta para pendente. */
+  async setShortageStatus(tenantId: string, itemId: string, status: 'pendente' | 'concluido') {
+    await this.db.withTenant(tenantId, async (db) => {
+      const r = await db.query(`UPDATE wms_items SET shortage_status = $2 WHERE id = $1 AND shortage_qty > 0 AND shortage_status <> 'removido'`, [itemId, status]);
+      if (!r.rowCount) throw new NotFoundError('Falta não encontrada');
+    });
+  }
+
+  /** Tira do relatório (o histórico do picking continua igual). Sem `itemId`: tira todas. */
+  async removeShortages(tenantId: string, itemId?: string): Promise<number> {
+    return this.db.withTenant(tenantId, async (db) => {
+      const r = itemId
+        ? await db.query(`UPDATE wms_items SET shortage_status = 'removido' WHERE id = $1 AND shortage_qty > 0`, [itemId])
+        : await db.query(`UPDATE wms_items SET shortage_status = 'removido' WHERE shortage_qty > 0 AND shortage_status <> 'removido'`);
+      if (itemId && !r.rowCount) throw new NotFoundError('Falta não encontrada');
+      return r.rowCount ?? 0;
     });
   }
 

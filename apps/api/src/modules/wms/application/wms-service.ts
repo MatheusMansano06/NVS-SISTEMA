@@ -16,17 +16,21 @@ import {
   type WmsProductPageDto,
   type WmsRankingDto,
   type WmsScanResultDto,
+  type WmsSettingsDto,
   type WmsShortageDto,
 } from '@nvs/shared';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../../shared/kernel/errors.js';
 import { parseInboundText, splitIntoLists, type InboundItem } from '../domain/ml-inbound-pdf.js';
 import { parseShopeeInboundText } from '../domain/shopee-inbound-pdf.js';
+import { buildLabelsPdf, type LabelSpec } from '../domain/label-pdf.js';
 import { buildLabelsZpl } from '../domain/zpl.js';
 
 const TZ = 'America/Sao_Paulo';
 /** SKU reservado da etiqueta de teste (não pertence a lista nenhuma). */
 const TEST_SKU = 'TESTE-IMPRESSORA';
+/** Empresa sem configuração salva: PDF pelo navegador, rolo de 1 coluna de 50 × 25 mm. */
+const DEFAULT_SETTINGS: WmsSettingsDto = { printMode: 'navegador', labelFormat: 'rolo_1col', labelWidthMm: 50, labelHeightMm: 25 };
 import { extractPdfText } from '../infrastructure/pdf-text.js';
 import { sortLists, toItem, toJob, type ItemRow, type ListRow, type PgWmsRepository, type PrintRow } from '../infrastructure/pg-wms-repository.js';
 import { hashAgentKey, newAgentKey, type PrintHub } from '../infrastructure/print-hub.js';
@@ -56,7 +60,7 @@ const undoubled = (code: string | undefined) => {
 
 /**
  * Supervisão Full (portado do NVS-WMS): envio do Full (PDF do ML) → lote → listas de até 1.000 unidades →
- * o operador bipa (unidade ou caixa), marca falta/sem estoque e as etiquetas saem na Zebra ao concluir o item.
+ * o operador bipa (unidade ou caixa), marca falta/sem estoque e as etiquetas saem ao concluir o item (na Zebra pelo agente ou em PDF pelo navegador).
  * Regra de ouro do NVS-WMS: quem bipa vira dono da lista; item de outra pessoa só passa por transferência.
  */
 export class WmsService {
@@ -356,7 +360,7 @@ export class WmsService {
     });
     // etiquetas saem sozinhas ao concluir o item (fora da transação da bipagem)
     if (result.status === 'complete' && result.item.labelsReady && !result.item.labelsPrinted) {
-      result.print = await this.print(a, listId, result.item.sku).catch(() => null);
+      result.print = await this.autoPrint(a, listId, result.item.sku);
     }
     return result;
   }
@@ -430,7 +434,7 @@ export class WmsService {
       await this.repo.refreshListStatus(db, listId);
       return { status: 'complete', item: toItem(r) };
     });
-    if (result.status === 'complete' && result.item.labelsReady) result.print = await this.print(a, listId, result.item.sku).catch(() => null);
+    if (result.status === 'complete' && result.item.labelsReady) result.print = await this.autoPrint(a, listId, result.item.sku);
     return result;
   }
 
@@ -439,7 +443,7 @@ export class WmsService {
       const { list, item } = await this.ownItem(db, a, listId, input.sku);
       return this.outOfStockIn(db, a, list, item, input.notes);
     });
-    if (result.status === 'complete' && result.item.labelsReady) result.print = await this.print(a, listId, result.item.sku).catch(() => null);
+    if (result.status === 'complete' && result.item.labelsReady) result.print = await this.autoPrint(a, listId, result.item.sku);
     return result;
   }
 
@@ -500,7 +504,7 @@ export class WmsService {
       await this.repo.refreshListStatus(db, listId);
       return { status: r.status === 'complete' ? 'complete' : 'ok', item: toItem(r) };
     });
-    if (result.status === 'complete' && result.item.labelsReady) result.print = await this.print(a, listId, result.item.sku).catch(() => null);
+    if (result.status === 'complete' && result.item.labelsReady) result.print = await this.autoPrint(a, listId, result.item.sku);
     return result;
   }
 
@@ -690,6 +694,85 @@ export class WmsService {
     return job;
   }
 
+  /** Item concluído: no agente Zebra as etiquetas saem sozinhas; pelo navegador, o operador imprime o PDF na tela. */
+  private async autoPrint(a: Actor, listId: string, sku: string): Promise<WmsPrintJobDto | null> {
+    if ((await this.settings(a.tenantId)).printMode !== 'agente_zebra') return null;
+    return this.print(a, listId, sku).catch(() => null);
+  }
+
+  // ================= Configuração da impressão
+  async settings(tenantId: string): Promise<WmsSettingsDto> {
+    const { rows } = await this.db.withTenant(tenantId, (db) =>
+      db.query<{ print_mode: WmsSettingsDto['printMode']; label_format: WmsSettingsDto['labelFormat']; label_width_mm: string; label_height_mm: string }>(
+        'SELECT print_mode, label_format, label_width_mm, label_height_mm FROM wms_settings',
+      ),
+    );
+    const r = rows[0];
+    return r
+      ? { printMode: r.print_mode, labelFormat: r.label_format, labelWidthMm: Number(r.label_width_mm), labelHeightMm: Number(r.label_height_mm) }
+      : DEFAULT_SETTINGS;
+  }
+
+  async saveSettings(a: Actor, input: WmsSettingsDto): Promise<WmsSettingsDto> {
+    this.analysis(a);
+    await this.db.withTenant(a.tenantId, (db) =>
+      db.query(
+        `INSERT INTO wms_settings (tenant_id, print_mode, label_format, label_width_mm, label_height_mm) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id) DO UPDATE SET print_mode = EXCLUDED.print_mode, label_format = EXCLUDED.label_format,
+           label_width_mm = EXCLUDED.label_width_mm, label_height_mm = EXCLUDED.label_height_mm, updated_at = now()`,
+        [a.tenantId, input.printMode, input.labelFormat, input.labelWidthMm, input.labelHeightMm],
+      ),
+    );
+    return this.settings(a.tenantId);
+  }
+
+  /**
+   * PDF das etiquetas no formato da empresa: de um SKU (`qty` ou o separado) ou, sem SKU, da lista inteira
+   * (cada item com a quantidade separada).
+   */
+  async labelsPdf(tenantId: string, listId: string, sku?: string, qty?: number): Promise<Buffer> {
+    const s = await this.settings(tenantId);
+    const specs = await this.db.withTenant(tenantId, async (db) => {
+      const list = await this.repo.list(db, listId);
+      if (!list) throw new NotFoundError('Lista não encontrada');
+      const items = sku ? [await this.repo.itemBySku(db, listId, sku)] : await this.repo.items(db, listId);
+      if (sku && !items[0]) throw new NotFoundError('Item não encontrado nesta lista');
+      return items
+        .filter((i): i is ItemRow => Boolean(i))
+        .map((i): LabelSpec => ({
+          marketplace: list.marketplace,
+          code: i.ml_code || i.sku,
+          description: i.description,
+          sku: i.sku,
+          qty: sku ? (qty ?? Math.max(1, i.qty_picked)) : i.qty_picked,
+        }))
+        .filter((i) => i.qty > 0);
+    });
+    if (!specs.length) throw new ValidationError('Nenhuma etiqueta para imprimir: nada foi separado nesta lista ainda.');
+    return buildLabelsPdf(specs, { format: s.labelFormat, widthMm: s.labelWidthMm, heightMm: s.labelHeightMm });
+  }
+
+  /** Impressão pelo navegador: o operador confirma que as etiquetas saíram. */
+  async markPrinted(a: Actor, listId: string, sku: string): Promise<void> {
+    await this.db.withTenant(a.tenantId, async (db) => {
+      const r = await db.query('UPDATE wms_items SET labels_printed = true WHERE list_id = $1 AND upper(sku) = upper($2)', [listId, sku]);
+      if (!r.rowCount) throw new NotFoundError('Item não encontrado nesta lista');
+    });
+  }
+
+  /** Etiqueta de teste em PDF (mesmo formato das do Full). */
+  async testPdf(a: Actor): Promise<Buffer> {
+    const s = await this.settings(a.tenantId);
+    const name = await this.operatorName(a);
+    const when = new Date().toLocaleString('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const qty = s.labelFormat === 'rolo_2col' ? 2 : 1;
+    return buildLabelsPdf([{ marketplace: 'ml', code: 'TESTENVS', description: `ETIQUETA DE TESTE NVS - ${when} - ${name}`, sku: TEST_SKU, qty }], {
+      format: s.labelFormat,
+      widthMm: s.labelWidthMm,
+      heightMm: s.labelHeightMm,
+    });
+  }
+
   async printStatus(tenantId: string, listId: string, sku: string) {
     return this.db.withTenant(tenantId, (db) => this.repo.printJob(db, listId, sku));
   }
@@ -721,8 +804,9 @@ export class WmsService {
    * alguém do turno) e se há Full em andamento (listas abertas) — só então a conferência é exigida.
    */
   async printerStatus(tenantId: string): Promise<WmsPrinterStatusDto> {
+    const settings = await this.settings(tenantId);
     const agents = this.hub.connected(tenantId).map((a) => ({ machine: a.machine, printer: a.printer, version: a.version }));
-    const ready = agents.some((a) => a.printer && a.printer.toUpperCase() !== 'NENHUMA');
+    const ready = settings.printMode === 'navegador' || agents.some((a) => a.printer && a.printer.toUpperCase() !== 'NENHUMA');
     return this.db.withTenant(tenantId, async (db) => {
       const check = (
         await db.query<{ confirmed_by: string; confirmed_at: Date; machine: string | null; printer_name: string | null }>(
@@ -738,6 +822,7 @@ export class WmsService {
         )
       ).rows[0];
       return {
+        settings,
         ready,
         agents,
         checkedToday: check
@@ -770,7 +855,11 @@ export class WmsService {
   /** "A etiqueta saiu legível": vale para o turno todo de hoje. */
   async confirmPrinter(a: Actor): Promise<void> {
     const name = await this.operatorName(a);
-    const agent = this.hub.connected(a.tenantId).find((x) => x.printer && x.printer.toUpperCase() !== 'NENHUMA');
+    const s = await this.settings(a.tenantId);
+    const agent =
+      s.printMode === 'navegador'
+        ? { machine: 'navegador', printer: `PDF ${s.labelWidthMm} × ${s.labelHeightMm} mm` }
+        : this.hub.connected(a.tenantId).find((x) => x.printer && x.printer.toUpperCase() !== 'NENHUMA');
     if (!agent) throw new ValidationError('Nenhum agente de impressão conectado agora: ligue o agente antes de confirmar.');
     await this.db.withTenant(a.tenantId, (db) =>
       db.query(

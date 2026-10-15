@@ -13,12 +13,13 @@ import {
   wmsProductImportSchema,
   wmsProductUpdateSchema,
   wmsScanSchema,
+  wmsSettingsSchema,
   wmsShortageSchema,
   wmsShortageStatusSchema,
   wmsSkuSchema,
 } from '@nvs/shared';
 import { z } from 'zod';
-import { ValidationError } from '../../../shared/kernel/errors.js';
+import { AppError, ValidationError } from '../../../shared/kernel/errors.js';
 import { readPerson } from '../../operation/index.js';
 import type { Actor, WmsService } from '../application/wms-service.js';
 import type { AgentSocket, PrintHub } from '../infrastructure/print-hub.js';
@@ -27,6 +28,12 @@ function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   const r = schema.safeParse(data);
   if (!r.success) throw new ValidationError('Revise os dados informados', r.error.flatten());
   return r.data;
+}
+
+class FeatureLockedError extends AppError {
+  constructor() {
+    super('A Supervisão Full ainda não está liberada para a sua empresa.', 'FEATURE_LOCKED', 403);
+  }
 }
 
 const id = z.object({ id: z.string().uuid() });
@@ -43,10 +50,17 @@ export function wmsRoutes(
     /** Senha da conta da empresa (ações destrutivas). */
     checkPassword: (tenantId: string, userId: string, password: string) => Promise<boolean>;
     inboundPerMinute?: number;
+    /** O recurso 'full' está liberado para a empresa (plano ou liberação manual). */
+    hasFull: (tenantId: string) => Promise<boolean>;
   },
 ) {
   return async (app: FastifyInstance) => {
-    const auth = { preHandler: app.authenticate };
+    // toda rota: sessão da empresa + recurso 'full' liberado (o agente Zebra, por WebSocket, fica de fora)
+    const full = async (req: FastifyRequest) => {
+      if (!(await opts.hasFull(req.user.tenantId))) throw new FeatureLockedError();
+    };
+    const guard = [app.authenticate, full];
+    const auth = { preHandler: guard };
     const actor = async (req: FastifyRequest): Promise<Actor> => {
       const p = readPerson(app, req);
       return { tenantId: req.user.tenantId, operatorId: p.sub, mode: p.mode, master: await opts.isMaster(req.user.tenantId, p.sub) };
@@ -101,7 +115,7 @@ export function wmsRoutes(
     app.delete('/wms/shortages', auth, async (req) => ({ removed: await service.removeShortages(await person(req)) }));
 
     // ---- Operador: bipar, faltas, transferência
-    const fast = { preHandler: app.authenticate, config: { rateLimit: { max: 600, timeWindow: '1 minute' } } };
+    const fast = { preHandler: guard, config: { rateLimit: { max: 600, timeWindow: '1 minute' } } };
     app.post('/wms/lists/:id/scan', fast, async (req) => service.scan(await actor(req), params(req), parse(wmsScanSchema, req.body)));
     app.post('/wms/lists/:id/undo', fast, async (req) => service.undo(await actor(req), params(req), parse(wmsSkuSchema, req.body).sku));
     app.post('/wms/lists/:id/shortage', fast, async (req) => service.shortage(await actor(req), params(req), parse(wmsShortageSchema, req.body)));
@@ -141,6 +155,29 @@ export function wmsRoutes(
         .header('content-disposition', `attachment; filename="etiquetas-${q.sku.replace(/[^\w-]/g, '_')}.zpl"`)
         .send(zpl);
     });
+    // PDF no formato da empresa (impressão pelo navegador): de um SKU ou, sem `sku`, da lista inteira
+    const pdf = (reply: { header(k: string, v: string): unknown }, name: string) => {
+      reply.header('content-type', 'application/pdf');
+      reply.header('content-disposition', `inline; filename="${name.replace(/[^\w-]/g, '_')}.pdf"`);
+      reply.header('cache-control', 'no-store');
+    };
+    app.get('/wms/lists/:id/labels.pdf', auth, async (req, reply) => {
+      const q = parse(z.object({ sku: z.string().trim().min(1).max(100).optional(), qty: z.coerce.number().int().min(1).max(5000).optional() }), req.query);
+      const body = await service.labelsPdf(await person(req), params(req), q.sku, q.qty);
+      pdf(reply, `etiquetas-${q.sku ?? 'lista'}`);
+      return reply.send(body);
+    });
+    app.post('/wms/lists/:id/printed', fast, async (req, reply) => {
+      await service.markPrinted(await actor(req), params(req), parse(wmsSkuSchema, req.body).sku);
+      return reply.code(204).send();
+    });
+    app.get('/wms/printer/test.pdf', auth, async (req, reply) => {
+      const body = await service.testPdf(await actor(req));
+      pdf(reply, 'etiqueta-teste');
+      return reply.send(body);
+    });
+    app.get('/wms/settings', auth, async (req) => service.settings(await person(req)));
+    app.put('/wms/settings', auth, async (req) => service.saveSettings(await actor(req), parse(wmsSettingsSchema, req.body)));
     app.get('/wms/agent', auth, async (req) => service.agentStatus(await person(req)));
     // conferência da impressora na tela do operador (agente ligado + etiqueta de teste do dia)
     app.get('/wms/printer', auth, async (req) => service.printerStatus(await person(req)));
@@ -168,11 +205,11 @@ export function wmsRoutes(
       const p = parse(z.object({ sku: z.string().min(1).max(100), barcode: z.string().min(1).max(200) }), req.params);
       return service.removeProductCode(await actor(req), p.sku, p.barcode);
     });
-    app.post('/wms/products/import', { preHandler: app.authenticate, bodyLimit: 6_000_000 }, async (req) => {
+    app.post('/wms/products/import', { preHandler: guard, bodyLimit: 6_000_000 }, async (req) => {
       const b = parse(wmsProductImportSchema, req.body);
       return service.importProducts(await actor(req), b.csv, b.onlyListings);
     });
-    app.post('/wms/products/clear', { preHandler: app.authenticate, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req) => {
+    app.post('/wms/products/clear', { preHandler: guard, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req) => {
       const a = await actor(req);
       const { password } = parse(wmsProductClearSchema, req.body);
       if (!(await opts.checkPassword(req.user.tenantId, req.user.sub, password))) {
@@ -182,7 +219,7 @@ export function wmsRoutes(
     });
 
     // ---- Processamento (PDF do envio, até ~10 MB)
-    app.post('/wms/inbound', { preHandler: app.authenticate, bodyLimit: 15_000_000, config: { rateLimit: { max: opts.inboundPerMinute ?? 20, timeWindow: '1 minute' } } }, async (req) =>
+    app.post('/wms/inbound', { preHandler: guard, bodyLimit: 15_000_000, config: { rateLimit: { max: opts.inboundPerMinute ?? 20, timeWindow: '1 minute' } } }, async (req) =>
       service.inbound(await actor(req), parse(wmsInboundSchema, req.body)),
     );
   };

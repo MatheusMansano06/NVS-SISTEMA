@@ -51,7 +51,7 @@ export function OperationHome() {
         <button type="button" className="op-choice op-choice-full" disabled={!full} onClick={() => navigate('/op/full')}>
           <span className="op-choice-icon" aria-hidden="true"><Icon name="truck" size={30} /></span>
           <strong>Supervisão Full</strong>
-          <span className="op-choice-text">Separar os produtos das listas do envio para o Full, bipando cada um, e imprimir as etiquetas na Zebra.</span>
+          <span className="op-choice-text">Separar os produtos das listas do envio para o Full, bipando cada um, e imprimir as etiquetas.</span>
           <span className="op-choice-stat">
             {!full ? 'Em breve' : listas === null ? 'Carregando as listas…' : listas.abertas === 0 ? 'Nenhuma lista aberta agora' : `${listas.abertas} ${listas.abertas === 1 ? 'lista aberta' : 'listas abertas'}${listas.minhas ? ` · ${listas.minhas} com você` : ''}`}
           </span>

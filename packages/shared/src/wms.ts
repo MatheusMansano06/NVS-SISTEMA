@@ -43,6 +43,32 @@ export const wmsShortageSchema = z.object({ sku, qtyFound: z.number().int().min(
 export const wmsOutOfStockSchema = z.object({ sku, notes: z.string().trim().max(300).optional() });
 export const wmsLinkBarcodeSchema = z.object({ barcode: code, sku });
 export const wmsPrintSchema = z.object({ sku, qty: z.number().int().min(1).max(5000).optional() });
+
+/** Como a empresa imprime as etiquetas: agente Zebra (ZPL) ou PDF pelo navegador (qualquer impressora). */
+export const WMS_PRINT_MODES = ['agente_zebra', 'navegador'] as const;
+export type WmsPrintMode = (typeof WMS_PRINT_MODES)[number];
+export const WMS_LABEL_FORMATS = ['rolo_1col', 'rolo_2col', 'a4'] as const;
+export type WmsLabelFormat = (typeof WMS_LABEL_FORMATS)[number];
+/** Formatos de etiqueta no PDF, com a medida padrão de cada um (dá para ajustar). */
+export const WMS_LABEL_FORMAT_INFO: Record<WmsLabelFormat, { label: string; text: string; widthMm: number; heightMm: number }> = {
+  rolo_1col: { label: 'Rolo de 1 coluna', text: 'Uma etiqueta por vez (ex.: 50 × 25 mm). Impressora térmica de rolo.', widthMm: 50, heightMm: 25 },
+  rolo_2col: { label: 'Rolo de 2 colunas', text: 'Duas etiquetas lado a lado (ex.: 40 × 25 mm cada). Impressora térmica de rolo.', widthMm: 40, heightMm: 25 },
+  a4: { label: 'Folha A4 de etiquetas', text: 'Folha adesiva em impressora comum (ex.: Pimaco A4356, 63,5 × 25,4 mm, 33 por folha).', widthMm: 63.5, heightMm: 25.4 },
+};
+export interface WmsSettingsDto {
+  printMode: WmsPrintMode;
+  labelFormat: WmsLabelFormat;
+  /** Medida de UMA etiqueta (no rolo de 2 colunas, de cada coluna). */
+  labelWidthMm: number;
+  labelHeightMm: number;
+}
+export const wmsSettingsSchema = z.object({
+  printMode: z.enum(WMS_PRINT_MODES),
+  labelFormat: z.enum(WMS_LABEL_FORMATS),
+  labelWidthMm: z.number().min(20, 'Mínimo 20 mm').max(120, 'Máximo 120 mm'),
+  labelHeightMm: z.number().min(15, 'Mínimo 15 mm').max(80, 'Máximo 80 mm'),
+});
+
 export const wmsLifecycleSchema = z.object({ lifecycle: z.enum(['em_andamento', 'finalizado']) });
 export const wmsNotesSchema = z.object({ notes: z.string().trim().max(300).nullable() });
 
@@ -220,7 +246,9 @@ export interface WmsProductPageDto {
 
 /** Impressora na tela do operador: agente ligado + conferência do dia (etiqueta de teste confirmada). */
 export interface WmsPrinterStatusDto {
-  /** Agente conectado agora com uma impressora detectada. */
+  /** Como a empresa imprime (e o formato da etiqueta no PDF). */
+  settings: WmsSettingsDto;
+  /** Pronto para imprimir: no agente Zebra, agente conectado com impressora; pelo navegador, sempre. */
   ready: boolean;
   agents: { machine: string; printer: string | null; version: string | null }[];
   /** Conferência de hoje (vale para todos do turno). */

@@ -15,6 +15,7 @@ import type {
   WmsProductPageDto,
   WmsRankingDto,
   WmsScanResultDto,
+  WmsSettingsDto,
   WmsShortageDto,
 } from '@nvs/shared';
 import { http } from '../../shared/http';
@@ -73,6 +74,13 @@ export const fullApi = {
   print: (id: string, sku: string, qty?: number) => http<WmsPrintJobDto>(`/api/v1/wms/lists/${id}/print`, { body: { sku, qty } }),
   printStatus: (id: string, sku: string) => http<WmsPrintJobDto | null>(`/api/v1/wms/lists/${id}/print?sku=${enc(sku)}`),
   zplUrl: (id: string, sku: string, qty?: number) => `/api/v1/wms/lists/${id}/zpl?sku=${enc(sku)}${qty ? `&qty=${qty}` : ''}`,
+  // impressão pelo navegador (PDF no formato da empresa)
+  labelsPdfUrl: (id: string, sku?: string, qty?: number) =>
+    `/api/v1/wms/lists/${id}/labels.pdf${sku ? `?sku=${enc(sku)}${qty ? `&qty=${qty}` : ''}` : ''}`,
+  markPrinted: (id: string, sku: string) => http<void>(`/api/v1/wms/lists/${id}/printed`, { body: { sku } }),
+  testPdfUrl: () => '/api/v1/wms/printer/test.pdf',
+  settings: () => http<WmsSettingsDto>('/api/v1/wms/settings'),
+  saveSettings: (b: WmsSettingsDto) => http<WmsSettingsDto>('/api/v1/wms/settings', { method: 'PUT', body: b }),
   agent: () => http<WmsAgentStatusDto>('/api/v1/wms/agent'),
   printer: () => http<WmsPrinterStatusDto>('/api/v1/wms/printer'),
   printerTest: () => http<{ id: string }>('/api/v1/wms/printer/test', { body: {} }),
@@ -92,6 +100,18 @@ export const fullApi = {
     http<{ products: number; codes: number; skipped: number }>('/api/v1/wms/products/import', { body: { csv, onlyListings } }),
   clearProducts: (password: string) => http<{ products: number; codes: number }>('/api/v1/wms/products/clear', { body: { password } }),
 };
+
+/** Configuração de impressão da empresa (lida uma vez por sessão; `refresh` após salvar). */
+let settingsCache: Promise<WmsSettingsDto> | null = null;
+export function loadPrintSettings(refresh = false): Promise<WmsSettingsDto> {
+  if (!settingsCache || refresh) {
+    settingsCache = fullApi.settings().catch((err: unknown) => {
+      settingsCache = null;
+      throw err;
+    });
+  }
+  return settingsCache;
+}
 
 /** Arquivo → base64 (sem o prefixo data:). */
 export function fileToBase64(file: File): Promise<string> {

@@ -26,7 +26,7 @@ export interface ViabilityDto {
   logisticType: string | null;
   availableQuantity: number | null;
   seller: { id: number; nickname: string | null; reputation: string | null } | null;
-  /** Visitas dos últimos ~6 meses. */
+  /** Visitas dos últimos 150 dias (máximo da janela diária do ML) ou, sem ela, mês a mês. */
   visits: {
     total: number;
     daily: { date: string; total: number }[];

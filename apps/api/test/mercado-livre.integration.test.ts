@@ -317,7 +317,7 @@ function fakeMl(sellerId: number) {
       id: 'MLB7000001', title: 'Garrafa térmica 1L', price: 89.9, date_created: '2026-04-15T12:00:00.000Z', sold_quantity: 500,
       catalog_listing: true, listing_type_id: 'gold_pro', available_quantity: 40, seller_id: 777, shipping: { free_shipping: true, logistic_type: 'fulfillment' },
     },
-    '/items/MLB7000001/visits/time_window?last=180&unit=day': {
+    '/items/MLB7000001/visits/time_window?last=150&unit=day': {
       total_visits: 30, results: [{ date: '2026-09-30T00:00:00Z', total: 10 }, { date: '2026-10-01T00:00:00Z', total: 20 }],
     },
     '/users/777': { nickname: 'CONCORRENTE', seller_reputation: { level_id: '5_green' } },

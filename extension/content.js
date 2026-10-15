@@ -194,7 +194,7 @@
     if (d.catalog != null) out.push(`<span class="nvs-chip ${d.catalog ? 'nvs-cat' : 'nvs-trad'}">${d.catalog ? 'Catálogo' : 'Tradicional'}</span>`);
     if (d.type) out.push(`<span class="nvs-chip">${esc(d.type)}</span>`);
     if (d.full) out.push('<span class="nvs-chip nvs-full">⚡ Full</span>');
-    out.push('<span class="nvs-chip nvs-btn" title="Ver visitas dos últimos 6 meses">📈</span>');
+    out.push('<span class="nvs-chip nvs-btn" title="Ver visitas dos últimos 150 dias">📈</span>');
     return out.join('');
   }
 
@@ -279,7 +279,7 @@
         ['Vendedor', d.seller ? `${esc(d.seller.nickname || d.seller.id)}${d.seller.reputation ? ` · ${esc(REPUTATION[d.seller.reputation] ?? d.seller.reputation)}` : ''}` : '—'],
       );
     }
-    const visitsTitle = d.visits ? `Visitas · 6 meses · ${nf.format(d.visits.total)} no total` : 'Visitas';
+    const visitsTitle = d.visits ? `Visitas · últimos 150 dias · ${nf.format(d.visits.total)} no total` : 'Visitas';
     return `<div class="nvs-head"><b>${esc(d.title || tag?.dataset.title || document.querySelector('.ui-pdp-title, h1')?.textContent.trim() || '')}</b><span class="nvs-dim">${esc(d.itemId)}</span></div>
       <dl class="nvs-grid">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
       <h4>${visitsTitle}</h4>

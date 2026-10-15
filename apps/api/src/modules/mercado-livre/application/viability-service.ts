@@ -9,7 +9,7 @@ import type { MlRawApi } from '../infrastructure/ml-api.js';
 import type { MlIntegrationService } from './ml-integration-service.js';
 
 const CACHE_TTL = 6 * 3600; // dado público do anúncio: o mesmo para qualquer empresa
-const VISIT_DAYS = 180;
+const VISIT_DAYS = 150; // máximo que o ML aceita na janela diária de visitas
 const ANCHORS_TTL = 6 * 3600;
 const MULTIGET = 20; // limite do ML por chamada de /items?ids=
 export const MAX_BATCH = 60;
@@ -33,6 +33,9 @@ interface MlVisitsWindow {
   total_visits?: number;
   results?: { date: string; total: number }[];
 }
+
+/** Consulta opcional ao ML: qualquer erro (janela inválida, limite etc.) vira "sem dado", sem derrubar o estudo. */
+const optional = <T>(p: Promise<T | null>): Promise<T | null> => p.catch(() => null);
 
 class FeatureLockedError extends AppError {
   constructor() {
@@ -75,9 +78,9 @@ export class ViabilityService {
     }
 
     const [visits, seller] = await Promise.all([
-      this.api.rawGet<MlVisitsWindow>(token, `/items/${item.id}/visits/time_window?last=${VISIT_DAYS}&unit=day`),
+      optional(this.api.rawGet<MlVisitsWindow>(token, `/items/${item.id}/visits/time_window?last=${VISIT_DAYS}&unit=day`)),
       item.seller_id
-        ? this.api.rawGet<{ nickname?: string; seller_reputation?: { level_id?: string | null } }>(token, `/users/${item.seller_id}`)
+        ? optional(this.api.rawGet<{ nickname?: string; seller_reputation?: { level_id?: string | null } }>(token, `/users/${item.seller_id}`))
         : Promise.resolve(null),
     ]);
     if (!visits) unavailable.push('visitas');
@@ -153,7 +156,7 @@ export class ViabilityService {
       let exact: string | null = null;
       if (descriptionOpen !== false) {
         token ??= await this.anyToken(tenantId);
-        exact = await this.createdAtFromDescription(token, id);
+        exact = await optional(this.createdAtFromDescription(token, id));
         descriptionOpen ??= exact !== null;
       }
       const at = exact ?? (await this.estimate(tenantId, id));
@@ -177,10 +180,10 @@ export class ViabilityService {
       return { month: from.toISOString().slice(0, 7), from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
     });
     const [createdExact, window, total, ...ranges] = await Promise.all([
-      this.createdAtFromDescription(token, id),
-      this.api.rawGet<MlVisitsWindow>(token, `/items/${id}/visits/time_window?last=${VISIT_DAYS}&unit=day`),
-      this.api.rawGet<Record<string, number>>(token, `/visits/items?ids=${id}`),
-      ...months.map((m) => this.api.rawGet<{ total_visits?: number }[]>(token, `/items/visits?ids=${id}&date_from=${m.from}&date_to=${m.to}`)),
+      optional(this.createdAtFromDescription(token, id)),
+      optional(this.api.rawGet<MlVisitsWindow>(token, `/items/${id}/visits/time_window?last=${VISIT_DAYS}&unit=day`)),
+      optional(this.api.rawGet<Record<string, number>>(token, `/visits/items?ids=${id}`)),
+      ...months.map((m) => optional(this.api.rawGet<{ total_visits?: number }[]>(token, `/items/visits?ids=${id}&date_from=${m.from}&date_to=${m.to}`))),
     ]);
     const monthlyRaw = months.map((m, i) => ({ month: m.month, total: ranges[i]?.[0]?.total_visits ?? null }));
     this.log?.warn(

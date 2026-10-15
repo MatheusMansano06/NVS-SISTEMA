@@ -42,11 +42,8 @@ export const wmsSkuSchema = z.object({ sku });
 export const wmsShortageSchema = z.object({ sku, qtyFound: z.number().int().min(0), notes: z.string().trim().max(300).optional() });
 export const wmsOutOfStockSchema = z.object({ sku, notes: z.string().trim().max(300).optional() });
 export const wmsLinkBarcodeSchema = z.object({ barcode: code, sku });
-export const wmsPrintSchema = z.object({ sku, qty: z.number().int().min(1).max(5000).optional() });
 
-/** Como a empresa imprime as etiquetas: agente Zebra (ZPL) ou PDF pelo navegador (qualquer impressora). */
-export const WMS_PRINT_MODES = ['agente_zebra', 'navegador'] as const;
-export type WmsPrintMode = (typeof WMS_PRINT_MODES)[number];
+/** Etiquetas em PDF no tamanho da etiqueta, impressas pelo navegador em qualquer impressora (sem agente nem ERP). */
 export const WMS_LABEL_FORMATS = ['rolo_1col', 'rolo_2col', 'a4'] as const;
 export type WmsLabelFormat = (typeof WMS_LABEL_FORMATS)[number];
 /** Formatos de etiqueta no PDF, com a medida padrão de cada um (dá para ajustar). */
@@ -56,14 +53,12 @@ export const WMS_LABEL_FORMAT_INFO: Record<WmsLabelFormat, { label: string; text
   a4: { label: 'Folha A4 de etiquetas', text: 'Folha adesiva em impressora comum (ex.: Pimaco A4356, 63,5 × 25,4 mm, 33 por folha).', widthMm: 63.5, heightMm: 25.4 },
 };
 export interface WmsSettingsDto {
-  printMode: WmsPrintMode;
   labelFormat: WmsLabelFormat;
   /** Medida de UMA etiqueta (no rolo de 2 colunas, de cada coluna). */
   labelWidthMm: number;
   labelHeightMm: number;
 }
 export const wmsSettingsSchema = z.object({
-  printMode: z.enum(WMS_PRINT_MODES),
   labelFormat: z.enum(WMS_LABEL_FORMATS),
   labelWidthMm: z.number().min(20, 'Mínimo 20 mm').max(120, 'Máximo 120 mm'),
   labelHeightMm: z.number().min(15, 'Mínimo 15 mm').max(80, 'Máximo 80 mm'),
@@ -158,7 +153,7 @@ export interface WmsRankingDto {
 
 /** Resultado de uma bipada (mesma linguagem do NVS-WMS). */
 export type WmsScanResultDto =
-  | { status: 'ok' | 'complete' | 'excess'; item: WmsItemDto; print?: WmsPrintJobDto | null }
+  | { status: 'ok' | 'complete' | 'excess'; item: WmsItemDto }
   | { status: 'unknown_barcode'; barcode: string; canLink: boolean }
   | { status: 'wrong_sku'; barcode: string; ownerSku: string; ownerDescription: string | null; expectedSku: string }
   | { status: 'ambiguous'; barcode: string; candidates: WmsItemDto[] }
@@ -183,20 +178,6 @@ export interface WmsFindCandidateDto {
   qtyPicked: number;
   qtyRequired: number;
   status: WmsItemStatus;
-}
-
-export interface WmsPrintJobDto {
-  id: string;
-  sku: string;
-  labels: number;
-  status: 'PENDING' | 'PRINTING' | 'PRINTED' | 'ERROR';
-  printerName: string | null;
-  error: string | null;
-}
-
-export interface WmsAgentStatusDto {
-  connected: { machine: string; printer: string | null; hostname: string | null; version: string | null }[];
-  keys: { hint: string; createdAt: string; lastSeenAt: string | null }[];
 }
 
 export interface WmsInboundResultDto {
@@ -244,17 +225,11 @@ export interface WmsProductPageDto {
   items: WmsProductDto[];
 }
 
-/** Impressora na tela do operador: agente ligado + conferência do dia (etiqueta de teste confirmada). */
+/** Impressora na tela do operador: formato da etiqueta + conferência do dia (etiqueta de teste confirmada). */
 export interface WmsPrinterStatusDto {
-  /** Como a empresa imprime (e o formato da etiqueta no PDF). */
   settings: WmsSettingsDto;
-  /** Pronto para imprimir: no agente Zebra, agente conectado com impressora; pelo navegador, sempre. */
-  ready: boolean;
-  agents: { machine: string; printer: string | null; version: string | null }[];
   /** Conferência de hoje (vale para todos do turno). */
-  checkedToday: { by: string; at: string; machine: string | null; printer: string | null } | null;
+  checkedToday: { by: string; at: string; format: string | null } | null;
   /** Há listas abertas ou em andamento (Full em curso): a conferência é exigida. */
   fullRunning: boolean;
-  /** Última etiqueta de teste: situação na fila. */
-  lastTest: { id: string; status: 'PENDING' | 'PRINTING' | 'PRINTED' | 'ERROR'; error: string | null; at: string } | null;
 }

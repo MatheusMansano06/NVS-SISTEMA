@@ -1,7 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
-import websocket from '@fastify/websocket';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
@@ -57,7 +56,7 @@ import { serveWeb } from './shared/infrastructure/web-static.js';
 import { PlatformService, platformRoutes } from './modules/platform/index.js';
 import { healthRoutes } from './modules/health/presentation/routes.js';
 import { CentralService, PgReturnsRepository, ReturnStock, ReturnsService, ReturnsSync, centralRoutes, returnsRoutes } from './modules/returns/index.js';
-import { PgWmsRepository, PrintHub, WmsService, wmsAgentSocket, wmsRoutes } from './modules/wms/index.js';
+import { PgWmsRepository, WmsService, wmsRoutes } from './modules/wms/index.js';
 import { OperatorService, PERSON_COOKIE, PgOperatorRepository, operationRoutes } from './modules/operation/index.js';
 
 declare module '@fastify/jwt' {
@@ -231,10 +230,8 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
     { prefix: '/api/v1' },
   );
   // Supervisão Full (lotes do envio Full, listas, bipagem, etiquetas e Master Data)
-  const printHub = new PrintHub(database);
-  await app.register(websocket, { options: { maxPayload: 1_000_000 } });
   await app.register(
-    wmsRoutes(new WmsService(database, new PgWmsRepository(), printHub), {
+    wmsRoutes(new WmsService(database, new PgWmsRepository()), {
       isMaster: async (tenantId, operatorId) => (await operators.me(tenantId, operatorId)).is_master,
       // ler PDF pesa: 20 envios/min por IP (nos testes, sem limite prático)
       inboundPerMinute: env.NODE_ENV === 'test' ? 1000 : 20,
@@ -244,7 +241,6 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
     }),
     { prefix: '/api/v1' },
   );
-  await app.register(wmsAgentSocket(printHub));
   // Central de Devoluções (pós-venda do ML): bipe e conferência na Operação, painel e B.I na Análise
   const raw = mlClient && 'rawGet' in mlClient ? (mlClient as unknown as MlRawApi) : null;
   const returnsRepo = new PgReturnsRepository();

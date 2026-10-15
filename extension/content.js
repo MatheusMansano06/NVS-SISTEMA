@@ -215,18 +215,39 @@
   }
 
   // ---------------------------------------------------------------- detalhe (modal e painel da página do anúncio)
-  /** Tendência: últimos 30 dias contra os 30 anteriores (ou último mês contra o anterior). */
-  function trend(days, months) {
-    let now, before;
-    if (days.length >= 60) {
-      const sum = (a) => a.reduce((acc, d) => acc + d.total, 0);
-      now = sum(days.slice(-30));
-      before = sum(days.slice(-60, -30));
-    } else if (months.length >= 3) {
-      // o mês atual está incompleto: compara os dois últimos meses fechados
-      now = months[months.length - 2].total;
-      before = months[months.length - 3].total;
-    } else return null;
+  /**
+   * Um ponto por mês: média de visitas por dia naquele mês (assim o mês atual, ainda incompleto, não parece queda).
+   * Vem das visitas diárias ou, sem elas, dos totais mensais.
+   */
+  function monthlyPoints(visits) {
+    const days = [...(visits?.daily ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+    const today = new Date();
+    if (days.length) {
+      const by = new Map();
+      for (const d of days) {
+        const m = d.date.slice(0, 7);
+        const cur = by.get(m) ?? { total: 0, n: 0 };
+        cur.total += d.total;
+        cur.n += 1;
+        by.set(m, cur);
+      }
+      return [...by.entries()].map(([month, v]) => ({ month, total: v.total, days: v.n, perDay: v.total / v.n }));
+    }
+    return (visits?.monthly ?? []).map((m) => {
+      const [y, mo] = m.month.split('-').map(Number);
+      const current = y === today.getFullYear() && mo === today.getMonth() + 1;
+      const n = current ? today.getDate() : new Date(y, mo, 0).getDate();
+      return { month: m.month, total: m.total, days: n, perDay: m.total / n };
+    });
+  }
+
+  /** Tendência: último mês contra o anterior (se o mês atual tiver menos de 7 dias, compara os dois anteriores). */
+  function trend(points) {
+    let pts = points;
+    if (pts.length >= 3 && pts[pts.length - 1].days < 7) pts = pts.slice(0, -1);
+    if (pts.length < 2) return null;
+    const now = pts[pts.length - 1].perDay;
+    const before = pts[pts.length - 2].perDay;
     if (!before) return now ? { cls: 'nvs-up', text: '↗ Crescendo' } : null;
     const pct = Math.round(((now - before) / before) * 100);
     if (pct > 10) return { cls: 'nvs-up', text: `↗ Crescendo +${pct}%` };
@@ -234,47 +255,44 @@
     return { cls: 'nvs-flat', text: `→ Estável ${pct > 0 ? '+' : ''}${pct}%` };
   }
 
-  /** Linha suave da tendência: média móvel de 7 dias (sem os picos do dia a dia) ou os totais por mês. */
+  /** Linha mês a mês (sobe, desce ou reta), com o mês embaixo e a média de visitas/dia em cada ponto. */
   function chart(visits) {
-    const days = visits?.daily ?? [];
-    const months = visits?.monthly ?? [];
-    if (!days.length && !months.length) return '<p class="nvs-dim">Sem visitas no período.</p>';
-    let values;
-    let first;
-    let last;
-    if (days.length >= 14) {
-      values = days.map((_, i) => {
-        const win = days.slice(Math.max(0, i - 6), i + 1);
-        return win.reduce((acc, d) => acc + d.total, 0) / win.length;
-      }).slice(6);
-      first = fmtDate(days[6].date);
-      last = fmtDate(days[days.length - 1].date);
-    } else {
-      values = months.map((m) => m.total);
-      first = months[0] ? fmtMonth(`${months[0].month}-01T12:00:00`) : '';
-      last = months.length ? fmtMonth(`${months[months.length - 1].month}-01T12:00:00`) : '';
-    }
-    const W = 560, H = 110, P = 8;
-    const max = Math.max(1, ...values);
-    const min = Math.min(...values);
-    const span = Math.max(1, max - min * 0.8);
-    const base = min * 0.8;
-    const step = (W - P * 2) / Math.max(1, values.length - 1);
-    const pts = values.map((v, i) => [P + i * step, H - P - ((v - base) / span) * (H - P * 2)]);
-    // curva suave (Catmull-Rom → Bézier)
-    let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] ?? pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] ?? p2;
+    const points = monthlyPoints(visits);
+    if (!points.length) return '<p class="nvs-dim">Sem visitas no período.</p>';
+    const W = 560, H = 170, L = 30, R = 30, T = 26, B = 30;
+    const vals = points.map((p) => p.perDay);
+    const max = Math.max(...vals);
+    const min = Math.min(...vals);
+    const pad = Math.max((max - min) * 0.25, max * 0.1, 0.5);
+    const lo = Math.max(0, min - pad), hi = max + pad;
+    const step = points.length > 1 ? (W - L - R) / (points.length - 1) : 0;
+    const xy = points.map((p, i) => [points.length > 1 ? L + i * step : W / 2, T + (1 - (p.perDay - lo) / (hi - lo)) * (H - T - B)]);
+    let d = `M${xy[0][0].toFixed(1)},${xy[0][1].toFixed(1)}`;
+    for (let i = 0; i < xy.length - 1; i++) {
+      const p0 = xy[i - 1] ?? xy[i], p1 = xy[i], p2 = xy[i + 1], p3 = xy[i + 2] ?? p2;
       const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
       const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
       d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
     }
-    const t = trend(days, months);
-    const avg = days.length ? Math.round(days.slice(-30).reduce((acc, x) => acc + x.total, 0) / Math.min(30, days.length)) : null;
-    return `<div class="nvs-trend-row">${t ? `<span class="nvs-trend ${t.cls}">${t.text}</span>` : ''}${avg != null ? `<span class="nvs-dim">média ${nf.format(avg)} visitas/dia (30 dias)</span>` : ''}</div>
-      <svg class="nvs-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tendência de visitas">
-        <path d="${d}" class="nvs-line ${t?.cls ?? ''}"/></svg>
-      <div class="nvs-chart-meta"><span>${first}</span><span>${last}</span></div>`;
+    const t = trend(points);
+    const label = (m) => {
+      const [y, mo] = m.split('-');
+      return `${new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}/${y.slice(2)}`;
+    };
+    const marks = points
+      .map((p, i) => {
+        const [x, y] = xy[i];
+        const partial = i === points.length - 1 && p.days < 28 ? ' *' : '';
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" class="nvs-dot ${t?.cls ?? ''}"/>
+          <text x="${x.toFixed(1)}" y="${(y - 10).toFixed(1)}" class="nvs-val">${nf2.format(Math.round(p.perDay * 10) / 10)}</text>
+          <text x="${x.toFixed(1)}" y="${H - 8}" class="nvs-lbl">${esc(label(p.month))}${partial}</text>`;
+      })
+      .join('');
+    const partialNote = points[points.length - 1].days < 28 ? '<span class="nvs-dim">* mês em andamento</span>' : '';
+    return `<div class="nvs-trend-row">${t ? `<span class="nvs-trend ${t.cls}">${t.text}</span>` : ''}<span class="nvs-dim">visitas por dia, média de cada mês</span></div>
+      <svg class="nvs-chart nvs-chart-m" viewBox="0 0 ${W} ${H}" role="img" aria-label="Visitas por mês">
+        <path d="${d}" class="nvs-line ${t?.cls ?? ''}"/>${marks}</svg>
+      <div class="nvs-chart-meta"><span>${partialNote}</span></div>`;
   }
 
   /** Dados do anúncio lidos do HTML desta própria página (quando o painel abre na página do anúncio). */

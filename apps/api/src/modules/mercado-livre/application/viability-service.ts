@@ -4,7 +4,7 @@ import type { Database } from '../../../shared/infrastructure/database.js';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import { AppError } from '../../../shared/kernel/errors.js';
 import { typeLabel } from '../domain/listing-margin.js';
-import { ageInDays, estimateError, estimateTime, mlbNumber, monthlyVisits, prepareAnchors, salesPerDay, type IdAnchor } from '../domain/viability.js';
+import { ageInDays, dailyVisits, estimateError, estimateTime, mlbNumber, monthlyVisits, prepareAnchors, salesPerDay, type IdAnchor } from '../domain/viability.js';
 import type { MlRawApi } from '../infrastructure/ml-api.js';
 import type { MlIntegrationService } from './ml-integration-service.js';
 
@@ -87,7 +87,7 @@ export class ViabilityService {
     if (item.sold_quantity == null) unavailable.push('vendas');
 
     const age = ageInDays(item.date_created, new Date());
-    const daily = (visits?.results ?? []).map((r) => ({ date: r.date.slice(0, 10), total: r.total ?? 0 }));
+    const daily = dailyVisits(visits?.results);
     const dto: ViabilityDto = {
       itemId: item.id,
       title: item.title,
@@ -194,7 +194,7 @@ export class ViabilityService {
     const createdAt = createdExact ?? (await this.estimate(tenantId, id));
     if (!createdAt && !window && !total) return null;
     const age = ageInDays(createdAt, now);
-    const daily = (window?.results ?? []).map((r) => ({ date: r.date.slice(0, 10), total: r.total ?? 0 }));
+    const daily = dailyVisits(window?.results);
     const monthly = daily.length ? monthlyVisits(daily) : monthlyRaw.filter((m): m is { month: string; total: number } => m.total !== null);
     const visitsTotal = window?.total_visits ?? (monthly.length ? monthly.reduce((acc, m) => acc + m.total, 0) : null);
     const visits = daily.length || monthly.length ? { total: visitsTotal ?? 0, daily, monthly } : null;

@@ -1,5 +1,10 @@
 const DAY_MS = 86_400_000;
 
+/** Visitas por dia em ordem cronológica (o ML devolve do mais novo para o mais antigo). */
+export function dailyVisits(results: { date: string; total?: number | null }[] | null | undefined): { date: string; total: number }[] {
+  return (results ?? []).map((r) => ({ date: r.date.slice(0, 10), total: r.total ?? 0 })).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** Soma as visitas diárias por mês (AAAA-MM), em ordem cronológica. */
 export function monthlyVisits(daily: { date: string; total: number }[]): { month: string; total: number }[] {
   const byMonth = new Map<string, number>();

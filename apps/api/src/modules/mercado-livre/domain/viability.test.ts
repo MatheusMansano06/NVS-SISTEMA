@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ageInDays, estimateError, estimateTime, mlbNumber, monthlyVisits, prepareAnchors, salesPerDay, type IdAnchor } from './viability.js';
+import { ageInDays, dailyVisits, estimateError, estimateTime, mlbNumber, monthlyVisits, prepareAnchors, salesPerDay, type IdAnchor } from './viability.js';
+
+describe('dailyVisits', () => {
+  it('ordena do mais antigo para o mais novo', () => {
+    expect(dailyVisits([{ date: '2026-10-02T00:00:00Z', total: 1 }, { date: '2026-10-01T00:00:00Z', total: null }])).toEqual([
+      { date: '2026-10-01', total: 0 },
+      { date: '2026-10-02', total: 1 },
+    ]);
+  });
+});
 
 describe('monthlyVisits', () => {
   it('soma por mês em ordem cronológica', () => {

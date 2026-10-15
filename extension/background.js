@@ -42,18 +42,26 @@ async function itemPage(id) {
   if (saved && Date.now() - saved.at < PAGE_TTL) return { ok: true, data: saved.data };
   if (Date.now() < pausedUntil) return { ok: false, paused: true };
   try {
-    // sem cookies, como um visitante: com a sessão do usuário o ML costuma pedir verificação
-    const res = await fetch(`https://produto.mercadolivre.com.br/MLB-${id.replace(/^MLB-?/i, '')}`, { credentials: 'omit' });
+    // com a sessão do usuário o ML reconhece o navegador; se pedir verificação, tenta como visitante
+    const url = `https://produto.mercadolivre.com.br/MLB-${id.replace(/^MLB-?/i, '')}`;
+    let res = await fetch(url, { credentials: 'include' });
+    let tries = 'include';
+    if (CHALLENGE.test(res.url)) {
+      res = await fetch(url, { credentials: 'omit' });
+      tries += '>omit';
+    }
     if (CHALLENGE.test(res.url)) {
       pausedUntil = Date.now() + 5 * 60_000;
-      return { ok: false, paused: true };
+      return { ok: false, paused: true, debug: { tries, finalUrl: res.url, status: res.status } };
     }
     if (res.status === 429) {
       pausedUntil = Date.now() + 60_000;
       return { ok: false, paused: true };
     }
     if (!res.ok) return { ok: false, status: res.status };
-    const data = parseItemPage(await res.text(), res.url);
+    const html = await res.text();
+    const data = parseItemPage(html, res.url);
+    data.debug = { tries, finalUrl: res.url, status: res.status, size: html.length };
     if (data.soldQuantity !== null || data.listingTypeId !== null) await chrome.storage.local.set({ [key]: { at: Date.now(), data } });
     return { ok: true, data };
   } catch {

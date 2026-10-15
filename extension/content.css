@@ -38,21 +38,9 @@
 .nvs-cat { background: #e3edff; color: #1d4ed8; font-weight: 600; }
 .nvs-trad { background: #f1f1f1; color: #444; font-weight: 600; }
 .nvs-full { background: #e7f8ee; color: #0a7a3b; font-weight: 600; }
-.nvs-btn { background: #fff; color: #111827; }
 .nvs-dim { color: #6b7280; }
 .nvs-link { color: #1d4ed8; text-decoration: underline; }
 
-.nvs-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483646;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.nvs-card,
 .nvs-panel {
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #1f2a37;
@@ -60,11 +48,12 @@
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
 }
-.nvs-card { position: relative; width: min(620px, 100%); max-height: 90vh; overflow: auto; padding: 18px 20px; }
-.nvs-x { position: absolute; top: 8px; right: 12px; border: 0; background: none; font-size: 22px; cursor: pointer; color: #6b7280; }
 
-.nvs-panel { position: fixed; right: 16px; bottom: 16px; z-index: 2147483645; width: min(400px, calc(100vw - 32px)); max-height: 80vh; overflow: auto; }
-.nvs-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #1f2a37; color: #fff; border-radius: 12px 12px 0 0; position: sticky; top: 0; }
+.nvs-panel { position: relative; z-index: 5; width: min(1184px, calc(100% - 32px)); margin: 16px auto; box-sizing: border-box; }
+.nvs-panel .nvs-body { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr); gap: 4px 28px; }
+.nvs-panel .nvs-body > .nvs-head, .nvs-panel .nvs-body > .nvs-foot, .nvs-panel .nvs-body > p { grid-column: 1 / -1; }
+@media (max-width: 760px) { .nvs-panel .nvs-body { grid-template-columns: 1fr; } }
+.nvs-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: linear-gradient(160deg, #24324a 0%, #111827 100%); color: #fff; border-radius: 12px 12px 0 0; }
 .nvs-min { border: 0; background: none; color: #fff; font-size: 18px; cursor: pointer; }
 .nvs-panel .nvs-body { padding: 12px 14px; }
 .nvs-collapsed .nvs-body { display: none; }
@@ -100,3 +89,6 @@
 .nvs-val { font: 600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; fill: #1f2a37; text-anchor: middle; }
 .nvs-lbl { font: 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; fill: #6b7280; text-anchor: middle; }
 .nvs-line.nvs-flat, .nvs-line:not(.nvs-up):not(.nvs-down) { stroke: #374151; }
+
+/* bloco flutuando no topo do card, por cima da foto */
+.nvs-tag.nvs-overlay { position: absolute; top: 8px; left: 8px; right: 8px; margin: 0; z-index: 20; }

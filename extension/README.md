@@ -2,9 +2,10 @@
 
 Extensão do Chrome que mostra, nas páginas do Mercado Livre, os dados de cada anúncio:
 
-- **Na busca e nas listas**: etiqueta em cada anúncio com data de criação (e dias de vida), vendas e média por dia,
-  catálogo/tradicional, Clássico/Premium e Full. Clique na etiqueta para ver as visitas dos últimos 6 meses.
-- **Na página do anúncio**: painel fixo no canto com todos os dados e o gráfico de visitas.
+- **Na busca e nas listas**: bloco em destaque por cima da foto de cada anúncio com dias no ar, vendas e vendas/dia,
+  catálogo/tradicional, Clássico/Premium e Full.
+- **Na página do anúncio**: painel no topo com os dados e o gráfico de visitas mês a mês (tendência), este só
+  nos anúncios da própria conta (o Mercado Livre não libera visitas de outros vendedores).
 
 Os dados vêm da API do NVS (`/api/v1/ml/viabilidade`), com o token da conta ML conectada da empresa.
 A extensão não guarda senha nem token: usa o login do NVS feito no mesmo navegador.

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NVS — Estudo de Viabilidade",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Mostra data de criação, vendas, tipo (catálogo/tradicional) e visitas dos anúncios do Mercado Livre.",
   "permissions": [
     "storage"

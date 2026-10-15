@@ -89,15 +89,12 @@
       tag.dataset.soldText = soldText(card.textContent) || '';
       tag.dataset.full = /FULL/.test(card.textContent) ? '1' : ''; // selo ⚡FULL do card
       tag.dataset.title = (card.querySelector('h2, h3, .poly-component__title, .ui-search-item__title') || card.querySelector('a[href]'))?.textContent.trim() || '';
-      tag.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openModal(id.item || id.product, tag);
-      });
-      const host = card.querySelector('.poly-card__content, .ui-search-result__content, .ui-search-result__content-wrapper') || card;
-      host.appendChild(tag);
+      // flutua por cima da foto: o card do ML tem altura fixa e cortaria o bloco embaixo
+      if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+      tag.classList.add('nvs-overlay');
+      card.appendChild(tag);
       if (id.product) {
-        tag.innerHTML = '<div class="nvs-chips"><span class="nvs-chip nvs-cat">Catálogo</span><span class="nvs-loading">clique para ver os dados</span></div>';
+        tag.innerHTML = '<div class="nvs-chips"><span class="nvs-chip nvs-cat">Catálogo</span><span class="nvs-loading">abra o anúncio para ver os dados</span></div>';
         continue;
       }
       tag.dataset.nvsId = id.item;
@@ -143,6 +140,8 @@
       pageRunning++;
       send({ type: 'page', id })
         .then((r) => {
+          // diagnóstico da leitura da página do anúncio (aparece no Console da página do ML)
+          console.debug('[NVS] página do anúncio', id, r?.ok ? { vendas: r.data.soldQuantity, tipo: r.data.listingTypeId, ...r.data.debug } : r);
           if (r?.ok) {
             page.set(id, r.data);
             refresh(id);
@@ -198,7 +197,6 @@
     if (d.catalog != null) tags.push(`<span class="nvs-chip ${d.catalog ? 'nvs-cat' : 'nvs-trad'}">${d.catalog ? 'Catálogo' : 'Tradicional'}</span>`);
     if (d.type) tags.push(`<span class="nvs-chip">${esc(d.type)}</span>`);
     if (d.full) tags.push('<span class="nvs-chip nvs-full">⚡ Full</span>');
-    tags.push('<span class="nvs-chip nvs-btn" title="Ver mais detalhes">📈</span>');
     return `<div class="nvs-stats">${days}${sold}${perDay}</div><div class="nvs-chips">${tags.join('')}</div>`;
   }
 
@@ -336,9 +334,9 @@
     }
     const visitsTitle = d.visits ? `Visitas · últimos 150 dias · ${nf.format(d.visits.total)} no total` : 'Visitas';
     return `<div class="nvs-head"><b>${esc(d.title || tag?.dataset.title || document.querySelector('.ui-pdp-title, h1')?.textContent.trim() || '')}</b><span class="nvs-dim">${esc(d.itemId)}</span></div>
-      <dl class="nvs-grid">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
-      <h4>${visitsTitle}</h4>
-      ${d.visits ? chart(d.visits) : '<p class="nvs-dim">O Mercado Livre não liberou as visitas deste anúncio.</p>'}
+      <div class="nvs-col"><dl class="nvs-grid">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></div>
+      <div class="nvs-col"><h4>${visitsTitle}</h4>
+      ${d.visits ? chart(d.visits) : '<p class="nvs-dim">O Mercado Livre só libera as visitas dos anúncios da sua conta.</p>'}</div>
       <p class="nvs-foot">Dados do Mercado Livre via NVS · atualizado ${new Date(d.fetchedAt).toLocaleString('pt-BR')}</p>`;
   }
 
@@ -357,26 +355,17 @@
     box.innerHTML = detailHtml(r.data, p, opts.tag);
   }
 
-  function openModal(id, tag) {
-    document.querySelector('.nvs-modal')?.remove();
-    const modal = document.createElement('div');
-    modal.className = 'nvs-modal';
-    modal.innerHTML = '<div class="nvs-card"><button class="nvs-x" aria-label="Fechar">×</button><div class="nvs-body"></div></div>';
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal || e.target.classList.contains('nvs-x')) modal.remove();
-    });
-    document.body.appendChild(modal);
-    loadDetail(modal.querySelector('.nvs-body'), id, { tag });
-  }
-
   function productPanel() {
     const id = idFromHref(location.href);
     if (!id || document.querySelector('.nvs-panel')) return;
     const panel = document.createElement('aside');
     panel.className = 'nvs-panel';
-    panel.innerHTML = '<div class="nvs-bar"><b>NVS · Viabilidade</b><button class="nvs-min" aria-label="Minimizar">–</button></div><div class="nvs-body"></div>';
+    panel.innerHTML = '<div class="nvs-bar"><b>NVS · Estudo de Viabilidade</b><button class="nvs-min" aria-label="Minimizar">–</button></div><div class="nvs-body"></div>';
     panel.querySelector('.nvs-min').addEventListener('click', () => panel.classList.toggle('nvs-collapsed'));
-    document.body.appendChild(panel);
+    // no topo do anúncio, antes do conteúdo da página
+    const top = document.querySelector('.ui-pdp-container, .ui-vip-core, #root-app main, main');
+    if (top?.parentNode) top.parentNode.insertBefore(panel, top);
+    else document.body.prepend(panel);
     loadDetail(panel.querySelector('.nvs-body'), id.item || id.product, { here: true });
   }
 

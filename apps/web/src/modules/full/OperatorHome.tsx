@@ -39,13 +39,10 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
   /** Entrar numa lista só com a impressora pronta (ou liberado por um MASTER hoje). */
   const guard = (fn: () => void) => {
     if (!blocked) return fn();
-    flash('warn', 'Impressora não conferida', printer.status?.ready
-      ? 'Faça a conferência da impressora de hoje (logo acima) antes de separar.'
-      : 'Nenhum agente de impressão está conectado ao NVS Tech. Ligue o agente (botão na faixa vermelha) antes de separar.');
+    flash('warn', 'Impressora não conferida', 'Faça a conferência da impressora de hoje (logo acima) antes de separar.');
   };
   const skipCheck = () => {
-    const zebra = printer.status?.settings.printMode === 'agente_zebra';
-    if (!window.confirm(`Separar hoje sem conferir a impressora?${zebra ? ' As etiquetas ficam na fila até o agente ser ligado.' : ''}`)) return;
+    if (!window.confirm('Separar hoje sem conferir a impressora?')) return;
     try {
       localStorage.setItem(OVERRIDE_KEY, todayKey());
     } catch {
@@ -139,7 +136,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
         <p>Gerencie suas listas de trabalho: retome as suas, pegue uma da fila ou bipe um produto para ir direto nele.</p>
       </section>
 
-      <PrinterGate status={printer.status} reload={printer.reload} watchStart={printer.watchStart} />
+      <PrinterGate status={printer.status} reload={printer.reload} />
       {blocked && me.master && (
         <button type="button" className="link pgate-skip" onClick={skipCheck}>Sou MASTER: separar hoje sem conferir a impressora</button>
       )}

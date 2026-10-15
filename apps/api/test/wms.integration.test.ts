@@ -44,9 +44,9 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
 
   /**
    * Empresa com Ana (Análise, MASTER) e João (Operação); devolve os cookies de cada um. Por padrão com o Full
-   * liberado e imprimindo pelo agente Zebra (o fluxo original); `navegador` = etiquetas em PDF.
+   * liberado e etiqueta em rolo de 2 colunas (40 × 25 mm).
    */
-  async function company(opts: { full?: boolean; print?: 'agente_zebra' | 'navegador' } = {}) {
+  async function company(opts: { full?: boolean } = {}) {
     const cnpj = randomCnpj();
     const email = `wms-${cnpj}@teste.dev`;
     await app.inject({
@@ -68,10 +68,7 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     const tenantId = res.json().tenant.id as string;
     if (opts.full !== false) await admin.query(`UPDATE tenants SET features = array_append(features, 'full') WHERE id = $1`, [tenantId]);
     await admin.withTenant(tenantId, (db) =>
-      db.query(`INSERT INTO wms_settings (tenant_id, print_mode, label_format, label_width_mm, label_height_mm) VALUES ($1, $2, 'rolo_2col', 40, 25)`, [
-        tenantId,
-        opts.print ?? 'agente_zebra',
-      ]),
+      db.query(`INSERT INTO wms_settings (tenant_id, label_format, label_width_mm, label_height_mm) VALUES ($1, 'rolo_2col', 40, 25)`, [tenantId]),
     );
     return { base, cnpj, tenantId, ana: await enter('Ana', 'analise'), joao: await enter('João', 'operacao') };
   }
@@ -124,12 +121,10 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: '7891234567895' });
     const done = (await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: 'IBFJ71702' })).json();
     expect(done).toMatchObject({ status: 'complete', item: { qtyPicked: 3, status: 'complete', labelsReady: true } });
-    expect(done.print).toMatchObject({ sku: 'PROTENIS', labels: 3, status: 'PENDING' });
     expect((await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: 'IBFJ71702' })).json().status).toBe('excess');
 
-    const zpl = await call('GET', `/wms/lists/${listId}/zpl?sku=PROTENIS`, joao);
-    expect(zpl.body).toContain('^BCN,54,N,N^FDIBFJ71702^FS');
-    expect(zpl.body.match(/\^XA/g)).toHaveLength(2); // 1 par + 1 simples
+    const labels = await call('GET', `/wms/lists/${listId}/labels.pdf?sku=PROTENIS`, joao);
+    expect(labels.headers['content-type']).toBe('application/pdf');
 
     // modo caixa: achou só 1 de 2 → parcial, falta de 1 no relatório; lista concluída
     const box = (await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: 'YTHH93028', mode: 'box', qty: 1 })).json();
@@ -231,8 +226,7 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     expect(found).toMatchObject({ action: 'open', sku: 'VEOX' });
     const done = (await call('POST', `/wms/lists/${found.match.listId}/scan`, joao, { barcode: '25147029740_243914807565', mode: 'box' })).json();
     expect(done).toMatchObject({ status: 'complete', item: { sku: 'VEOX', qtyPicked: 200 } });
-    const zpl = (await call('GET', `/wms/lists/${found.match.listId}/zpl?sku=VEOX&qty=1`, joao)).body;
-    expect(zpl).toContain('^BQN,2,3^FDQA,25147029740_243914807565^FS');
+    expect((await call('GET', `/wms/lists/${found.match.listId}/labels.pdf?sku=VEOX&qty=1`, joao)).statusCode).toBe(200);
   });
 
   it('PDF da Shopee de julho (EAN do armazém quebrado em 2 linhas) fecha 4.073', async () => {
@@ -292,54 +286,6 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     expect((await call('GET', '/wms/products', other.ana)).json().total).toBe(0);
   });
 
-  it('agente Zebra: chave da empresa no MACHINE_ID; chave errada é recusada', async () => {
-    const { ana, joao } = await company();
-    expect((await call('POST', '/wms/agent/key', joao)).statusCode).toBe(403);
-    const { key } = (await call('POST', '/wms/agent/key', ana)).json();
-    expect(key).toMatch(/^nvsk_[a-f0-9]{40}$/);
-    await app.ready();
-    const bad = await app.injectWS('/ws/zebra-agent/nvsk_' + '0'.repeat(40));
-    const closed = await new Promise<number>((r) => bad.on('close', (code: number) => r(code)));
-    expect(closed).toBe(4401);
-
-    const listId = (await inbound(ana)).json().batch.lists[0].id as string;
-    const ws = await app.injectWS(`/ws/zebra-agent/${key}.CAIXA1`);
-    const msgs: Record<string, unknown>[] = [];
-    const next = () => new Promise<Record<string, unknown>>((r) => ws.once('message', (d: Buffer) => r(JSON.parse(String(d)))));
-    let wait = next();
-    ws.send(JSON.stringify({ type: 'hello', printer: 'ZDesigner', agent_version: '3.0' }));
-    msgs.push(await wait);
-    expect(msgs[0]).toMatchObject({ type: 'connected', machine_id: 'CAIXA1' });
-
-    wait = next();
-    const job = (await call('POST', `/wms/lists/${listId}/print`, joao, { sku: 'VARAL', qty: 2 })).json();
-    const sent = await wait;
-    expect(sent).toMatchObject({ type: 'print_job', id: job.id, sku: 'VARAL' });
-    expect(String(sent.zpl_content)).toContain('^FDYTHH93028^FS');
-    ws.send(JSON.stringify({ type: 'print_result', job_id: job.id, job_token: sent.job_token, status: 'ok', printer: 'ZDesigner' }));
-    await new Promise((r) => setTimeout(r, 150));
-    expect((await call('GET', `/wms/lists/${listId}/print?sku=VARAL`, joao)).json()).toMatchObject({ status: 'PRINTED', printerName: 'ZDesigner' });
-    expect((await call('GET', '/wms/agent', ana)).json().connected).toEqual([{ machine: 'CAIXA1', printer: 'ZDesigner', hostname: null, version: '3.0' }]);
-
-    // conferência do dia na tela do operador: agente pronto, Full em andamento, ainda não conferido
-    expect((await call('GET', '/wms/printer', joao)).json()).toMatchObject({ ready: true, fullRunning: true, checkedToday: null, lastTest: null });
-    wait = next();
-    const test = (await call('POST', '/wms/printer/test', joao)).json();
-    const testJob = await wait;
-    expect(testJob).toMatchObject({ type: 'print_job', id: test.id, sku: 'TESTE-IMPRESSORA' });
-    expect(String(testJob.zpl_content)).toContain('ETIQUETA DE TESTE NVS');
-    ws.send(JSON.stringify({ type: 'print_result', job_id: test.id, job_token: testJob.job_token, status: 'ok', printer: 'ZDesigner' }));
-    await new Promise((r) => setTimeout(r, 150));
-    expect((await call('GET', '/wms/printer', joao)).json().lastTest).toMatchObject({ id: test.id, status: 'PRINTED' });
-    expect((await call('POST', '/wms/printer/confirm', joao)).statusCode).toBe(204);
-    const checked = (await call('GET', '/wms/printer', ana)).json(); // vale para todos do turno
-    expect(checked.checkedToday).toMatchObject({ machine: 'CAIXA1', printer: 'ZDesigner' });
-    ws.terminate();
-    await new Promise((r) => setTimeout(r, 100));
-    expect((await call('GET', '/wms/printer', joao)).json().ready).toBe(false); // agente fechou
-    expect((await call('POST', '/wms/printer/confirm', joao)).statusCode).toBe(400);
-  });
-
   it('sem o recurso Full liberado, a API do Full é recusada', async () => {
     const { ana } = await company({ full: false });
     const r = await call('GET', '/wms/batches', ana);
@@ -348,17 +294,16 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     expect((await inbound(ana)).statusCode).toBe(403);
   });
 
-  it('impressão pelo navegador: sem agente, etiquetas em PDF no formato da empresa e o operador confirma', async () => {
-    const { ana, joao } = await company({ print: 'navegador' });
+  it('etiquetas em PDF no formato da empresa: o operador imprime e confirma, sem agente nenhum', async () => {
+    const { ana, joao } = await company();
     // configuração: só a Análise muda; vale o formato salvo
-    expect((await call('GET', '/wms/settings', joao)).json()).toMatchObject({ printMode: 'navegador', labelFormat: 'rolo_2col' });
-    const settings = { printMode: 'navegador', labelFormat: 'rolo_1col', labelWidthMm: 50, labelHeightMm: 25 };
+    expect((await call('GET', '/wms/settings', joao)).json()).toMatchObject({ labelFormat: 'rolo_2col', labelWidthMm: 40 });
+    const settings = { labelFormat: 'rolo_1col', labelWidthMm: 50, labelHeightMm: 25 };
     expect((await app.inject({ method: 'PUT', url: '/api/v1/wms/settings', cookies: joao, payload: settings })).statusCode).toBe(403);
     expect((await app.inject({ method: 'PUT', url: '/api/v1/wms/settings', cookies: ana, payload: { ...settings, labelWidthMm: 5 } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'PUT', url: '/api/v1/wms/settings', cookies: ana, payload: settings })).json()).toEqual(settings);
 
-    // pronto sem agente nenhum
-    expect((await call('GET', '/wms/printer', joao)).json()).toMatchObject({ ready: true, settings: { printMode: 'navegador' } });
+    expect((await call('GET', '/wms/printer', joao)).json()).toMatchObject({ settings, checkedToday: null });
 
     const listId = (await inbound(ana)).json().batch.lists[0].id as string;
     // nada separado ainda: lista inteira não tem etiqueta
@@ -367,8 +312,6 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     const done = (await call('GET', `/wms/lists/${listId}`, joao)).json();
     const item = done.items.find((i: { sku: string }) => i.sku === 'PROTENIS');
     expect(item).toMatchObject({ status: 'complete', labelsPrinted: false });
-    // nada vai para a fila do agente
-    expect((await call('GET', `/wms/lists/${listId}/print?sku=PROTENIS`, joao)).json()).toBeNull();
 
     const pdf = await call('GET', `/wms/lists/${listId}/labels.pdf?sku=PROTENIS`, joao);
     expect(pdf.statusCode).toBe(200);
@@ -380,10 +323,10 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     const after = (await call('GET', `/wms/lists/${listId}`, joao)).json();
     expect(after.items.find((i: { sku: string }) => i.sku === 'PROTENIS').labelsPrinted).toBe(true);
 
-    // teste e conferência do dia sem agente
+    // teste e conferência do dia
     const test = await call('GET', '/wms/printer/test.pdf', joao);
     expect(test.headers['content-type']).toBe('application/pdf');
     expect((await call('POST', '/wms/printer/confirm', joao)).statusCode).toBe(204);
-    expect((await call('GET', '/wms/printer', ana)).json().checkedToday).toMatchObject({ machine: 'navegador', printer: 'PDF 50 × 25 mm' });
+    expect((await call('GET', '/wms/printer', ana)).json().checkedToday).toMatchObject({ by: 'João', format: 'PDF 50 × 25 mm' });
   });
 });

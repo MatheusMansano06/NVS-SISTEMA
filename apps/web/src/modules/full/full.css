@@ -139,9 +139,6 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .full-file[data-has] span { border-style: solid; border-color: var(--blue); color: var(--navy); background: var(--blue-soft); }
 .full-file:focus-within span { outline: 3px solid color-mix(in srgb, var(--blue) 45%, transparent); }
 .full-archive span, .full-result { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.full-agents { display: flex; gap: 8px; flex-wrap: wrap; }
-.full-agent { padding: 6px 12px; border-radius: 99px; background: var(--gray-50); color: var(--gray-500); font-size: .8rem; font-weight: 700; }
-.full-agent[data-on] { background: var(--ok-soft); color: var(--ok-ink); }
 .full-key pre { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--navy-solid); color: #fff; font-size: .82rem; overflow-x: auto; user-select: all; }
 .full-key p { margin: 0 0 8px; font-size: .86rem; }
 .full-keybtn { justify-self: start; }
@@ -265,15 +262,6 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .full-modal label, .full-modal > * { min-width: 0; }
 .full-codes-edit { max-height: 180px; overflow: auto; }
 
-/* passo a passo do agente */
-.full-steps { margin: 0; padding-left: 20px; display: grid; gap: 14px; color: var(--navy); font-size: .88rem; line-height: 1.5; }
-.full-steps li { display: block; }
-.full-steps li > a.act, .full-steps li > button, .full-steps li > .full-machine { display: flex; width: fit-content; margin: 8px 0 4px; }
-.full-steps small { display: block; color: var(--gray-500); font-size: .76rem; }
-.full-steps code { padding: 1px 6px; border-radius: 6px; background: var(--gray-50); font-size: .8rem; }
-.full-steps a.act { text-decoration: none; }
-.full-steps li > .full-machine { width: 100%; }
-.full-machine input { height: 38px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--gray-300); font: inherit; max-width: 180px; }
 
 /* ======================================================================
    Leitura fácil: rótulos em texto normal (nada de CAIXA ALTA miúda e espaçada)
@@ -682,11 +670,9 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 }
 .dock-item:hover .dock-tip { opacity: 1; }
 @media (hover: none) { .dock-item { width: 52px !important; height: 52px !important; } }
-.pgate-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 2px; }
-.pgate-start small { flex: 1; min-width: 220px; color: var(--gray-500); font-size: .8rem; line-height: 1.4; }
 
 /* Impressão das etiquetas (Processamento): modo e formato */
-.full-choice-row, .full-fmt-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.full-fmt-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
 .full-choice-card {
   display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px 14px; border-radius: 16px; cursor: pointer;
   background: var(--surface); border: 1.5px solid var(--gray-100); color: var(--ink); font: inherit;

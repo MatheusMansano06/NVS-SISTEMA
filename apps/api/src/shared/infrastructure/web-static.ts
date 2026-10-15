@@ -19,7 +19,7 @@ export async function serveWeb(app: FastifyInstance, dir: string | undefined): P
         'cache-control',
         path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
       );
-      // agente da impressora Zebra e scripts: sempre como arquivo para salvar
+      // arquivos para baixar: sempre como anexo
       if (path.includes('/downloads/')) res.header('content-disposition', `attachment; filename="${path.split('/').pop()}"`);
     },
   });

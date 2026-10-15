@@ -149,7 +149,7 @@ export const TOURS = {
       title: 'Supervisão Full',
       text:
         'Aqui fica a expedição do Full do Mercado Livre, do PDF do envio até a etiqueta na caixa.\n' +
-        'A Análise carrega o envio; a Operação separa bipando e imprime as etiquetas (em qualquer impressora, ou sozinhas na Zebra).',
+        'A Análise carrega o envio; a Operação separa bipando e imprime as etiquetas em PDF, em qualquer impressora.',
     },
     { target: '.full-tabs', title: 'As abas', text: 'Visão Geral (andamento e faltas), Listas e Lotes (cada envio e suas listas), Processamento (carregar o PDF) e Produtos (os códigos de barras de cada SKU).' },
     { title: 'Processamento', text: 'Baixe no ML o PDF “Lista de produtos e instruções de preparação” do envio e envie em Processamento: o sistema monta as listas de até 1.000 unidades e cadastra o Código ML e o EAN de cada produto.' },

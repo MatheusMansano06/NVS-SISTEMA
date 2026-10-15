@@ -6,7 +6,6 @@ import {
   wmsLinkBarcodeSchema,
   wmsNotesSchema,
   wmsOutOfStockSchema,
-  wmsPrintSchema,
   wmsProductCodeSchema,
   wmsProductCreateSchema,
   wmsProductClearSchema,
@@ -22,7 +21,6 @@ import { z } from 'zod';
 import { AppError, ValidationError } from '../../../shared/kernel/errors.js';
 import { readPerson } from '../../operation/index.js';
 import type { Actor, WmsService } from '../application/wms-service.js';
-import type { AgentSocket, PrintHub } from '../infrastructure/print-hub.js';
 
 function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
   const r = schema.safeParse(data);
@@ -55,7 +53,7 @@ export function wmsRoutes(
   },
 ) {
   return async (app: FastifyInstance) => {
-    // toda rota: sessão da empresa + recurso 'full' liberado (o agente Zebra, por WebSocket, fica de fora)
+    // toda rota: sessão da empresa + recurso 'full' liberado
     const full = async (req: FastifyRequest) => {
       if (!(await opts.hasFull(req.user.tenantId))) throw new FeatureLockedError();
     };
@@ -141,21 +139,8 @@ export function wmsRoutes(
     });
     app.get('/wms/pending', auth, async (req) => service.pending(await person(req), parse(mpQuery, req.query).marketplace));
 
-    // ---- Etiquetas
-    app.post('/wms/lists/:id/print', fast, async (req) => {
-      const b = parse(wmsPrintSchema, req.body);
-      return service.print(await actor(req), params(req), b.sku, b.qty);
-    });
-    app.get('/wms/lists/:id/print', auth, async (req) => service.printStatus(await person(req), params(req), parse(wmsSkuSchema, req.query).sku));
-    app.get('/wms/lists/:id/zpl', auth, async (req, reply) => {
-      const q = parse(wmsSkuSchema.extend({ qty: z.coerce.number().int().min(1).max(5000).optional() }), req.query);
-      const zpl = await service.zpl(await person(req), params(req), q.sku, q.qty);
-      return reply
-        .header('content-type', 'text/plain; charset=utf-8')
-        .header('content-disposition', `attachment; filename="etiquetas-${q.sku.replace(/[^\w-]/g, '_')}.zpl"`)
-        .send(zpl);
-    });
-    // PDF no formato da empresa (impressão pelo navegador): de um SKU ou, sem `sku`, da lista inteira
+    // ---- Etiquetas (PDF no formato da empresa, impresso pelo navegador em qualquer impressora)
+    // de um SKU ou, sem `sku`, da lista inteira
     const pdf = (reply: { header(k: string, v: string): unknown }, name: string) => {
       reply.header('content-type', 'application/pdf');
       reply.header('content-disposition', `inline; filename="${name.replace(/[^\w-]/g, '_')}.pdf"`);
@@ -178,15 +163,12 @@ export function wmsRoutes(
     });
     app.get('/wms/settings', auth, async (req) => service.settings(await person(req)));
     app.put('/wms/settings', auth, async (req) => service.saveSettings(await actor(req), parse(wmsSettingsSchema, req.body)));
-    app.get('/wms/agent', auth, async (req) => service.agentStatus(await person(req)));
-    // conferência da impressora na tela do operador (agente ligado + etiqueta de teste do dia)
+    // conferência da impressora na tela do operador (etiqueta de teste do dia)
     app.get('/wms/printer', auth, async (req) => service.printerStatus(await person(req)));
-    app.post('/wms/printer/test', fast, async (req) => service.printTest(await actor(req)));
     app.post('/wms/printer/confirm', auth, async (req, reply) => {
       await service.confirmPrinter(await actor(req));
       return reply.code(204).send();
     });
-    app.post('/wms/agent/key', auth, async (req) => service.newAgentKey(await actor(req)));
 
     // ---- Master Data
     const sku = (req: FastifyRequest) => parse(z.object({ sku: z.string().trim().min(1).max(100) }), req.params).sku;
@@ -222,34 +204,5 @@ export function wmsRoutes(
     app.post('/wms/inbound', { preHandler: guard, bodyLimit: 15_000_000, config: { rateLimit: { max: opts.inboundPerMinute ?? 20, timeWindow: '1 minute' } } }, async (req) =>
       service.inbound(await actor(req), parse(wmsInboundSchema, req.body)),
     );
-  };
-}
-
-/**
- * WebSocket do agente Zebra (o mesmo ZebraAgent do NVS-WMS): BACKEND_URL=https://<site>/api e
- * MACHINE_ID=<chave da empresa>.<nome da máquina>. Fica fora de /api/v1 porque o agente deriva o
- * endereço tirando o "/api" do BACKEND_URL (→ wss://<site>/ws/zebra-agent/<MACHINE_ID>).
- */
-export function wmsAgentSocket(hub: PrintHub) {
-  return async (app: FastifyInstance) => {
-    app.get('/ws/zebra-agent/:machineId', { websocket: true, config: { rateLimit: false } }, async (socket, req) => {
-      const s = socket as unknown as AgentSocket & { on(ev: string, fn: (d: unknown) => void): void };
-      // o agente manda o "hello" logo ao conectar: guarda as mensagens até validar a chave
-      const early: string[] = [];
-      let owner: { tenantId: string; machine: string } | null = null;
-      s.on('message', (data) => {
-        if (owner) void hub.onMessage(owner.tenantId, owner.machine, String(data)).catch(() => undefined);
-        else if (early.length < 20) early.push(String(data));
-      });
-      s.on('close', () => owner && hub.unregister(owner.tenantId, owner.machine, s));
-      const machineId = String((req.params as { machineId?: string }).machineId ?? '').slice(0, 200);
-      owner = await hub.tenantForKey(machineId).catch(() => null);
-      if (!owner) {
-        s.close(4401, 'chave do agente inválida');
-        return;
-      }
-      hub.register(owner.tenantId, owner.machine, s);
-      for (const m of early.splice(0)) await hub.onMessage(owner.tenantId, owner.machine, m).catch(() => undefined);
-    });
   };
 }

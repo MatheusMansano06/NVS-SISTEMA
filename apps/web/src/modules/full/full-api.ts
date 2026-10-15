@@ -1,5 +1,4 @@
 import type {
-  WmsAgentStatusDto,
   WmsPrinterStatusDto,
   WmsBatchDto,
   WmsFindCandidateDto,
@@ -10,7 +9,6 @@ import type {
   WmsListSummaryDto,
   WmsMarketplace,
   WmsOverviewDto,
-  WmsPrintJobDto,
   WmsProductDto,
   WmsProductPageDto,
   WmsRankingDto,
@@ -71,21 +69,15 @@ export const fullApi = {
   linkBarcode: (barcode: string, sku: string) => http<void>('/api/v1/wms/barcodes', { body: { barcode, sku } }),
   find: (term: string) => http<WmsFindDto>(`/api/v1/wms/find?${q()}&q=${enc(term)}`),
   pending: () => http<WmsFindCandidateDto[]>(`/api/v1/wms/pending?${q()}`),
-  print: (id: string, sku: string, qty?: number) => http<WmsPrintJobDto>(`/api/v1/wms/lists/${id}/print`, { body: { sku, qty } }),
-  printStatus: (id: string, sku: string) => http<WmsPrintJobDto | null>(`/api/v1/wms/lists/${id}/print?sku=${enc(sku)}`),
-  zplUrl: (id: string, sku: string, qty?: number) => `/api/v1/wms/lists/${id}/zpl?sku=${enc(sku)}${qty ? `&qty=${qty}` : ''}`,
-  // impressão pelo navegador (PDF no formato da empresa)
+  // etiquetas em PDF no formato da empresa (impressas pelo navegador)
   labelsPdfUrl: (id: string, sku?: string, qty?: number) =>
     `/api/v1/wms/lists/${id}/labels.pdf${sku ? `?sku=${enc(sku)}${qty ? `&qty=${qty}` : ''}` : ''}`,
   markPrinted: (id: string, sku: string) => http<void>(`/api/v1/wms/lists/${id}/printed`, { body: { sku } }),
   testPdfUrl: () => '/api/v1/wms/printer/test.pdf',
   settings: () => http<WmsSettingsDto>('/api/v1/wms/settings'),
   saveSettings: (b: WmsSettingsDto) => http<WmsSettingsDto>('/api/v1/wms/settings', { method: 'PUT', body: b }),
-  agent: () => http<WmsAgentStatusDto>('/api/v1/wms/agent'),
   printer: () => http<WmsPrinterStatusDto>('/api/v1/wms/printer'),
-  printerTest: () => http<{ id: string }>('/api/v1/wms/printer/test', { body: {} }),
   printerConfirm: () => http<void>('/api/v1/wms/printer/confirm', { body: {} }),
-  agentKey: () => http<{ key: string }>('/api/v1/wms/agent/key', { body: {} }),
   inbound: (b: { fullDate: string; pdfBase64: string; archiveOldestId?: string }) =>
     http<WmsInboundResultDto>('/api/v1/wms/inbound', { body: { marketplace: current, ...b } }),
   // Master Data

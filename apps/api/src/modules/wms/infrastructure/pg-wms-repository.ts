@@ -5,7 +5,6 @@ import type {
   WmsItemStatus,
   WmsListSummaryDto,
   WmsMarketplace,
-  WmsPrintJobDto,
   WmsProductDto,
 } from '@nvs/shared';
 import type { Queryable } from '../../../shared/infrastructure/database.js';
@@ -289,15 +288,6 @@ export class PgWmsRepository {
     }));
   }
 
-  // ---------------- impressão
-  async printJob(db: Queryable, listId: string, sku: string): Promise<WmsPrintJobDto | null> {
-    const { rows } = await db.query<PrintRow>(
-      'SELECT * FROM wms_print_jobs WHERE list_id = $1 AND upper(sku) = upper($2) ORDER BY created_at DESC LIMIT 1',
-      [listId, sku],
-    );
-    return rows[0] ? toJob(rows[0]) : null;
-  }
-
   // ---------------- master data
   async products(db: Queryable, q: string, limit: number, offset: number): Promise<{ total: number; items: WmsProductDto[] }> {
     const like = `%${q.trim()}%`;
@@ -327,27 +317,3 @@ export class PgWmsRepository {
     };
   }
 }
-
-export interface PrintRow {
-  id: string;
-  tenant_id: string;
-  list_id: string;
-  sku: string;
-  zpl: string;
-  labels: number;
-  status: WmsPrintJobDto['status'];
-  job_token: string | null;
-  claimed_by: string | null;
-  printer_name: string | null;
-  error_msg: string | null;
-  retry_count: number;
-  started_at: Date | null;
-}
-export const toJob = (r: PrintRow): WmsPrintJobDto => ({
-  id: r.id,
-  sku: r.sku,
-  labels: r.labels,
-  status: r.status,
-  printerName: r.printer_name,
-  error: r.error_msg,
-});

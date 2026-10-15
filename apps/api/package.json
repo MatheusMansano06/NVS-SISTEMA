@@ -17,7 +17,6 @@
     "@fastify/jwt": "^10.2.4",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "^10.1.6",
-    "@fastify/websocket": "^11.3.4",
     "@nvs/shared": "^0.1.0",
     "bwip-js": "^4.11.4",
     "fastify": "^5.12.5",

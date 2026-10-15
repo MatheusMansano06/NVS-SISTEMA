@@ -71,13 +71,14 @@ export interface UserDto {
  * Recursos que o Painel Master libera por empresa (e que cada plano inclui); o que não estiver liberado aparece como
  * "em breve". Dashboard, Cadastro de SKUs, Integrações e Equipe são a base e ficam sempre ligados.
  */
-export const TENANT_FEATURES = ['financeiro', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full'] as const;
+export const TENANT_FEATURES = ['financeiro', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full', 'viabilidade'] as const;
 export type TenantFeature = (typeof TENANT_FEATURES)[number];
 export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: string; area: 'Análise' | 'Anúncios' | 'Operação' }> = {
   financeiro: { label: 'Análise Financeira', text: 'Margem de contribuição venda a venda, composição e exportação.', area: 'Análise' },
   vendas: { label: 'Vendas', text: 'Pedidos, formas de pagamento, estados e DIFAL.', area: 'Análise' },
   precificador: { label: 'Precificador', text: 'Simula preço, tarifa, frete e margem antes de anunciar.', area: 'Análise' },
   radar_frete: { label: 'Radar de Frete', text: 'Frete pago por anúncio e oportunidades de Flex.', area: 'Análise' },
+  viabilidade: { label: 'Estudo de Viabilidade', text: 'Extensão do Chrome: data, vendas, tipo e visitas de qualquer anúncio do ML.', area: 'Análise' },
   anuncios: { label: 'Meus anúncios', text: 'Lista de anúncios com margem, edição, estoque e preço.', area: 'Anúncios' },
   promocoes: { label: 'Central de Promoção', text: 'Inscrever anúncios nas campanhas do ML vendo a margem.', area: 'Anúncios' },
   marketing: { label: 'Central de Marketing', text: 'Raio-X das ferramentas do ML (atacado, cupom, ofertas, Ads…).', area: 'Anúncios' },
@@ -87,8 +88,8 @@ export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: s
 export const TENANT_FEATURE_LABELS: Record<TenantFeature, string> = Object.fromEntries(
   TENANT_FEATURES.map((f) => [f, TENANT_FEATURE_INFO[f].label]),
 ) as Record<TenantFeature, string>;
-/** Padrão de empresa nova e de plano novo: tudo, menos o que ainda está em teste. */
-export const DEFAULT_TENANT_FEATURES: TenantFeature[] = TENANT_FEATURES.filter((f) => f !== 'full');
+/** Padrão de empresa nova e de plano novo: tudo, menos o que ainda está em teste (Full e Viabilidade). */
+export const DEFAULT_TENANT_FEATURES: TenantFeature[] = TENANT_FEATURES.filter((f) => f !== 'full' && f !== 'viabilidade');
 
 export interface SessionDto {
   user: UserDto;

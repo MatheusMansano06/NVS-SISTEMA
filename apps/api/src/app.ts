@@ -46,6 +46,8 @@ import {
   FlexService,
   FreightRadarService,
   pricingRoutes,
+  ViabilityService,
+  viabilityRoutes,
   listingRoutes,
   mercadoLivreRoutes,
   type MlApi,
@@ -219,6 +221,7 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
     { prefix: '/api/v1' },
   );
   await app.register(pricingRoutes(ml && mlClient ? new PricingService(database, ml, mlClient, new PgCategoryCache(database), mlLookups!) : null), { prefix: '/api/v1' });
+  await app.register(viabilityRoutes(ml && rawMl ? new ViabilityService(database, ml, rawMl, sharedCache) : null), { prefix: '/api/v1' });
   const operators = new OperatorService(database, new PgOperatorRepository());
   await app.register(
     operationRoutes(operators, {

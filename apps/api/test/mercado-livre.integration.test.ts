@@ -312,6 +312,16 @@ function fakeMl(sellerId: number) {
     '/post-purchase/v1/returns/reasons?flow=seller_return_failed&claim_id=5001': [{ id: 'SRF2', detail: 'O produto chegou com defeito' }],
     '/shipments/7001': { id: 7_001, logistic_type: 'fulfillment' }, // venda de ida pelo Full
     '/items/MLB1': { id: 'MLB1', available_quantity: 3, shipping: { logistic_type: 'drop_off' } },
+    // Estudo de viabilidade: anúncio de concorrente e produto de catálogo cujo vencedor é ele
+    '/items/MLB7000001': {
+      id: 'MLB7000001', title: 'Garrafa térmica 1L', price: 89.9, date_created: '2026-04-15T12:00:00.000Z', sold_quantity: 500,
+      catalog_listing: true, listing_type_id: 'gold_pro', available_quantity: 40, seller_id: 777, shipping: { free_shipping: true, logistic_type: 'fulfillment' },
+    },
+    '/items/MLB7000001/visits/time_window?last=180&unit=day': {
+      total_visits: 30, results: [{ date: '2026-09-30T00:00:00Z', total: 10 }, { date: '2026-10-01T00:00:00Z', total: 20 }],
+    },
+    '/users/777': { nickname: 'CONCORRENTE', seller_reputation: { level_id: '5_green' } },
+    '/products/MLB9000001': { buy_box_winner: { item_id: 'MLB7000001' } },
     // Central de Marketing: MLB0 com cupom e atacado; MLB1 elegível a cupom e com vídeo
     '/seller-promotions/items/MLB0?app_version=v2': [{ type: 'SELLER_COUPON_CAMPAIGN', status: 'started' }],
     '/seller-promotions/items/MLB1?app_version=v2': [{ type: 'SELLER_COUPON_CAMPAIGN', status: 'candidate' }, { type: 'LIGHTNING', status: 'started' }],
@@ -646,6 +656,36 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     const other = await account();
     const cross = await app.inject({ method: 'GET', url: candUrl, cookies: other });
     expect(cross.statusCode).toBe(404);
+  });
+
+  it('estudo de viabilidade: bloqueado sem o recurso; com ele traz data, vendas, tipo e visitas (também via produto)', async () => {
+    const cookies = firstCookies;
+    const url = '/api/v1/ml/viabilidade/MLB7000001';
+    expect((await app.inject({ method: 'GET', url, cookies })).statusCode).toBe(403); // "em breve" no plano
+
+    const tid = (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies })).json().tenant.id as string;
+    const db = new Database(TEST_DB!);
+    await db.query(`UPDATE tenants SET features = array_append(features, 'viabilidade') WHERE id = $1`, [tid]);
+    await db.close();
+
+    const res = await app.inject({ method: 'GET', url, cookies });
+    expect(res.statusCode).toBe(200);
+    const v = res.json();
+    expect(v).toMatchObject({
+      itemId: 'MLB7000001', createdAt: '2026-04-15T12:00:00.000Z', soldQuantity: 500, catalog: true, listingType: 'Premium',
+      freeShipping: true, logisticType: 'fulfillment', seller: { id: 777, nickname: 'CONCORRENTE', reputation: '5_green' }, unavailable: [],
+    });
+    expect(v.ageDays).toBeGreaterThan(0);
+    expect(v.salesPerDay).toBeCloseTo(500 / v.ageDays, 1);
+    expect(v.visits).toEqual({
+      total: 30,
+      daily: [{ date: '2026-09-30', total: 10 }, { date: '2026-10-01', total: 20 }],
+      monthly: [{ month: '2026-09', total: 10 }, { month: '2026-10', total: 20 }],
+    });
+    // página de catálogo (/p/MLB…): usa o anúncio que ganha a vitrine
+    expect((await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade/MLB9000001', cookies })).json().itemId).toBe('MLB7000001');
+    expect((await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade/MLB5555555', cookies })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade/abc', cookies })).statusCode).toBe(400);
   });
 
   it('recusa state reutilizado, código inválido, negação e conta já usada por outra empresa', async () => {

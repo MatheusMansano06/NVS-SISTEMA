@@ -44,7 +44,8 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
       : 'Nenhum agente de impressão está conectado ao NVS Tech. Ligue o agente (botão na faixa vermelha) antes de separar.');
   };
   const skipCheck = () => {
-    if (!window.confirm('Separar hoje sem conferir a impressora? As etiquetas ficam na fila até o agente ser ligado.')) return;
+    const zebra = printer.status?.settings.printMode === 'agente_zebra';
+    if (!window.confirm(`Separar hoje sem conferir a impressora?${zebra ? ' As etiquetas ficam na fila até o agente ser ligado.' : ''}`)) return;
     try {
       localStorage.setItem(OVERRIDE_KEY, todayKey());
     } catch {

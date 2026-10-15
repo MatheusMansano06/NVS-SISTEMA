@@ -684,3 +684,29 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 @media (hover: none) { .dock-item { width: 52px !important; height: 52px !important; } }
 .pgate-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 2px; }
 .pgate-start small { flex: 1; min-width: 220px; color: var(--gray-500); font-size: .8rem; line-height: 1.4; }
+
+/* Impressão das etiquetas (Processamento): modo e formato */
+.full-choice-row, .full-fmt-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.full-choice-card {
+  display: grid; gap: 4px; align-content: start; text-align: left; padding: 12px 14px; border-radius: 16px; cursor: pointer;
+  background: var(--surface); border: 1.5px solid var(--gray-100); color: var(--ink); font: inherit;
+}
+.full-choice-card b { color: var(--navy); font-size: .95rem; }
+.full-choice-card small { color: var(--gray-500); font-size: .8rem; line-height: 1.45; }
+.full-choice-card:hover { border-color: var(--gray-300); }
+.full-choice-card[aria-checked='true'] { border-color: var(--blue); background: var(--blue-soft); box-shadow: 0 0 0 1px var(--blue) inset; }
+.full-choice-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.full-sub { margin: 4px 0 0; font-size: .92rem; color: var(--navy); }
+.full-fmt { justify-items: start; }
+.full-fmt-sketch { display: flex; gap: 3px; height: 34px; align-items: center; margin-bottom: 4px; }
+.full-fmt-sketch i { display: grid; place-items: center; width: 34px; height: 18px; border-radius: 3px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-300); }
+.full-fmt-sketch i b { width: 70%; height: 6px; background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 3px); }
+.full-fmt-sketch[data-format='a4'] { display: grid; grid-template-columns: repeat(3, 12px); gap: 2px; height: auto; padding: 3px; border-radius: 3px; box-shadow: 0 0 0 1px var(--gray-300); }
+.full-fmt-sketch[data-format='a4'] i { width: 12px; height: 6px; box-shadow: none; background: var(--gray-100); }
+.full-fmt-sketch[data-format='a4'] i b { height: 3px; }
+.full-fmt-size { flex-wrap: wrap; align-items: flex-end; }
+.full-fmt-size label { display: grid; gap: 4px; width: 150px; flex: none; }
+.full-fmt-size label small, .full-fmt-size > small { color: var(--gray-500); font-size: .78rem; }
+.full-fmt-size > span { padding-bottom: 8px; color: var(--gray-500); }
+.full-fmt-size > small { flex: 1 1 200px; padding-bottom: 8px; }
+.full-note { margin: 0; color: var(--gray-500); font-size: .8rem; line-height: 1.5; }

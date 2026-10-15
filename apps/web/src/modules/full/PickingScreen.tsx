@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { WMS_ITEM_STATUS_LABELS, type WmsItemDto, type WmsListDetailDto, type WmsPrintJobDto, type WmsScanResultDto } from '@nvs/shared';
+import {
+  WMS_ITEM_STATUS_LABELS,
+  WMS_LABEL_FORMAT_INFO,
+  type WmsItemDto,
+  type WmsListDetailDto,
+  type WmsPrintJobDto,
+  type WmsScanResultDto,
+  type WmsSettingsDto,
+} from '@nvs/shared';
 import { int } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { Modal } from '../../shared/ui/Modal';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
 import { usePerson } from '../operation/PersonContext';
-import { fullApi } from './full-api';
+import { fullApi, loadPrintSettings } from './full-api';
+import { printPdf } from './print-pdf';
 import { ProductDock } from './ProductDock';
 
 type Dialog =
@@ -21,7 +30,10 @@ type Dialog =
 
 const errMsg = (err: unknown) => (err instanceof ApiError ? err.message : 'Não foi possível concluir.');
 
-/** Separação de uma lista: bipa o produto em foco; ao concluir o item, as etiquetas vão para a Zebra. */
+/**
+ * Separação de uma lista: bipa o produto em foco; ao concluir o item, as etiquetas vão para a Zebra (agente) ou,
+ * na impressão pelo navegador, ficam prontas para imprimir em PDF com um toque.
+ */
 export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: { listId: string; focus?: string; onBack: () => void; onOpen: (id: string, sku?: string) => void }) {
   const me = usePerson()!.person.person;
   const [detail, setDetail] = useState<WmsListDetailDto | null>(null);
@@ -33,10 +45,17 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<WmsPrintJobDto | null>(null);
+  const [settings, setSettings] = useState<WmsSettingsDto | null>(null);
+  /** Navegador: etiquetas do último item concluído, esperando imprimir / confirmar que saíram. */
+  const [pending, setPending] = useState<{ sku: string; qty: number; printed: boolean } | null>(null);
+  const browser = settings?.printMode === 'navegador';
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<number | null>(null);
 
   const load = useCallback(() => fullApi.list(listId).then(setDetail).catch((e) => setMsg(errMsg(e))), [listId]);
+  useEffect(() => {
+    void loadPrintSettings().then(setSettings).catch(() => undefined);
+  }, []);
   useEffect(() => {
     void load();
     return () => {
@@ -79,7 +98,10 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
         break;
       case 'complete': {
         blink('complete');
-        if (r.item.labelsReady) watch(r.item.sku, r.print);
+        if (r.item.labelsReady) {
+          if (browser) setPending({ sku: r.item.sku, qty: r.item.qtyPicked, printed: false });
+          else watch(r.item.sku, r.print);
+        }
         setMsg(r.item.status === 'complete' ? `✓ ${r.item.sku} completo` : `${r.item.sku}: ${WMS_ITEM_STATUS_LABELS[r.item.status].toLowerCase()} (falta ${r.item.shortageQty})`);
         setFocus(undefined);
         break;
@@ -138,6 +160,29 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
     else void run(() => fullApi.scan(listId, { barcode: c, focusSku: focus ?? item.sku, mode: 'unit' }), c);
   }
 
+  /** Navegador: abre a impressão do PDF (de um SKU ou, sem SKU, da lista inteira). */
+  async function printBrowser(sku?: string, qty?: number) {
+    setMsg('');
+    try {
+      await printPdf(fullApi.labelsPdfUrl(listId, sku, qty));
+      if (sku) setPending({ sku, qty: qty ?? 0, printed: true });
+    } catch (e) {
+      setMsg(errMsg(e));
+    }
+  }
+  async function confirmPrinted(sku: string) {
+    try {
+      await fullApi.markPrinted(listId, sku);
+      setPending(null);
+      await load();
+    } catch (e) {
+      setMsg(errMsg(e));
+    }
+  }
+  const pdfZone = browser && pending && (
+    <PdfZone pending={pending} onPrint={() => void printBrowser(pending.sku, pending.qty)} onConfirm={() => void confirmPrinted(pending.sku)} />
+  );
+
   if (!detail) return msg ? <p className="banner banner-error">{msg}</p> : <div className="promo-skel" aria-hidden="true" />;
   const { list } = detail;
   const pct = list.itemsTotal ? Math.round((list.itemsPicked / list.itemsTotal) * 100) : 0;
@@ -170,6 +215,11 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
             <span aria-hidden="true">🎉</span>
             <h2>Lista concluída!</h2>
             <p>{detail.items.filter((i) => i.shortageQty > 0).length ? 'Os itens com falta foram para o Relatório de Faltas.' : 'Tudo separado e etiquetado.'}</p>
+            {pdfZone}
+            {msg && <p className="pk-msg">{msg}</p>}
+            {browser && (
+              <button type="button" className="pk-btn pk-soft" onClick={() => void printBrowser()}>🖨 Imprimir todas as etiquetas da lista</button>
+            )}
             <button type="button" className="pk-btn pk-primary" onClick={onBack}>Voltar ao painel</button>
           </div>
         ) : (
@@ -224,6 +274,13 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
               </button>
             </div>
 
+            {browser ? (
+              (pdfZone || (item.labelsReady && (
+                <div className="pk-print">
+                  <button type="button" className="pk-btn pk-ok" onClick={() => setDialog({ kind: 'reprint' })}>🖨 Imprimir {item.qtyPicked || item.qtyRequired} etiquetas</button>
+                </div>
+              ))) || null
+            ) : (
             <PrintZone
               job={job}
               ready={item.labelsReady}
@@ -232,6 +289,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
               onPrint={() => setDialog({ kind: 'reprint' })}
               onRetry={() => job && void fullApi.print(listId, job.sku).then((j) => watch(j.sku, j))}
             />
+            )}
           </div>
         )}
       </section>
@@ -257,6 +315,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
         {dialog && item && (
           <DialogBody
             dialog={dialog}
+            settings={settings}
             item={item}
             items={detail.items}
             onClose={() => setDialog(null)}
@@ -275,6 +334,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
             }}
             onReprint={async (qty) => {
               setDialog(null);
+              if (browser) return void printBrowser(item.sku, qty);
               try {
                 watch(item.sku, await fullApi.print(listId, item.sku, qty));
               } catch (e) {
@@ -314,6 +374,29 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
   );
 }
 
+/** Impressão pelo navegador: imprimir o PDF do item concluído e confirmar que as etiquetas saíram. */
+function PdfZone(p: { pending: { sku: string; qty: number; printed: boolean }; onPrint: () => void; onConfirm: () => void }) {
+  const { pending } = p;
+  return (
+    <div className="pk-print">
+      {!pending.printed ? (
+        <>
+          <p data-s="done">✓ {pending.sku} concluído: {pending.qty} etiqueta(s) prontas</p>
+          <button type="button" className="pk-btn pk-ok" onClick={p.onPrint}>🖨 Imprimir {pending.qty} etiquetas</button>
+        </>
+      ) : (
+        <>
+          <p data-s="queue">As etiquetas do {pending.sku} saíram certinhas?</p>
+          <span className="pk-row">
+            <button type="button" className="pk-btn pk-ok" onClick={p.onConfirm}>✓ Sim, saíram</button>
+            <button type="button" className="pk-btn pk-soft" onClick={p.onPrint}>⟳ Imprimir de novo</button>
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Zona de impressão (como no NVS-WMS): só aparece quando o item tem etiqueta pronta ou já foi para a fila. */
 function PrintZone(p: { job: WmsPrintJobDto | null; ready: boolean; qty: number; zplUrl: string; onPrint: () => void; onRetry: () => void }) {
   const { job } = p;
@@ -344,6 +427,7 @@ function PrintZone(p: { job: WmsPrintJobDto | null; ready: boolean; qty: number;
 
 function DialogBody(p: {
   dialog: Dialog;
+  settings: WmsSettingsDto | null;
   item: WmsItemDto;
   items: WmsItemDto[];
   onClose: () => void;
@@ -397,7 +481,13 @@ function DialogBody(p: {
       return (
         <form className="full-modal" onSubmit={(e) => { e.preventDefault(); if (n > 0) p.onReprint(n); }}>
           <h2>Imprimir etiquetas do {item.sku}</h2>
-          <p>Código {item.mlCode ?? item.sku} · 2 por linha.</p>
+          <p>
+            Código {item.mlCode ?? item.sku} ·{' '}
+            {p.settings?.printMode === 'navegador'
+              ? `${WMS_LABEL_FORMAT_INFO[p.settings.labelFormat].label} (${p.settings.labelWidthMm} × ${p.settings.labelHeightMm} mm)`
+              : '2 por linha'}
+            .
+          </p>
           {num('Quantidade de etiquetas', 5000)}
           <button type="submit" className="full-dark-btn">Imprimir</button>
         </form>

@@ -149,7 +149,7 @@ export const TOURS = {
       title: 'Supervisão Full',
       text:
         'Aqui fica a expedição do Full do Mercado Livre, do PDF do envio até a etiqueta na caixa.\n' +
-        'A Análise carrega o envio; a Operação separa bipando; as etiquetas saem sozinhas na Zebra.',
+        'A Análise carrega o envio; a Operação separa bipando e imprime as etiquetas (em qualquer impressora, ou sozinhas na Zebra).',
     },
     { target: '.full-tabs', title: 'As abas', text: 'Visão Geral (andamento e faltas), Listas e Lotes (cada envio e suas listas), Processamento (carregar o PDF) e Produtos (os códigos de barras de cada SKU).' },
     { title: 'Processamento', text: 'Baixe no ML o PDF “Lista de produtos e instruções de preparação” do envio e envie em Processamento: o sistema monta as listas de até 1.000 unidades e cadastra o Código ML e o EAN de cada produto.' },
@@ -201,7 +201,7 @@ export const TOURS = {
         'Este é o computador da operação. Aqui você escolhe o que vai fazer agora e eu te ajudo em cada tela.\n' +
         'Vamos ver as opções?',
     },
-    { target: '.op-choice-full', title: 'Supervisão Full', text: 'Para montar o envio do Full: pegue uma lista, bipe cada produto e as etiquetas saem sozinhas na impressora Zebra.' },
+    { target: '.op-choice-full', title: 'Supervisão Full', text: 'Para montar o envio do Full: pegue uma lista, bipe cada produto e imprima as etiquetas com o Código ML.' },
     { target: '.op-choice-dev', title: 'Devoluções', text: 'Para o que voltou do comprador: bipe o pacote, confira o produto, tire as fotos e lance no estoque.' },
     { target: '.op-switch', title: 'Trocar de tarefa', text: 'Pelo topo você troca entre Início, Supervisão Full e Devoluções a qualquer momento, sem sair da sua conta.' },
     {
@@ -213,7 +213,7 @@ export const TOURS = {
     {
       title: 'Separar o Full 📦',
       text:
-        'Aqui você monta o envio para o Full: pega uma lista, bipa cada produto e as etiquetas saem sozinhas na impressora Zebra.\n' +
+        'Aqui você monta o envio para o Full: pega uma lista, bipa cada produto e imprime as etiquetas com o Código ML.\n' +
         'Vou te mostrar onde fica cada coisa.',
     },
     { target: '.full-op-search', title: 'Atalho: bipe qualquer produto', text: 'Bipe o código de barras (ou digite SKU ou nome) e o sistema abre a lista certa já no produto. Se ele estiver com outra pessoa, oferece transferir para você.' },

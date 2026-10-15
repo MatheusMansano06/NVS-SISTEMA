@@ -239,6 +239,8 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
       // ler PDF pesa: 20 envios/min por IP (nos testes, sem limite prático)
       inboundPerMinute: env.NODE_ENV === 'test' ? 1000 : 20,
       checkPassword: (tenantId, userId, password) => identity.checkPassword(tenantId, userId, password),
+      hasFull: async (tenantId) =>
+        (await database.query<{ ok: boolean }>(`SELECT 'full' = ANY(features) AS ok FROM tenants WHERE id = $1`, [tenantId])).rows[0]?.ok ?? false,
     }),
     { prefix: '/api/v1' },
   );

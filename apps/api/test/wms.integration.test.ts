@@ -32,13 +32,21 @@ type Cookies = Record<string, string>;
 
 describe.skipIf(!TEST_DB)('Supervisão Full', () => {
   let app: FastifyInstance;
+  let admin: Database;
   beforeAll(async () => {
     app = await buildApp({ env: loadEnv({ ...process.env, DATABASE_URL: TEST_DB, AUTH_RATE_LIMIT_MAX: '1000' }) });
+    admin = new Database(TEST_DB!);
   });
-  afterAll(() => app.close());
+  afterAll(async () => {
+    await admin.close();
+    await app.close();
+  });
 
-  /** Empresa com Ana (Análise, MASTER) e João (Operação); devolve os cookies de cada um. */
-  async function company() {
+  /**
+   * Empresa com Ana (Análise, MASTER) e João (Operação); devolve os cookies de cada um. Por padrão com o Full
+   * liberado e imprimindo pelo agente Zebra (o fluxo original); `navegador` = etiquetas em PDF.
+   */
+  async function company(opts: { full?: boolean; print?: 'agente_zebra' | 'navegador' } = {}) {
     const cnpj = randomCnpj();
     const email = `wms-${cnpj}@teste.dev`;
     await app.inject({
@@ -49,12 +57,23 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     const res = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: cnpj } });
     const base = { nvs_session: cookieOf(res, 'nvs_session') };
     const team = (await app.inject({ method: 'GET', url: '/api/v1/team', cookies: base })).json();
+    const ip = `10.${randomInt(0, 255)}.${randomInt(0, 255)}.${randomInt(1, 255)}`;
     const enter = async (name: string, mode: string) => {
       const m = team.members.find((x: { name: string }) => x.name === name);
-      const r = await app.inject({ method: 'POST', url: '/api/v1/team/login', cookies: base, payload: { operatorId: m.id, pin: '1234', mode } });
+      // IP próprio por empresa: o login da equipe tem limite de 20/min por IP
+      const r = await app.inject({ method: 'POST', url: '/api/v1/team/login', remoteAddress: ip, cookies: base, payload: { operatorId: m.id, pin: '1234', mode } });
+      if (r.statusCode !== 200) throw new Error(`team/login ${r.statusCode} ${r.body}`);
       return { ...base, nvs_person: cookieOf(r, 'nvs_person') };
     };
-    return { base, cnpj, tenantId: res.json().tenant.id as string, ana: await enter('Ana', 'analise'), joao: await enter('João', 'operacao') };
+    const tenantId = res.json().tenant.id as string;
+    if (opts.full !== false) await admin.query(`UPDATE tenants SET features = array_append(features, 'full') WHERE id = $1`, [tenantId]);
+    await admin.withTenant(tenantId, (db) =>
+      db.query(`INSERT INTO wms_settings (tenant_id, print_mode, label_format, label_width_mm, label_height_mm) VALUES ($1, $2, 'rolo_2col', 40, 25)`, [
+        tenantId,
+        opts.print ?? 'agente_zebra',
+      ]),
+    );
+    return { base, cnpj, tenantId, ana: await enter('Ana', 'analise'), joao: await enter('João', 'operacao') };
   }
   const call = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, cookies: Cookies, payload?: object) =>
     app.inject({ method, url: `/api/v1${url}`, cookies, ...(payload ? { payload: payload as Record<string, unknown> } : {}) });
@@ -319,5 +338,52 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     await new Promise((r) => setTimeout(r, 100));
     expect((await call('GET', '/wms/printer', joao)).json().ready).toBe(false); // agente fechou
     expect((await call('POST', '/wms/printer/confirm', joao)).statusCode).toBe(400);
+  });
+
+  it('sem o recurso Full liberado, a API do Full é recusada', async () => {
+    const { ana } = await company({ full: false });
+    const r = await call('GET', '/wms/batches', ana);
+    expect(r.statusCode).toBe(403);
+    expect(r.json().error.code).toBe('FEATURE_LOCKED');
+    expect((await inbound(ana)).statusCode).toBe(403);
+  });
+
+  it('impressão pelo navegador: sem agente, etiquetas em PDF no formato da empresa e o operador confirma', async () => {
+    const { ana, joao } = await company({ print: 'navegador' });
+    // configuração: só a Análise muda; vale o formato salvo
+    expect((await call('GET', '/wms/settings', joao)).json()).toMatchObject({ printMode: 'navegador', labelFormat: 'rolo_2col' });
+    const settings = { printMode: 'navegador', labelFormat: 'rolo_1col', labelWidthMm: 50, labelHeightMm: 25 };
+    expect((await app.inject({ method: 'PUT', url: '/api/v1/wms/settings', cookies: joao, payload: settings })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'PUT', url: '/api/v1/wms/settings', cookies: ana, payload: { ...settings, labelWidthMm: 5 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PUT', url: '/api/v1/wms/settings', cookies: ana, payload: settings })).json()).toEqual(settings);
+
+    // pronto sem agente nenhum
+    expect((await call('GET', '/wms/printer', joao)).json()).toMatchObject({ ready: true, settings: { printMode: 'navegador' } });
+
+    const listId = (await inbound(ana)).json().batch.lists[0].id as string;
+    // nada separado ainda: lista inteira não tem etiqueta
+    expect((await call('GET', `/wms/lists/${listId}/labels.pdf`, joao)).statusCode).toBe(400);
+    await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: 'IBFJ71702', mode: 'box' });
+    const done = (await call('GET', `/wms/lists/${listId}`, joao)).json();
+    const item = done.items.find((i: { sku: string }) => i.sku === 'PROTENIS');
+    expect(item).toMatchObject({ status: 'complete', labelsPrinted: false });
+    // nada vai para a fila do agente
+    expect((await call('GET', `/wms/lists/${listId}/print?sku=PROTENIS`, joao)).json()).toBeNull();
+
+    const pdf = await call('GET', `/wms/lists/${listId}/labels.pdf?sku=PROTENIS`, joao);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    expect((await call('GET', `/wms/lists/${listId}/labels.pdf`, joao)).statusCode).toBe(200); // lista inteira
+
+    expect((await call('POST', `/wms/lists/${listId}/printed`, joao, { sku: 'PROTENIS' })).statusCode).toBe(204);
+    const after = (await call('GET', `/wms/lists/${listId}`, joao)).json();
+    expect(after.items.find((i: { sku: string }) => i.sku === 'PROTENIS').labelsPrinted).toBe(true);
+
+    // teste e conferência do dia sem agente
+    const test = await call('GET', '/wms/printer/test.pdf', joao);
+    expect(test.headers['content-type']).toBe('application/pdf');
+    expect((await call('POST', '/wms/printer/confirm', joao)).statusCode).toBe(204);
+    expect((await call('GET', '/wms/printer', ana)).json().checkedToday).toMatchObject({ machine: 'navegador', printer: 'PDF 50 × 25 mm' });
   });
 });

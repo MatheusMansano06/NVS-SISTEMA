@@ -1,4 +1,5 @@
 import type { ViabilityDto, ViabilityLiteDto } from '@nvs/shared';
+import type { FastifyBaseLogger } from 'fastify';
 import type { Database } from '../../../shared/infrastructure/database.js';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import { AppError } from '../../../shared/kernel/errors.js';
@@ -45,6 +46,7 @@ export class ViabilityService {
     private readonly ml: MlIntegrationService,
     private readonly api: MlRawApi,
     private readonly cache: Cache,
+    private readonly log?: Pick<FastifyBaseLogger, 'warn'>,
   ) {}
 
   async analyze(tenantId: string, rawId: string): Promise<ViabilityDto> {
@@ -123,7 +125,11 @@ export class ViabilityService {
         const chunk = missing.slice(i, i + MULTIGET);
         const res = await this.api.rawGet<{ code: number; body: MlItemLite }[]>(token, `/items?ids=${chunk.join(',')}`);
         for (const r of res ?? []) {
-          if (r.code !== 200 || !r.body?.id) continue;
+          if (r.code !== 200 || !r.body?.id) {
+            // o ML pode recusar anúncio de outro vendedor: registra o motivo para entendermos o bloqueio
+            this.log?.warn({ code: r.code, body: r.body }, 'Viabilidade: ML recusou anúncio no lote');
+            continue;
+          }
           const lite = toLite(r.body, now);
           out[lite.itemId] = lite;
           await this.cache.set(`viability-lite:${lite.itemId}`, lite, CACHE_TTL);

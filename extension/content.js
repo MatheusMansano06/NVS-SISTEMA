@@ -4,7 +4,7 @@
 // no ML (vendas e tipo de anúncio de outro vendedor, que a API do ML não libera). Ambas via background.js.
 (() => {
   const BATCH = 60; // limite da rota em lote
-  const PAGE_CONCURRENCY = 2; // páginas de anúncio buscadas ao mesmo tempo (devagar, para não parecer robô)
+  const PAGE_CONCURRENCY = 3; // páginas de anúncio buscadas ao mesmo tempo (devagar, para não parecer robô)
   const CARD_SEL = '.poly-card, li.ui-search-layout__item, .ui-search-result__wrapper';
 
   const nf = new Intl.NumberFormat('pt-BR');
@@ -61,7 +61,6 @@
   const pageQueue = [];
   const pageQueued = new Set();
   let pageRunning = 0;
-  let pageBlocked = false;
   let blocked = null; // erro do NVS que impede novas consultas (login, recurso, conexão ML)
   let timer = null;
 
@@ -130,21 +129,20 @@
 
   // vendas e tipo de anúncio de terceiro: página do anúncio, poucas por vez e só das que aparecem na tela
   function queuePage(id) {
-    if (!id || pageQueued.has(id) || pageBlocked) return;
+    if (!id || pageQueued.has(id)) return;
     pageQueued.add(id);
     pageQueue.push(id);
     pumpPages();
   }
 
   async function pumpPages() {
-    while (pageRunning < PAGE_CONCURRENCY && pageQueue.length && !pageBlocked) {
+    while (pageRunning < PAGE_CONCURRENCY && pageQueue.length) {
       const id = pageQueue.shift();
       // anúncio da própria conta já vem completo da API
       if (api.get(id)?.fromApi) continue;
       pageRunning++;
       send({ type: 'page', id })
         .then((r) => {
-          if (r?.blocked) pageBlocked = true;
           if (r?.ok) {
             page.set(id, r.data);
             refresh(id);

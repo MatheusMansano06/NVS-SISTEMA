@@ -32,17 +32,29 @@ function parseItemPage(html, finalUrl) {
   };
 }
 
+// páginas de verificação ("não sou robô", login): o ML não entregou o anúncio
+const CHALLENGE = /\/captcha\/wall|\/gz\/account-verification|\/challenge|\/gz\/login/i;
+let pausedUntil = 0;
+
 async function itemPage(id) {
   const key = `page:${id}`;
   const saved = (await chrome.storage.local.get(key))[key];
   if (saved && Date.now() - saved.at < PAGE_TTL) return { ok: true, data: saved.data };
+  if (Date.now() < pausedUntil) return { ok: false, paused: true };
   try {
-    const res = await fetch(`https://produto.mercadolivre.com.br/MLB-${id.replace(/^MLB-?/i, '')}`, { credentials: 'include' });
-    // o ML às vezes pede verificação de "não sou robô": para de buscar e avisa
-    if (/account-verification|captcha/i.test(res.url)) return { ok: false, blocked: true };
+    // sem cookies, como um visitante: com a sessão do usuário o ML costuma pedir verificação
+    const res = await fetch(`https://produto.mercadolivre.com.br/MLB-${id.replace(/^MLB-?/i, '')}`, { credentials: 'omit' });
+    if (CHALLENGE.test(res.url)) {
+      pausedUntil = Date.now() + 5 * 60_000;
+      return { ok: false, paused: true };
+    }
+    if (res.status === 429) {
+      pausedUntil = Date.now() + 60_000;
+      return { ok: false, paused: true };
+    }
     if (!res.ok) return { ok: false, status: res.status };
     const data = parseItemPage(await res.text(), res.url);
-    await chrome.storage.local.set({ [key]: { at: Date.now(), data } });
+    if (data.soldQuantity !== null || data.listingTypeId !== null) await chrome.storage.local.set({ [key]: { at: Date.now(), data } });
     return { ok: true, data };
   } catch {
     return { ok: false, status: 0 };

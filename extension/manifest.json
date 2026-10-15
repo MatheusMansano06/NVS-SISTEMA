@@ -1,17 +1,34 @@
 {
   "manifest_version": 3,
   "name": "NVS — Estudo de Viabilidade",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mostra data de criação, vendas, tipo (catálogo/tradicional) e visitas dos anúncios do Mercado Livre.",
-  "permissions": ["storage"],
-  "host_permissions": ["https://nvs-app-production.up.railway.app/*", "http://localhost:3333/*"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "NVS Viabilidade" },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://nvs-app-production.up.railway.app/*",
+    "http://localhost:3333/*",
+    "https://*.mercadolivre.com.br/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "NVS Viabilidade"
+  },
   "content_scripts": [
     {
-      "matches": ["https://*.mercadolivre.com.br/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "https://*.mercadolivre.com.br/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ]

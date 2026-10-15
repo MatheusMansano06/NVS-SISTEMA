@@ -21,6 +21,12 @@ export function viabilityRoutes(service: ViabilityService | null) {
       return service.analyzeMany(req.user.tenantId, q.data.ids);
     });
 
+    // precisão da data estimada (medida nos anúncios da própria empresa)
+    app.get('/ml/viabilidade/precisao', live, async (req) => {
+      if (!service) throw new ValidationError('Integração com o Mercado Livre ainda não configurada neste ambiente');
+      return service.accuracy(req.user.tenantId);
+    });
+
     app.get('/ml/viabilidade/:id', live, async (req) => {
       if (!service) throw new ValidationError('Integração com o Mercado Livre ainda não configurada neste ambiente');
       const p = params.safeParse(req.params);

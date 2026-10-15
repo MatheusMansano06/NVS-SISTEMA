@@ -65,3 +65,6 @@
 .nvs-month { display: flex; flex-direction: column; align-items: center; background: #f1f5f9; border-radius: 6px; padding: 4px; }
 .nvs-month span { color: #6b7280; font-size: 11px; }
 .nvs-foot { color: #9ca3af; font-size: 11px; margin: 10px 0 0; }
+.nvs-bars { display: flex; align-items: flex-end; gap: 6px; height: 110px; background: #f8fafc; border-radius: 8px; padding: 8px; box-sizing: border-box; }
+.nvs-bar-col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.nvs-bar-fill { width: 100%; min-height: 2px; background: #1d4ed8; border-radius: 4px 4px 0 0; opacity: 0.8; }

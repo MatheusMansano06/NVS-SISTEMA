@@ -1,15 +1,16 @@
-import type { ViabilityDto, ViabilityLiteDto } from '@nvs/shared';
+import type { ViabilityAccuracyDto, ViabilityDto, ViabilityLiteDto } from '@nvs/shared';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Database } from '../../../shared/infrastructure/database.js';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import { AppError } from '../../../shared/kernel/errors.js';
 import { typeLabel } from '../domain/listing-margin.js';
-import { ageInDays, monthlyVisits, salesPerDay } from '../domain/viability.js';
+import { ageInDays, estimateError, estimateTime, mlbNumber, monthlyVisits, prepareAnchors, salesPerDay, type IdAnchor } from '../domain/viability.js';
 import type { MlRawApi } from '../infrastructure/ml-api.js';
 import type { MlIntegrationService } from './ml-integration-service.js';
 
 const CACHE_TTL = 6 * 3600; // dado público do anúncio: o mesmo para qualquer empresa
 const VISIT_DAYS = 180;
+const ANCHORS_TTL = 6 * 3600;
 const MULTIGET = 20; // limite do ML por chamada de /items?ids=
 export const MAX_BATCH = 60;
 
@@ -65,7 +66,13 @@ export class ViabilityService {
       const winner = product?.buy_box_winner?.item_id;
       if (winner) item = await this.api.rawGet<MlItemLite>(token, `/items/${winner}`);
     }
-    if (!item) throw new AppError('Anúncio não encontrado ou não liberado pelo Mercado Livre.', 'NOT_FOUND', 404);
+    if (!item) {
+      // anúncio de outro vendedor: o ML recusa /items (403). Tenta os dados que ele ainda libera; vendas e tipo a extensão lê da página
+      const dto = await this.thirdParty(tenantId, token, id);
+      if (!dto) throw new AppError('Anúncio não encontrado ou não liberado pelo Mercado Livre.', 'NOT_FOUND', 404);
+      await this.cache.set(key, dto, CACHE_TTL);
+      return dto;
+    }
 
     const [visits, seller] = await Promise.all([
       this.api.rawGet<MlVisitsWindow>(token, `/items/${item.id}/visits/time_window?last=${VISIT_DAYS}&unit=day`),
@@ -85,6 +92,8 @@ export class ViabilityService {
       thumbnail: item.thumbnail ?? null,
       price: item.price ?? null,
       createdAt: item.date_created ?? null,
+      createdAtEstimated: false,
+      fromApi: true,
       ageDays: age,
       soldQuantity: item.sold_quantity ?? null,
       salesPerDay: salesPerDay(item.sold_quantity, age),
@@ -136,8 +145,105 @@ export class ViabilityService {
         }
       }
     }
-    for (const id of ids) out[id] ??= null;
+    // recusados pelo ML (anúncios de terceiros): data pela descrição; se o ML também barrar a descrição, estimada
+    let descriptionOpen: boolean | null = null;
+    let token: string | null = null;
+    for (const id of ids) {
+      if (out[id]) continue;
+      let exact: string | null = null;
+      if (descriptionOpen !== false) {
+        token ??= await this.anyToken(tenantId);
+        exact = await this.createdAtFromDescription(token, id);
+        descriptionOpen ??= exact !== null;
+      }
+      const at = exact ?? (await this.estimate(tenantId, id));
+      const age = ageInDays(at, new Date());
+      out[id] = at
+        ? { itemId: id, price: null, createdAt: at, createdAtEstimated: !exact, fromApi: false, ageDays: age, soldQuantity: null, salesPerDay: null, catalog: null, listingType: null, freeShipping: null, logisticType: null }
+        : null;
+    }
     return out;
+  }
+
+  /**
+   * Anúncio de terceiro: data pela descrição do anúncio (criada junto com ele) ou estimada pelo número;
+   * visitas pela janela diária ou, se o ML não liberar, mês a mês.
+   */
+  private async thirdParty(tenantId: string, token: string, id: string): Promise<ViabilityDto | null> {
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + i, 1));
+      const to = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0));
+      return { month: from.toISOString().slice(0, 7), from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+    });
+    const [createdExact, window, total, ...ranges] = await Promise.all([
+      this.createdAtFromDescription(token, id),
+      this.api.rawGet<MlVisitsWindow>(token, `/items/${id}/visits/time_window?last=${VISIT_DAYS}&unit=day`),
+      this.api.rawGet<Record<string, number>>(token, `/visits/items?ids=${id}`),
+      ...months.map((m) => this.api.rawGet<{ total_visits?: number }[]>(token, `/items/visits?ids=${id}&date_from=${m.from}&date_to=${m.to}`)),
+    ]);
+    const monthlyRaw = months.map((m, i) => ({ month: m.month, total: ranges[i]?.[0]?.total_visits ?? null }));
+    this.log?.warn(
+      { id, description: createdExact, timeWindow: Boolean(window), total: total?.[id] ?? null, monthly: monthlyRaw.filter((m) => m.total !== null).length },
+      'Viabilidade: dados liberados pelo ML para anúncio de terceiro',
+    );
+
+    const createdAt = createdExact ?? (await this.estimate(tenantId, id));
+    if (!createdAt && !window && !total) return null;
+    const age = ageInDays(createdAt, now);
+    const daily = (window?.results ?? []).map((r) => ({ date: r.date.slice(0, 10), total: r.total ?? 0 }));
+    const monthly = daily.length ? monthlyVisits(daily) : monthlyRaw.filter((m): m is { month: string; total: number } => m.total !== null);
+    const visitsTotal = window?.total_visits ?? (monthly.length ? monthly.reduce((acc, m) => acc + m.total, 0) : null);
+    const visits = daily.length || monthly.length ? { total: visitsTotal ?? 0, daily, monthly } : null;
+    return {
+      itemId: id, title: '', permalink: null, thumbnail: null, price: null, createdAt, createdAtEstimated: !createdExact, fromApi: false,
+      ageDays: age, soldQuantity: null, salesPerDay: null, catalog: null, listingType: null, freeShipping: null, logisticType: null,
+      availableQuantity: null, seller: null, visits, unavailable: visits ? ['vendas', 'tipo'] : ['vendas', 'tipo', 'visitas'],
+      fetchedAt: now.toISOString(),
+    };
+  }
+
+  /** A descrição do anúncio nasce com ele: a data dela é a data de criação. Guardada por 30 dias (não muda). */
+  private async createdAtFromDescription(token: string, id: string): Promise<string | null> {
+    const key = `viability-created:${id}`;
+    const hit = await this.cache.get<{ at: string | null }>(key);
+    if (hit) return hit.at;
+    const d = await this.api.rawGet<{ date_created?: string | null }>(token, `/items/${id}/description`);
+    const at = d?.date_created && !Number.isNaN(Date.parse(d.date_created)) ? new Date(d.date_created).toISOString() : null;
+    await this.cache.set(key, { at }, at ? 30 * 86_400 : 86_400);
+    return at;
+  }
+
+  /** Precisão da data estimada nos anúncios da própria empresa (cada um estimado sem a sua data real). */
+  async accuracy(tenantId: string): Promise<ViabilityAccuracyDto> {
+    await this.ensureFeature(tenantId);
+    const raw = await this.rawAnchors(tenantId);
+    const e = estimateError(raw, Date.now());
+    return { anchors: raw.length, sample: e?.n ?? 0, medianDays: e?.medianDays ?? null, p90Days: e?.p90Days ?? null };
+  }
+
+  /** Data estimada (ISO) pelo número do anúncio, com os anúncios da empresa como referência. */
+  private async estimate(tenantId: string, id: string): Promise<string | null> {
+    const n = mlbNumber(id);
+    if (n === null) return null;
+    const key = `viability-anchors:${tenantId}`;
+    let anchors = await this.cache.get<IdAnchor[]>(key);
+    if (!anchors) {
+      anchors = prepareAnchors(await this.rawAnchors(tenantId));
+      await this.cache.set(key, anchors, ANCHORS_TTL);
+    }
+    const t = estimateTime(n, anchors, Date.now());
+    return t === null ? null : new Date(t).toISOString();
+  }
+
+  private async rawAnchors(tenantId: string): Promise<IdAnchor[]> {
+    const rows = await this.db.withTenant(tenantId, (c) =>
+      c.query<{ external_id: string; listed_at: Date }>(
+        `SELECT external_id, listed_at FROM listings
+          WHERE marketplace = 'mercado_livre' AND listed_at IS NOT NULL AND external_id ~ '^MLB[0-9]+$'`,
+      ),
+    );
+    return rows.rows.map((r) => ({ id: Number(r.external_id.slice(3)), t: r.listed_at.getTime() }));
   }
 
   /** A extensão chama a API direto, então o "em breve" do plano precisa valer aqui também. */
@@ -161,6 +267,8 @@ function toLite(item: MlItemLite, now: Date): ViabilityLiteDto {
     itemId: item.id,
     price: item.price ?? null,
     createdAt: item.date_created ?? null,
+    createdAtEstimated: false,
+    fromApi: true,
     ageDays: age,
     soldQuantity: item.sold_quantity ?? null,
     salesPerDay: salesPerDay(item.sold_quantity, age),

@@ -18,10 +18,42 @@ async function call(path) {
   }
 }
 
+// ---------------------------------------------------------------- dados da página do anúncio (anúncio de terceiro)
+// O ML não libera vendas/tipo de outro vendedor pela API, mas a página do anúncio traz esses dados no HTML.
+const PAGE_TTL = 6 * 3600 * 1000;
+
+function parseItemPage(html, finalUrl) {
+  const sold = html.match(/\\?"sold_quantity\\?"\s*:\s*(\d+)/);
+  const type = html.match(/\\?"listing_type_id\\?"\s*:\s*\\?"(\w+)/);
+  return {
+    soldQuantity: sold ? Number(sold[1]) : null,
+    listingTypeId: type ? type[1] : null,
+    catalog: /\/p\/MLB\d+/i.test(finalUrl),
+  };
+}
+
+async function itemPage(id) {
+  const key = `page:${id}`;
+  const saved = (await chrome.storage.local.get(key))[key];
+  if (saved && Date.now() - saved.at < PAGE_TTL) return { ok: true, data: saved.data };
+  try {
+    const res = await fetch(`https://produto.mercadolivre.com.br/MLB-${id.replace(/^MLB-?/i, '')}`, { credentials: 'include' });
+    // o ML às vezes pede verificação de "não sou robô": para de buscar e avisa
+    if (/account-verification|captcha/i.test(res.url)) return { ok: false, blocked: true };
+    if (!res.ok) return { ok: false, status: res.status };
+    const data = parseItemPage(await res.text(), res.url);
+    await chrome.storage.local.set({ [key]: { at: Date.now(), data } });
+    return { ok: true, data };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type === 'batch') call(`/ml/viabilidade?ids=${encodeURIComponent(msg.ids.join(','))}`).then(reply);
   else if (msg?.type === 'one') call(`/ml/viabilidade/${encodeURIComponent(msg.id)}`).then(reply);
   else if (msg?.type === 'me') call('/auth/me').then(reply);
+  else if (msg?.type === 'page') itemPage(msg.id).then(reply);
   else return false;
   return true; // resposta assíncrona
 });

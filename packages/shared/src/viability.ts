@@ -7,6 +7,10 @@ export interface ViabilityDto {
   price: number | null;
   /** Data de criação do anúncio (ISO). */
   createdAt: string | null;
+  /** true = data estimada pelo número do anúncio (o ML não libera a data de anúncio de outro vendedor). */
+  createdAtEstimated: boolean;
+  /** true = dados vieram da API do ML (anúncio da própria conta); false = só a estimativa, o resto sai da página. */
+  fromApi: boolean;
   /** Dias desde a criação. */
   ageDays: number | null;
   /** Vendas informadas pelo ML (pode vir arredondada ou ausente para anúncio de terceiro). */
@@ -36,5 +40,13 @@ export interface ViabilityDto {
 /** Versão leve (sem visitas nem vendedor) para as etiquetas da página de busca, consultada em lote. */
 export type ViabilityLiteDto = Pick<
   ViabilityDto,
-  'itemId' | 'price' | 'createdAt' | 'ageDays' | 'soldQuantity' | 'salesPerDay' | 'catalog' | 'listingType' | 'freeShipping' | 'logisticType'
+  'itemId' | 'price' | 'createdAt' | 'createdAtEstimated' | 'fromApi' | 'ageDays' | 'soldQuantity' | 'salesPerDay' | 'catalog' | 'listingType' | 'freeShipping' | 'logisticType'
 >;
+
+/** Precisão da data estimada, medida nos anúncios da própria empresa. */
+export interface ViabilityAccuracyDto {
+  anchors: number;
+  sample: number;
+  medianDays: number | null;
+  p90Days: number | null;
+}

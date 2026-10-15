@@ -19,7 +19,7 @@ export default tseslint.config(
     files: ['extension/**/*.js'],
     languageOptions: {
       sourceType: 'script',
-      globals: { chrome: 'readonly', document: 'readonly', location: 'readonly', fetch: 'readonly', URL: 'readonly', URLSearchParams: 'readonly', MutationObserver: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' },
+      globals: { chrome: 'readonly', document: 'readonly', location: 'readonly', fetch: 'readonly', URL: 'readonly', URLSearchParams: 'readonly', MutationObserver: 'readonly', IntersectionObserver: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' },
     },
   },
   {

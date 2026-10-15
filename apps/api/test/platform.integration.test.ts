@@ -131,4 +131,47 @@ describe.skipIf(!TEST_DB)('Painel Master (dono do NVS Tech)', () => {
     const ov = (await call('GET', '/admin/overview')).json();
     expect(ov.tenants.total).toBeGreaterThan(0);
   });
+
+  it('recursos por plano e por empresa: padrão, plano, ajuste manual e volta ao plano', async () => {
+    const cnpj = randomCnpj();
+    const email = `recursos-${cnpj}@teste.dev`;
+    await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload: { email, phone: '11912345678', cnpj } });
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: cnpj } });
+    const tenant = { nvs_session: login.cookies.find((c) => c.name === 'nvs_session')!.value };
+    const features = async () => (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies: tenant })).json().tenant.features as string[];
+    const tenantId = (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies: tenant })).json().tenant.id as string;
+    // empresa nova: tudo, menos a Supervisão Full (em teste)
+    expect(await features()).toEqual(expect.arrayContaining(['financeiro', 'vendas', 'devolucoes']));
+    expect(await features()).not.toContain('full');
+
+    const adminEmail = `master-rec-${cnpj}@nvs.dev`;
+    await db.query('INSERT INTO platform_admins (email, name, password_hash) VALUES ($1, $2, $3)', [adminEmail, 'Dono', await hashPassword('senha-master-123')]);
+    const al = await app.inject({ method: 'POST', url: '/api/v1/admin/auth/login', payload: { email: adminEmail, password: 'senha-master-123' } });
+    const admin = { nvs_admin: al.cookies.find((c) => c.name === 'nvs_admin')!.value };
+    const call = (method: 'GET' | 'POST' | 'PUT', url: string, payload?: object) =>
+      app.inject({ method, url: `/api/v1${url}`, cookies: admin, ...(payload ? { payload: payload as Record<string, unknown> } : {}) });
+
+    // plano Básico: só financeiro e vendas → a empresa assinante recebe exatamente isso
+    await call('POST', '/admin/plans', { name: `Básico ${cnpj}`, price: 99, active: true, features: ['financeiro', 'vendas'] });
+    const plan = (await call('GET', '/admin/plans')).json().find((p: { name: string }) => p.name === `Básico ${cnpj}`);
+    expect(plan.features).toEqual(['financeiro', 'vendas']);
+    expect((await call('PUT', `/admin/tenants/${tenantId}/subscription`, { planId: plan.id, status: 'active', billingDay: 5 })).statusCode).toBe(204);
+    expect((await features()).sort()).toEqual(['financeiro', 'vendas']);
+
+    // mudar o plano vale na hora para quem segue o plano
+    await call('PUT', `/admin/plans/${plan.id}`, { name: plan.name, price: 99, active: true, features: ['financeiro', 'vendas', 'precificador'] });
+    expect((await features()).sort()).toEqual(['financeiro', 'precificador', 'vendas']);
+
+    // ajuste manual: só esta empresa, e deixa de seguir o plano
+    expect((await call('POST', `/admin/tenants/${tenantId}/features`, { feature: 'full', enabled: true })).statusCode).toBe(204);
+    expect(await features()).toContain('full');
+    expect((await call('GET', `/admin/tenants/${tenantId}`)).json().featuresCustom).toBe(true);
+    await call('PUT', `/admin/plans/${plan.id}`, { name: plan.name, price: 99, active: true, features: ['financeiro'] });
+    expect(await features()).toContain('vendas'); // personalizada: não mudou com o plano
+
+    // voltar ao plano
+    expect((await call('POST', `/admin/tenants/${tenantId}/features/reset`)).statusCode).toBe(204);
+    expect(await features()).toEqual(['financeiro']);
+    expect((await call('GET', `/admin/tenants/${tenantId}`)).json().featuresCustom).toBe(false);
+  });
 });

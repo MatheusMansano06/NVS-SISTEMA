@@ -13,16 +13,19 @@ import { NoticesBar } from './NoticesBar';
 import { ThemeSwitch } from '../shared/theme';
 import './shell.css';
 
+const LISTING_TABS: [TenantFeature, string][] = [['anuncios', '/anuncios'], ['promocoes', '/anuncios/promocoes'], ['marketing', '/anuncios/marketing']];
+const listingsHome = (features: TenantFeature[]) => LISTING_TABS.find(([f]) => features.includes(f))?.[1];
+
 const NAV: { label: string; icon: IconName; path?: string; master?: boolean; feature?: TenantFeature }[] = [
   { label: 'Dashboard', icon: 'dashboard', path: '/' },
-  { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro' },
+  { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro', feature: 'financeiro' },
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
-  { label: 'Vendas', icon: 'cart', path: '/vendas' },
+  { label: 'Vendas', icon: 'cart', path: '/vendas', feature: 'vendas' },
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
-  { label: 'Precificador', icon: 'tag', path: '/precificador' },
-  { label: 'Radar de Frete', icon: 'radar', path: '/radar-frete' },
+  { label: 'Precificador', icon: 'tag', path: '/precificador', feature: 'precificador' },
+  { label: 'Radar de Frete', icon: 'radar', path: '/radar-frete', feature: 'radar_frete' },
   { label: 'Supervisão Full', icon: 'truck', path: '/full', feature: 'full' },
-  { label: 'Devoluções', icon: 'undo', path: '/devolucoes' },
+  { label: 'Devoluções', icon: 'undo', path: '/devolucoes', feature: 'devolucoes' },
   { label: 'Equipe', icon: 'users', path: '/equipe', master: true },
   { label: 'Integrações', icon: 'plug' },
 ];
@@ -63,13 +66,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <ul>
             {NAV.filter((item) => !item.master || person?.person.person.master)
               .map((item) => (item.feature && !features.includes(item.feature) ? { ...item, path: undefined } : item))
+              // Anúncios: abre na 1ª tela liberada (meus anúncios, promoção ou marketing)
+              .map((item) => (item.path === '/anuncios' ? { ...item, path: listingsHome(features) } : item))
               .map((item) => (
               <li key={item.label}>
                 <a
                   href={item.path}
                   className="nav-item"
                   title={item.label}
-                  aria-current={item.path && (item.path === path || (item.path !== '/' && path.startsWith(item.path))) ? 'page' : undefined}
+                  aria-current={item.path && (item.path === path || (item.path !== '/' && path.startsWith(item.path)) || (item.label === 'Anúncios' && path.startsWith('/anuncios'))) ? 'page' : undefined}
                   aria-disabled={item.path ? undefined : true}
                   onClick={(e) => {
                     e.preventDefault();

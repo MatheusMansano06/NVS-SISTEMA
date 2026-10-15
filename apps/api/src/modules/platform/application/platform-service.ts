@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { DEFAULT_TENANT_FEATURES } from '@nvs/shared';
 import type {
   AdminDto,
   AnnouncementDto,
@@ -149,7 +150,7 @@ export class PlatformService {
   async tenants(q?: string, id?: string): Promise<TenantRowDto[]> {
     const today = this.deps.today();
     const { rows } = await this.db.query<Json>(
-      `SELECT t.id, t.name, t.cnpj, t.phone, t.status, t.created_at, t.features,
+      `SELECT t.id, t.name, t.cnpj, t.phone, t.status, t.created_at, t.features, t.features_custom,
               (SELECT li.email FROM login_identities li WHERE li.tenant_id = t.id ORDER BY li.email LIMIT 1) AS owner_email,
               (SELECT count(*) FROM login_identities li WHERE li.tenant_id = t.id) AS users,
               EXISTS (SELECT 1 FROM marketplace_identities mi WHERE mi.tenant_id = t.id) AS ml,
@@ -174,6 +175,7 @@ export class PlatformService {
       subscription: r.sub_status ? { status: r.sub_status, planName: r.plan_name, price: num(r.sub_price) } : null,
       overdue: Number(r.overdue ?? 0),
       features: r.features ?? [],
+      featuresCustom: Boolean(r.features_custom),
     };
   }
 
@@ -218,13 +220,27 @@ export class PlatformService {
   /** Liga/desliga um recurso para a empresa (ex.: Supervisão Full); vale na hora para quem já está logado. */
   async setTenantFeature(by: string, id: string, feature: string, enabled: boolean) {
     const r = await this.db.query(
-      `UPDATE tenants SET features = CASE WHEN $3 THEN array(SELECT DISTINCT unnest(features || ARRAY[$2::text])) ELSE array_remove(features, $2) END
+      `UPDATE tenants SET features_custom = true,
+              features = CASE WHEN $3 THEN array(SELECT DISTINCT unnest(features || ARRAY[$2::text])) ELSE array_remove(features, $2) END
         WHERE id = $1`,
       [id, feature, enabled],
     );
     if (!r.rowCount) throw new NotFoundError('Empresa não encontrada');
     await this.deps.forgetTenant(id);
     await this.audit(by, enabled ? 'tenant.feature_on' : 'tenant.feature_off', id, { feature });
+  }
+
+  /** Volta a empresa aos recursos do plano dela (sem plano: o padrão). */
+  async resetTenantFeatures(by: string, id: string) {
+    const r = await this.db.query(
+      `UPDATE tenants t SET features_custom = false,
+              features = coalesce((SELECT p.features FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.tenant_id = t.id), $2)
+        WHERE t.id = $1`,
+      [id, DEFAULT_TENANT_FEATURES],
+    );
+    if (!r.rowCount) throw new NotFoundError('Empresa não encontrada');
+    await this.deps.forgetTenant(id);
+    await this.audit(by, 'tenant.features_reset', id);
   }
 
   /** Senha provisória de 8 números: a pessoa entra com ela e o sistema obriga a criar uma nova. */
@@ -248,17 +264,34 @@ export class PlatformService {
     const { rows } = await this.db.query<Json>(
       `SELECT p.*, (SELECT count(*) FROM subscriptions s WHERE s.plan_id = p.id AND s.status <> 'canceled') AS subscribers FROM plans p ORDER BY p.price`,
     );
-    return rows.map((p) => ({ id: p.id, name: p.name, price: Number(p.price), description: p.description, active: p.active, subscribers: Number(p.subscribers) }));
+    return rows.map((p) => ({
+      id: p.id, name: p.name, price: Number(p.price), description: p.description, active: p.active, subscribers: Number(p.subscribers), features: p.features ?? [],
+    }));
   }
 
-  async savePlan(by: string, input: { name: string; price: number; description?: string | null; active: boolean }, id?: string): Promise<void> {
-    if (id) {
-      const r = await this.db.query('UPDATE plans SET name = $2, price = $3, description = $4, active = $5 WHERE id = $1', [id, input.name, input.price, input.description ?? null, input.active]);
+  /** Mudar os recursos do plano vale na hora para as empresas dele que seguem o plano (as personalizadas ficam como estão). */
+  async savePlan(by: string, input: { name: string; price: number; description?: string | null; active: boolean; features: string[] }, id?: string): Promise<void> {
+    const synced = await this.db.transaction(async (db) => {
+      if (!id) {
+        await db.query('INSERT INTO plans (name, price, description, active, features) VALUES ($1, $2, $3, $4, $5)', [
+          input.name, input.price, input.description ?? null, input.active, input.features,
+        ]);
+        return [];
+      }
+      const r = await db.query('UPDATE plans SET name = $2, price = $3, description = $4, active = $5, features = $6 WHERE id = $1', [
+        id, input.name, input.price, input.description ?? null, input.active, input.features,
+      ]);
       if (!r.rowCount) throw new NotFoundError('Plano não encontrado');
-    } else {
-      await this.db.query('INSERT INTO plans (name, price, description, active) VALUES ($1, $2, $3, $4)', [input.name, input.price, input.description ?? null, input.active]);
-    }
-    await this.audit(by, id ? 'plan.update' : 'plan.create', input.name, { price: input.price });
+      return (
+        await db.query<{ id: string }>(
+          `UPDATE tenants t SET features = $2 FROM subscriptions s
+            WHERE s.tenant_id = t.id AND s.plan_id = $1 AND NOT t.features_custom RETURNING t.id`,
+          [id, input.features],
+        )
+      ).rows.map((r) => r.id);
+    });
+    for (const t of synced) await this.deps.forgetTenant(t);
+    await this.audit(by, id ? 'plan.update' : 'plan.create', input.name, { price: input.price, features: input.features });
   }
 
   // ================= cupons
@@ -328,7 +361,7 @@ export class PlatformService {
     const code = input.couponCode?.trim() || null;
     // cupom (limite conferido com a linha travada) e assinatura gravados juntos
     await this.db.transaction(async (db) => {
-      const cur = (await db.query<Json>('SELECT s.coupon_id, s.coupon_cycles_left, c.code FROM subscriptions s LEFT JOIN coupons c ON c.id = s.coupon_id WHERE s.tenant_id = $1 FOR UPDATE OF s', [tenantId])).rows[0];
+      const cur = (await db.query<Json>('SELECT s.plan_id, s.coupon_id, s.coupon_cycles_left, c.code FROM subscriptions s LEFT JOIN coupons c ON c.id = s.coupon_id WHERE s.tenant_id = $1 FOR UPDATE OF s', [tenantId])).rows[0];
       let couponId: string | null = cur?.coupon_id ?? null;
       let cycles: number | null = cur?.coupon_cycles_left ?? null;
       if (!code) {
@@ -352,7 +385,16 @@ export class PlatformService {
            canceled_at = CASE WHEN EXCLUDED.status = 'canceled' THEN coalesce(subscriptions.canceled_at, now()) END, updated_at = now()`,
         [tenantId, input.planId ?? null, input.price ?? null, input.status, input.trialEndsOn ?? null, input.billingDay, couponId, cycles, input.notes ?? null],
       );
+    // a empresa recebe os recursos do plano (trocar de plano também desfaz o ajuste manual)
+    if (input.planId) {
+      await db.query(
+        `UPDATE tenants SET features = (SELECT features FROM plans WHERE id = $2), features_custom = false
+          WHERE id = $1 AND (NOT features_custom OR $3)`,
+        [tenantId, input.planId, cur?.plan_id !== input.planId],
+      );
+    }
     });
+    await this.deps.forgetTenant(tenantId);
     await this.audit(by, 'subscription.save', tenantId, { status: input.status, planId: input.planId, price: input.price, coupon: code });
   }
 

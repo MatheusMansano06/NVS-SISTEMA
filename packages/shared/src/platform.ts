@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_TENANT_FEATURES, TENANT_FEATURES } from './schemas.js';
 
 /** Painel Master (dono do NVS Tech): empresas, mensalidades, cupons, planos, comunicados e administradores. */
 
@@ -14,6 +15,8 @@ export const planSchema = z.object({
   price: z.number().min(0).max(1_000_000),
   description: z.string().trim().max(300).nullish(),
   active: z.boolean().default(true),
+  /** Recursos incluídos no plano (as empresas do plano recebem estes, salvo as personalizadas). */
+  features: z.array(z.enum(TENANT_FEATURES)).default(DEFAULT_TENANT_FEATURES),
 });
 
 export const couponSchema = z.object({
@@ -89,6 +92,8 @@ export interface TenantRowDto {
   overdue: number;
   /** Recursos liberados para a empresa (TENANT_FEATURES). */
   features: string[];
+  /** true = ajustados à mão no Master (não seguem mais o plano). */
+  featuresCustom: boolean;
 }
 
 export interface TenantDetailDto extends TenantRowDto {
@@ -119,7 +124,7 @@ export interface InvoiceDto {
   notes: string | null;
 }
 
-export interface PlanDto { id: string; name: string; price: number; description: string | null; active: boolean; subscribers: number }
+export interface PlanDto { id: string; name: string; price: number; description: string | null; active: boolean; subscribers: number; features: string[] }
 export interface CouponDto {
   id: string; code: string; description: string | null; kind: 'percent' | 'fixed'; value: number; duration: 'once' | 'months' | 'forever';
   months: number | null; maxRedemptions: number | null; redemptions: number; validUntil: string | null; active: boolean;

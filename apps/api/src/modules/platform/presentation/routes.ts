@@ -91,6 +91,10 @@ export function platformRoutes(service: PlatformService, opts: { secureCookies: 
       await service.setTenantFeature(await by(req), idOf(req), b.feature, b.enabled);
       return noContent(reply);
     });
+    app.post('/admin/tenants/:id/features/reset', async (req, reply) => {
+      await service.resetTenantFeatures(await by(req), idOf(req));
+      return noContent(reply);
+    });
     app.post('/admin/tenants/:id/users/:userId/reset-password', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req) =>
       service.resetPassword(await by(req), idOf(req), idOf(req, 'userId')),
     );

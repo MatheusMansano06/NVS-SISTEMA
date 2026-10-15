@@ -24,6 +24,7 @@ export const masterApi = {
   tenant: (id: string) => http<TenantDetailDto>(`${A}/tenants/${id}`),
   tenantStatus: (id: string, status: 'active' | 'suspended') => http<void>(`${A}/tenants/${id}/status`, { body: { status } }),
   tenantFeature: (id: string, feature: TenantFeature, enabled: boolean) => http<void>(`${A}/tenants/${id}/features`, { body: { feature, enabled } }),
+  resetFeatures: (id: string) => http<void>(`${A}/tenants/${id}/features/reset`, { body: {} }),
   resetPassword: (tenantId: string, userId: string) =>
     http<{ email: string; temporaryPassword: string }>(`${A}/tenants/${tenantId}/users/${userId}/reset-password`, { method: 'POST' }),
   saveSubscription: (
@@ -31,7 +32,7 @@ export const masterApi = {
     body: { planId: string | null; price: number | null; status: SubscriptionStatus; trialEndsOn: string | null; billingDay: number; couponCode: string | null; notes: string | null },
   ) => http<void>(`${A}/tenants/${tenantId}/subscription`, { method: 'PUT', body }),
   plans: () => http<PlanDto[]>(`${A}/plans`),
-  savePlan: (body: { name: string; price: number; description: string | null; active: boolean }, id?: string) =>
+  savePlan: (body: { name: string; price: number; description: string | null; active: boolean; features: TenantFeature[] }, id?: string) =>
     http<void>(`${A}/plans${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body }),
   coupons: () => http<CouponDto[]>(`${A}/coupons`),
   saveCoupon: (body: Omit<CouponDto, 'id' | 'redemptions'>, id?: string) => http<void>(`${A}/coupons${id ? `/${id}` : ''}`, { method: id ? 'PUT' : 'POST', body }),

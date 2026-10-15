@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { CouponDto, InvoiceDto, PlanDto, TenantRowDto } from '@nvs/shared';
+import { DEFAULT_TENANT_FEATURES, TENANT_FEATURE_LABELS, TENANT_FEATURES, type CouponDto, type InvoiceDto, type PlanDto, type TenantFeature, type TenantRowDto } from '@nvs/shared';
 import { money } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
+import { FeaturePicker } from './FeaturePicker';
 import { SITUATION_LABEL, brDate, masterApi } from './master-api';
 
 const errMsg = (e: unknown) => (e instanceof ApiError ? e.message : 'Não foi possível concluir.');
@@ -302,6 +303,7 @@ export function PlansView() {
               <strong>{money(p.price)}<small>/mês</small></strong>
               <small>{p.subscribers} assinante(s)</small>
               {p.description && <p>{p.description}</p>}
+              <p className="ms-plan-feats">{p.features.length} de {TENANT_FEATURES.length} recursos · {p.features.map((f) => TENANT_FEATURE_LABELS[f as TenantFeature] ?? f).join(', ')}</p>
               <footer><button type="button" className="act" onClick={() => setEdit(p)}>Editar</button></footer>
             </article>
           ))}
@@ -319,11 +321,12 @@ function PlanForm({ plan, onDone }: { plan: PlanDto | null; onDone: () => void }
   const [price, setPrice] = useState(plan ? String(plan.price) : '');
   const [description, setDescription] = useState(plan?.description ?? '');
   const [active, setActive] = useState(plan?.active ?? true);
+  const [features, setFeatures] = useState<string[]>(plan?.features ?? DEFAULT_TENANT_FEATURES);
   const [error, setError] = useState('');
   async function submit(e: FormEvent) {
     e.preventDefault();
     try {
-      await masterApi.savePlan({ name, price: toNum(price), description: description.trim() || null, active }, plan?.id);
+      await masterApi.savePlan({ name, price: toNum(price), description: description.trim() || null, active, features: features as TenantFeature[] }, plan?.id);
       onDone();
     } catch (err) {
       setError(errMsg(err));
@@ -336,6 +339,11 @@ function PlanForm({ plan, onDone }: { plan: PlanDto | null; onDone: () => void }
       <label><small>Preço mensal (R$)</small><input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required /></label>
       <label><small>O que inclui</small><textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} /></label>
       <label className="full-check"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> À venda</label>
+      <div>
+        <small className="ms-feat-label">Recursos do plano</small>
+        <FeaturePicker value={features} onToggle={(f, on) => setFeatures((cur) => (on ? [...cur, f] : cur.filter((x) => x !== f)))} />
+        {plan && plan.subscribers > 0 && <p className="ms-muted">Vale na hora para as {plan.subscribers} empresa(s) deste plano que não foram personalizadas.</p>}
+      </div>
       {error && <p className="banner banner-error">{error}</p>}
       <Button type="submit">Salvar plano</Button>
     </form>

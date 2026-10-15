@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { TENANT_FEATURES, TENANT_FEATURE_LABELS, type PlanDto, type SubscriptionStatus, type TenantDetailDto, type TenantFeature, type TenantRowDto } from '@nvs/shared';
+import { TENANT_FEATURE_LABELS, type PlanDto, type SubscriptionStatus, type TenantDetailDto, type TenantFeature, type TenantRowDto } from '@nvs/shared';
 import { int, money } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
 import { InvoiceTable } from './BillingViews';
+import { FeaturePicker } from './FeaturePicker';
 import { SUB_LABEL, brDate, masterApi } from './master-api';
 
 const cnpjFmt = (c: string | null) => (c ? c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : '—');
@@ -86,6 +87,17 @@ export function TenantDetailView({ id, onBack }: { id: string; onBack: () => voi
     }
   }
 
+  async function resetFeatures() {
+    if (!t) return;
+    try {
+      await masterApi.resetFeatures(id);
+      setNote('Recursos de volta ao padrão do plano.');
+      void load();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
+
   async function resetPassword(userId: string, name: string) {
     if (!window.confirm(`Gerar uma senha provisória para ${name}? A senha atual deixa de funcionar.`)) return;
     try {
@@ -127,17 +139,25 @@ export function TenantDetailView({ id, onBack }: { id: string; onBack: () => voi
       </section>
 
       <section className="ms-card">
-        <h2>Recursos liberados</h2>
-        <p className="ms-muted">Desligado, o recurso aparece como “em breve” para a empresa.</p>
-        <div className="ms-features">
-          {TENANT_FEATURES.map((f) => (
-            <label key={f} className="ads-toggle">
-              <input type="checkbox" checked={t.features.includes(f)} onChange={() => void toggleFeature(f)} />
-              <span className="ads-switch" aria-hidden="true" />
-              {TENANT_FEATURE_LABELS[f]}
-            </label>
-          ))}
-        </div>
+        <header className="ms-feat-head">
+          <div>
+            <h2>Recursos liberados</h2>
+            <p className="ms-muted">
+              {t.featuresCustom
+                ? 'Personalizado para esta empresa (não segue mais o plano).'
+                : t.subscription?.planName
+                  ? `Conforme o plano ${t.subscription.planName}. Mudar uma chave aqui personaliza só esta empresa.`
+                  : 'Padrão (sem plano). Mudar uma chave aqui personaliza só esta empresa.'}{' '}
+              Desligado, o recurso aparece como “em breve” para a empresa.
+            </p>
+          </div>
+          {t.featuresCustom && (
+            <button type="button" className="act" onClick={() => void resetFeatures()}>
+              Voltar ao {t.subscription?.planName ? `plano ${t.subscription.planName}` : 'padrão'}
+            </button>
+          )}
+        </header>
+        <FeaturePicker value={t.features} onToggle={(f) => void toggleFeature(f)} />
       </section>
 
       <section className="ms-card">

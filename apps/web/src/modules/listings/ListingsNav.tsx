@@ -1,18 +1,21 @@
 import { useState } from 'react';
+import type { TenantFeature } from '@nvs/shared';
 import { navigate, usePath } from '../../app/router';
+import { useFeatures } from '../../shared/features';
 
-const LINKS = [
-  { path: '/anuncios', label: 'Meus anúncios' },
-  { path: '/anuncios/promocoes', label: 'Central de Promoção' },
-  { path: '/anuncios/marketing', label: 'Central de Marketing' },
+const LINKS: { path: string; label: string; feature: TenantFeature }[] = [
+  { path: '/anuncios', label: 'Meus anúncios', feature: 'anuncios' },
+  { path: '/anuncios/promocoes', label: 'Central de Promoção', feature: 'promocoes' },
+  { path: '/anuncios/marketing', label: 'Central de Marketing', feature: 'marketing' },
 ];
 
 /** Navegação entre as telas de anúncios. */
 export function ListingsNav() {
   const path = usePath();
+  const features = useFeatures();
   return (
     <nav className="lnav" aria-label="Anúncios">
-      {LINKS.map((l) => (
+      {LINKS.filter((l) => features.includes(l.feature)).map((l) => (
         <a
           key={l.path}
           href={l.path}

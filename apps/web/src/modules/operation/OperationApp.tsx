@@ -5,7 +5,7 @@ import { CentralDevolucoes } from '../central/CentralDevolucoes';
 import { useAuth } from '../auth/AuthContext';
 import { Modal } from '../../shared/ui/Modal';
 import { NoticesBar } from '../../app/NoticesBar';
-import { ComingSoon, useFeature } from '../../shared/features';
+import { FeatureGate, useFeature } from '../../shared/features';
 import { ThemeSwitch } from '../../shared/theme';
 import { OperationHome } from './OperationHome';
 import { PinChange } from './PinChange';
@@ -29,6 +29,7 @@ export function OperationApp() {
   }, []);
 
   const full = useFeature('full');
+  const dev = useFeature('devolucoes');
   const tab = (a: Area, to: string, label: string) => (
     <button type="button" role="tab" aria-checked={area === a} onClick={() => { setView('home'); navigate(to); }}>{label}</button>
   );
@@ -41,7 +42,7 @@ export function OperationApp() {
         <nav className="seg op-switch" aria-label="Área da operação">
           {tab('inicio', '/op', 'Início')}
           {tab('full', '/op/full', full ? '📦 Supervisão Full' : '📦 Supervisão Full · em breve')}
-          {tab('devolucoes', '/op/devolucoes', '↩︎ Devoluções')}
+          {tab('devolucoes', '/op/devolucoes', dev ? '↩︎ Devoluções' : '↩︎ Devoluções · em breve')}
         </nav>
         <span className="station-user">
           <ThemeSwitch compact />
@@ -56,9 +57,9 @@ export function OperationApp() {
         {view === 'pin' ? (
           <PinChange person={ctx.person} onCancel={() => setView('home')} onDone={(p) => { ctx.update(p); setView('home'); }} />
         ) : area === 'full' ? (
-          <div className="op-full">{full ? <FullRouter mode="operacao" /> : <ComingSoon title="Supervisão Full" text="A Supervisão Full (separação das listas do Full com bipagem e impressão das etiquetas) está em fase de testes e será liberada em breve para a sua empresa." />}</div>
+          <div className="op-full"><FeatureGate feature="full"><FullRouter mode="operacao" /></FeatureGate></div>
         ) : area === 'devolucoes' ? (
-          <div className="op-full"><CentralDevolucoes modo="operacao" telas={['operacao', 'historico', 'full']} /></div>
+          <div className="op-full"><FeatureGate feature="devolucoes"><CentralDevolucoes modo="operacao" telas={['operacao', 'historico', 'full']} /></FeatureGate></div>
         ) : (
           <OperationHome />
         )}

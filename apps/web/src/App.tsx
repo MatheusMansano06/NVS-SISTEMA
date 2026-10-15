@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
-import type { OnboardingDto } from '@nvs/shared';
+import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import type { OnboardingDto, TenantFeature } from '@nvs/shared';
 import { AuthProvider, useAuth } from './modules/auth/AuthContext';
 import { AuthPage } from './modules/auth/AuthPage';
 import { Dashboard } from './modules/dashboard/Dashboard';
@@ -7,7 +7,7 @@ import { OnboardingPage } from './modules/onboarding/OnboardingPage';
 import { onboardingApi } from './modules/onboarding/onboarding-api';
 import { usePath } from './app/router';
 import { AppShell } from './app/AppShell';
-import { ComingSoon, useFeature } from './shared/features';
+import { FeatureGate, useFeatures } from './shared/features';
 import type { PersonSessionDto, TeamDto } from '@nvs/shared';
 import { PersonProvider } from './modules/operation/PersonContext';
 import { PinChange } from './modules/operation/PinChange';
@@ -53,20 +53,31 @@ function Pages() {
   );
 }
 
+/** Telas que dependem de recurso liberado para a empresa (Painel Master / plano). */
+const GATED: { prefix: string; feature: TenantFeature; page: () => ReactNode }[] = [
+  { prefix: '/vendas', feature: 'vendas', page: () => <SalesPage /> },
+  { prefix: '/precificador', feature: 'precificador', page: () => <PricingPage /> },
+  { prefix: '/radar-frete', feature: 'radar_frete', page: () => <FreightPage /> },
+  { prefix: '/devolucoes', feature: 'devolucoes', page: () => <CentralDevolucoes /> },
+  { prefix: '/full', feature: 'full', page: () => <FullRouter mode="analise" /> },
+  { prefix: '/anuncios/promocoes', feature: 'promocoes', page: () => <PromotionsPage /> },
+  { prefix: '/anuncios/marketing', feature: 'marketing', page: () => <MarketingPage /> },
+  { prefix: '/anuncios', feature: 'anuncios', page: () => <ListingsPage /> },
+  { prefix: '/financeiro', feature: 'financeiro', page: () => <FinancePage /> },
+];
+/** Telas que já trazem o AppShell próprio (as demais são embrulhadas aqui). */
+const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro']);
+
 function Routes() {
   const path = usePath();
-  const full = useFeature('full');
+  const features = useFeatures();
   if (path.startsWith('/skus')) return <SkuPage />;
-  if (path.startsWith('/vendas')) return <SalesPage />;
-  if (path.startsWith('/precificador')) return <PricingPage />;
-  if (path.startsWith('/radar-frete')) return <FreightPage />;
   if (path.startsWith('/equipe')) return <TeamPage />;
-  if (path.startsWith('/devolucoes')) return <AppShell><CentralDevolucoes /></AppShell>;
-  if (path.startsWith('/full')) return <AppShell>{full ? <FullRouter mode="analise" /> : <ComingSoon title="Supervisão Full" text="A Supervisão Full (separação das listas do Full com bipagem e impressão das etiquetas) está em fase de testes e será liberada em breve para a sua empresa." />}</AppShell>;
-  if (path.startsWith('/anuncios/promocoes')) return <PromotionsPage />;
-  if (path.startsWith('/anuncios/marketing')) return <MarketingPage />;
-  if (path.startsWith('/anuncios')) return <ListingsPage />;
-  if (path.startsWith('/financeiro')) return <FinancePage />;
+  const g = GATED.find((x) => path.startsWith(x.prefix));
+  if (g) {
+    if (!features.includes(g.feature)) return <AppShell><FeatureGate feature={g.feature}>{null}</FeatureGate></AppShell>;
+    return OWN_SHELL.has(g.prefix) ? <>{g.page()}</> : <AppShell>{g.page()}</AppShell>;
+  }
   return <Dashboard />;
 }
 

@@ -20,6 +20,7 @@ export function OperationHome() {
   const [devolucoes, setDevolucoes] = useState<{ chegaram: number; pendentes: number } | null>(null);
   const tour = useGuidedTour('operacao-inicio', TOURS['operacao-inicio'], true);
   const full = useFeature('full');
+  const dev = useFeature('devolucoes');
 
   useEffect(() => {
     if (full) fullApi
@@ -29,10 +30,10 @@ export function OperationHome() {
         setListas({ abertas: abertas.length, minhas: abertas.filter((l) => l.operatorId === me.id).length });
       })
       .catch(() => setListas(null));
-    http<{ aguardando_conferencia: number; contestar: number; lancar_estoque: number; chamados_manuais: number }>('/api/v1/central/operacao/atencao')
+    if (dev) http<{ aguardando_conferencia: number; contestar: number; lancar_estoque: number; chamados_manuais: number }>('/api/v1/central/operacao/atencao')
       .then((a) => setDevolucoes({ chegaram: a.aguardando_conferencia, pendentes: a.contestar + a.lancar_estoque + a.chamados_manuais }))
       .catch(() => setDevolucoes(null));
-  }, [me.id, full]);
+  }, [me.id, full, dev]);
 
   return (
     <section className="op-home">
@@ -56,14 +57,14 @@ export function OperationHome() {
           </span>
           <em>{full ? 'Separar e imprimir →' : 'Em breve'}</em>
         </button>
-        <button type="button" className="op-choice op-choice-dev" onClick={() => navigate('/op/devolucoes')}>
+        <button type="button" className="op-choice op-choice-dev" disabled={!dev} onClick={() => navigate('/op/devolucoes')}>
           <span className="op-choice-icon" aria-hidden="true"><Icon name="undo" size={30} /></span>
           <strong>Devoluções</strong>
           <span className="op-choice-text">Bipar o pacote que voltou, conferir o produto, tirar as fotos e lançar no estoque. Também a etiqueta do Full que voltou do CD.</span>
           <span className="op-choice-stat">
-            {devolucoes === null ? 'Carregando a bancada…' : devolucoes.chegaram === 0 && devolucoes.pendentes === 0 ? 'Nada esperando na bancada' : `${devolucoes.chegaram} ${devolucoes.chegaram === 1 ? 'chegou' : 'chegaram'} para conferir${devolucoes.pendentes ? ` · ${devolucoes.pendentes} para terminar` : ''}`}
+            {!dev ? 'Em breve' : devolucoes === null ? 'Carregando a bancada…' : devolucoes.chegaram === 0 && devolucoes.pendentes === 0 ? 'Nada esperando na bancada' : `${devolucoes.chegaram} ${devolucoes.chegaram === 1 ? 'chegou' : 'chegaram'} para conferir${devolucoes.pendentes ? ` · ${devolucoes.pendentes} para terminar` : ''}`}
           </span>
-          <em>Abrir a bancada →</em>
+          <em>{dev ? 'Abrir a bancada →' : 'Em breve'}</em>
         </button>
       </div>
       {tour.element}

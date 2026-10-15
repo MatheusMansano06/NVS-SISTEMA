@@ -1,14 +1,31 @@
 /* Tudo com prefixo nvs- para não colidir com o CSS do Mercado Livre. */
 .nvs-tag {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 6px 0 2px;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
   font: 12px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #fff;
+  background: linear-gradient(160deg, #24324a 0%, #111827 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 6px 16px rgba(17, 24, 39, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   cursor: pointer;
   position: relative;
   z-index: 2;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
+.nvs-tag:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(17, 24, 39, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.nvs-stats { display: flex; gap: 6px; }
+.nvs-stat { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4px 2px; background: rgba(255, 255, 255, 0.07); border-radius: 7px; min-width: 0; }
+.nvs-stat b { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; }
+.nvs-stat span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.65); white-space: nowrap; }
+.nvs-stat-dim b { color: rgba(255, 255, 255, 0.45); }
+.nvs-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.nvs-loading { color: rgba(255, 255, 255, 0.7); }
+.nvs-tag .nvs-dim { color: rgba(255, 255, 255, 0.7); }
+.nvs-tag .nvs-link { color: #93c5fd; }
 .nvs-chip {
   display: inline-flex;
   align-items: center;
@@ -21,7 +38,7 @@
 .nvs-cat { background: #e3edff; color: #1d4ed8; font-weight: 600; }
 .nvs-trad { background: #f1f1f1; color: #444; font-weight: 600; }
 .nvs-full { background: #e7f8ee; color: #0a7a3b; font-weight: 600; }
-.nvs-btn { background: #1f2a37; color: #fff; }
+.nvs-btn { background: #fff; color: #111827; }
 .nvs-dim { color: #6b7280; }
 .nvs-link { color: #1d4ed8; text-decoration: underline; }
 

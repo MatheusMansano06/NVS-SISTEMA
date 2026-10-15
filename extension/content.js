@@ -97,7 +97,7 @@
       const host = card.querySelector('.poly-card__content, .ui-search-result__content, .ui-search-result__content-wrapper') || card;
       host.appendChild(tag);
       if (id.product) {
-        tag.innerHTML = '<span class="nvs-chip nvs-cat">Catálogo</span><span class="nvs-dim">clique para ver os dados</span>';
+        tag.innerHTML = '<div class="nvs-chips"><span class="nvs-chip nvs-cat">Catálogo</span><span class="nvs-loading">clique para ver os dados</span></div>';
         continue;
       }
       tag.dataset.nvsId = id.item;
@@ -180,26 +180,32 @@
     };
   }
 
+  /** Bloco em destaque: dias no ar, vendas e vendas/dia em números grandes; tipo e Full em chips menores. */
   function chips(d) {
-    const out = [];
-    if (d.ageDays != null) {
-      const when = d.estimated ? `estimado: ~${fmtMonth(d.createdAt)}` : `criado em ${fmtDate(d.createdAt)}`;
-      out.push(`<span class="nvs-chip" title="Dias no ar (${when})">📅 ${d.estimated ? '~' : ''}${nf.format(d.ageDays)} dias</span>`);
-    } else out.push('<span class="nvs-chip nvs-dim">📅 —</span>');
-    if (d.sold != null) out.push(`<span class="nvs-chip" title="Vendas · média por dia de vida">🛒 ${nf.format(d.sold)}${d.perDay != null ? ` · ${d.estimated ? '~' : ''}${nf2.format(d.perDay)}/dia` : ''}</span>`);
-    else if (d.soldText) out.push(`<span class="nvs-chip" title="Vendas mostradas pelo ML (faixa)">🛒 ${esc(d.soldText)}</span>`);
-    else out.push('<span class="nvs-chip nvs-dim">🛒 …</span>');
-    if (d.catalog != null) out.push(`<span class="nvs-chip ${d.catalog ? 'nvs-cat' : 'nvs-trad'}">${d.catalog ? 'Catálogo' : 'Tradicional'}</span>`);
-    if (d.type) out.push(`<span class="nvs-chip">${esc(d.type)}</span>`);
-    if (d.full) out.push('<span class="nvs-chip nvs-full">⚡ Full</span>');
-    out.push('<span class="nvs-chip nvs-btn" title="Ver visitas dos últimos 150 dias">📈</span>');
-    return out.join('');
+    const approx = d.estimated ? '~' : '';
+    const when = d.ageDays != null ? (d.estimated ? `estimado: ~${fmtMonth(d.createdAt)}` : `criado em ${fmtDate(d.createdAt)}`) : '';
+    const stat = (value, label, title, dim) =>
+      `<div class="nvs-stat${dim ? ' nvs-stat-dim' : ''}" title="${esc(title)}"><b>${value}</b><span>${label}</span></div>`;
+    const days = d.ageDays != null ? stat(`${approx}${nf.format(d.ageDays)}`, 'dias no ar', `Dias no ar (${when})`) : stat('—', 'dias no ar', 'Sem data', true);
+    const sold =
+      d.sold != null
+        ? stat(nf.format(d.sold), 'vendas', 'Vendas totais')
+        : d.soldText
+          ? stat(esc(d.soldText), 'vendas', 'Faixa de vendas mostrada pelo ML')
+          : stat('…', 'vendas', 'Carregando', true);
+    const perDay = d.perDay != null ? stat(`${approx}${nf2.format(d.perDay)}`, 'vendas/dia', 'Média de vendas por dia no ar') : '';
+    const tags = [];
+    if (d.catalog != null) tags.push(`<span class="nvs-chip ${d.catalog ? 'nvs-cat' : 'nvs-trad'}">${d.catalog ? 'Catálogo' : 'Tradicional'}</span>`);
+    if (d.type) tags.push(`<span class="nvs-chip">${esc(d.type)}</span>`);
+    if (d.full) tags.push('<span class="nvs-chip nvs-full">⚡ Full</span>');
+    tags.push('<span class="nvs-chip nvs-btn" title="Ver mais detalhes">📈</span>');
+    return `<div class="nvs-stats">${days}${sold}${perDay}</div><div class="nvs-chips">${tags.join('')}</div>`;
   }
 
   function renderTag(tag) {
     if (blocked) return;
     const d = merged(tag.dataset.nvsId, tag);
-    tag.innerHTML = d === undefined ? '<span class="nvs-dim">NVS…</span>' : chips(d);
+    tag.innerHTML = d === undefined ? '<span class="nvs-loading">NVS · carregando…</span>' : chips(d);
   }
 
   function blockedHtml(r) {

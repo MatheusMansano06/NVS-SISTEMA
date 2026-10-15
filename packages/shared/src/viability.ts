@@ -32,3 +32,9 @@ export interface ViabilityDto {
   unavailable: string[];
   fetchedAt: string;
 }
+
+/** Versão leve (sem visitas nem vendedor) para as etiquetas da página de busca, consultada em lote. */
+export type ViabilityLiteDto = Pick<
+  ViabilityDto,
+  'itemId' | 'price' | 'createdAt' | 'ageDays' | 'soldQuantity' | 'salesPerDay' | 'catalog' | 'listingType' | 'freeShipping' | 'logisticType'
+>;

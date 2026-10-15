@@ -15,6 +15,14 @@ export default tseslint.config(
     languageOptions: { globals: { process: 'readonly', console: 'readonly', crypto: 'readonly' } },
   },
   {
+    // extensão do Chrome: JS puro rodando no navegador
+    files: ['extension/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { chrome: 'readonly', document: 'readonly', location: 'readonly', fetch: 'readonly', URL: 'readonly', URLSearchParams: 'readonly', MutationObserver: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' },
+    },
+  },
+  {
     // Fronteira de módulos: um módulo só importa outro pelo seu index.ts (API pública).
     files: ['apps/api/src/modules/**/*.ts'],
     rules: {

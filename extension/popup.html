@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>NVS Viabilidade</title>
+    <style>
+      body { width: 300px; margin: 0; padding: 14px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1f2a37; }
+      h1 { font-size: 15px; margin: 0 0 10px; }
+      #status { padding: 8px 10px; border-radius: 8px; background: #f1f5f9; margin-bottom: 12px; }
+      #status.ok { background: #e7f8ee; color: #0a7a3b; }
+      #status.err { background: #fdecec; color: #a11d1d; }
+      label { display: block; color: #6b7280; font-size: 12px; margin-bottom: 4px; }
+      input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+      .row { display: flex; gap: 6px; margin-top: 8px; }
+      button, a.btn { flex: 1; padding: 7px; border: 0; border-radius: 6px; background: #1f2a37; color: #fff; font: inherit; cursor: pointer; text-align: center; text-decoration: none; }
+      button.sec { background: #e5e7eb; color: #1f2a37; }
+      p.hint { color: #6b7280; font-size: 12px; margin: 10px 0 0; }
+    </style>
+  </head>
+  <body>
+    <h1>NVS · Estudo de Viabilidade</h1>
+    <div id="status">Verificando…</div>
+    <label for="api">Endereço do NVS</label>
+    <input id="api" type="url" spellcheck="false" />
+    <div class="row">
+      <button id="save">Salvar</button>
+      <button id="reset" class="sec">Padrão</button>
+      <a id="open" class="btn" target="_blank" rel="noopener">Abrir NVS</a>
+    </div>
+    <p class="hint">Entre no NVS neste navegador. Depois é só pesquisar no Mercado Livre: cada anúncio ganha uma etiqueta com data, vendas e tipo. Clique em 📈 para ver as visitas.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

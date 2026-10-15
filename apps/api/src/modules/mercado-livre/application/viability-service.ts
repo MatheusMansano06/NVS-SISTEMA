@@ -1,4 +1,4 @@
-import type { ViabilityDto } from '@nvs/shared';
+import type { ViabilityDto, ViabilityLiteDto } from '@nvs/shared';
 import type { Database } from '../../../shared/infrastructure/database.js';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import { AppError } from '../../../shared/kernel/errors.js';
@@ -9,6 +9,8 @@ import type { MlIntegrationService } from './ml-integration-service.js';
 
 const CACHE_TTL = 6 * 3600; // dado público do anúncio: o mesmo para qualquer empresa
 const VISIT_DAYS = 180;
+const MULTIGET = 20; // limite do ML por chamada de /items?ids=
+export const MAX_BATCH = 60;
 
 interface MlItemLite {
   id: string;
@@ -100,6 +102,38 @@ export class ViabilityService {
     return dto;
   }
 
+  /**
+   * Etiquetas da busca: vários anúncios de uma vez (multiget do ML, 20 por chamada), sem visitas.
+   * ID que o ML não devolver vem como null.
+   */
+  async analyzeMany(tenantId: string, rawIds: string[]): Promise<Record<string, ViabilityLiteDto | null>> {
+    await this.ensureFeature(tenantId);
+    const ids = [...new Set(rawIds.map((i) => i.toUpperCase().replace('-', '')))].slice(0, MAX_BATCH);
+    const out: Record<string, ViabilityLiteDto | null> = {};
+    const missing: string[] = [];
+    for (const id of ids) {
+      const hit = await this.cache.get<ViabilityLiteDto>(`viability-lite:${id}`);
+      if (hit) out[id] = hit;
+      else missing.push(id);
+    }
+    if (missing.length) {
+      const token = await this.anyToken(tenantId);
+      const now = new Date();
+      for (let i = 0; i < missing.length; i += MULTIGET) {
+        const chunk = missing.slice(i, i + MULTIGET);
+        const res = await this.api.rawGet<{ code: number; body: MlItemLite }[]>(token, `/items?ids=${chunk.join(',')}`);
+        for (const r of res ?? []) {
+          if (r.code !== 200 || !r.body?.id) continue;
+          const lite = toLite(r.body, now);
+          out[lite.itemId] = lite;
+          await this.cache.set(`viability-lite:${lite.itemId}`, lite, CACHE_TTL);
+        }
+      }
+    }
+    for (const id of ids) out[id] ??= null;
+    return out;
+  }
+
   /** A extensão chama a API direto, então o "em breve" do plano precisa valer aqui também. */
   private async ensureFeature(tenantId: string): Promise<void> {
     const r = await this.db.query<{ features: string[] }>('SELECT features FROM tenants WHERE id = $1', [tenantId]);
@@ -113,4 +147,20 @@ export class ViabilityService {
     if (!c) throw new AppError('Conecte uma conta do Mercado Livre para usar o Estudo de Viabilidade.', 'LISTING_BLOCKED', 409);
     return (await this.ml.accessToken(tenantId, c.id)).token;
   }
+}
+
+function toLite(item: MlItemLite, now: Date): ViabilityLiteDto {
+  const age = ageInDays(item.date_created, now);
+  return {
+    itemId: item.id,
+    price: item.price ?? null,
+    createdAt: item.date_created ?? null,
+    ageDays: age,
+    soldQuantity: item.sold_quantity ?? null,
+    salesPerDay: salesPerDay(item.sold_quantity, age),
+    catalog: item.catalog_listing ?? null,
+    listingType: typeLabel(item.listing_type_id ?? null),
+    freeShipping: item.shipping?.free_shipping ?? null,
+    logisticType: item.shipping?.logistic_type ?? null,
+  };
 }

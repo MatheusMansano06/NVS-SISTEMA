@@ -322,6 +322,10 @@ function fakeMl(sellerId: number) {
     },
     '/users/777': { nickname: 'CONCORRENTE', seller_reputation: { level_id: '5_green' } },
     '/products/MLB9000001': { buy_box_winner: { item_id: 'MLB7000001' } },
+    '/items?ids=MLB7000002,MLB5555555': [
+      { code: 200, body: { id: 'MLB7000002', title: 'Garrafa 2', date_created: '2026-10-05T12:00:00.000Z', sold_quantity: 20, catalog_listing: false, listing_type_id: 'gold_special' } },
+      { code: 404, body: { message: 'not found' } },
+    ],
     // Central de Marketing: MLB0 com cupom e atacado; MLB1 elegível a cupom e com vídeo
     '/seller-promotions/items/MLB0?app_version=v2': [{ type: 'SELLER_COUPON_CAMPAIGN', status: 'started' }],
     '/seller-promotions/items/MLB1?app_version=v2': [{ type: 'SELLER_COUPON_CAMPAIGN', status: 'candidate' }, { type: 'LIGHTNING', status: 'started' }],
@@ -686,6 +690,12 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     expect((await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade/MLB9000001', cookies })).json().itemId).toBe('MLB7000001');
     expect((await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade/MLB5555555', cookies })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade/abc', cookies })).statusCode).toBe(400);
+    // lote para as etiquetas da busca: sem visitas; o que o ML não devolver vem null
+    const lote = (await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade?ids=MLB7000002,MLB-5555555', cookies })).json();
+    expect(lote.MLB5555555).toBeNull();
+    expect(lote.MLB7000002).toMatchObject({ itemId: 'MLB7000002', soldQuantity: 20, catalog: false, listingType: 'Clássico' });
+    expect(lote.MLB7000002.salesPerDay).toBeGreaterThan(0);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/ml/viabilidade?ids=', cookies })).statusCode).toBe(400);
   });
 
   it('recusa state reutilizado, código inválido, negação e conta já usada por outra empresa', async () => {

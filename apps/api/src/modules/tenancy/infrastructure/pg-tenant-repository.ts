@@ -6,7 +6,7 @@ export class PgTenantRepository implements TenantRepository {
 
   async findBySlug(slug: string): Promise<Tenant | null> {
     const { rows } = await this.db.query<Tenant>(
-      'SELECT id, name, slug, status FROM tenants WHERE slug = $1',
+      'SELECT id, name, slug, status, features FROM tenants WHERE slug = $1',
       [slug],
     );
     return rows[0] ?? null;
@@ -14,7 +14,7 @@ export class PgTenantRepository implements TenantRepository {
 
   async findById(id: string): Promise<Tenant | null> {
     const { rows } = await this.db.query<Tenant>(
-      'SELECT id, name, slug, status FROM tenants WHERE id = $1',
+      'SELECT id, name, slug, status, features FROM tenants WHERE id = $1',
       [id],
     );
     return rows[0] ?? null;

@@ -132,3 +132,5 @@ button.ms-kpi:hover { transform: translateY(-2px); box-shadow: 0 0 0 2px var(--b
   .ms-grid { grid-template-columns: 1fr; }
 }
 
+.ms-features { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.ms-muted { margin: 0 0 10px; color: var(--gray-500); font-size: .84rem; }

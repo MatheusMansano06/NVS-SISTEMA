@@ -1,4 +1,5 @@
 import type {
+  TenantFeature,
   AdminDto,
   AnnouncementDto,
   AuditDto,
@@ -22,6 +23,7 @@ export const masterApi = {
   tenants: (q = '') => http<TenantRowDto[]>(`${A}/tenants${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   tenant: (id: string) => http<TenantDetailDto>(`${A}/tenants/${id}`),
   tenantStatus: (id: string, status: 'active' | 'suspended') => http<void>(`${A}/tenants/${id}/status`, { body: { status } }),
+  tenantFeature: (id: string, feature: TenantFeature, enabled: boolean) => http<void>(`${A}/tenants/${id}/features`, { body: { feature, enabled } }),
   resetPassword: (tenantId: string, userId: string) =>
     http<{ email: string; temporaryPassword: string }>(`${A}/tenants/${tenantId}/users/${userId}/reset-password`, { method: 'POST' }),
   saveSubscription: (

@@ -5,6 +5,7 @@ import { useGuidedTour } from '../../shared/tour/Tour';
 import { TOURS } from '../../shared/tour/tours';
 import { Icon } from '../../shared/ui/Icon';
 import { fullApi } from '../full/full-api';
+import { useFeature } from '../../shared/features';
 import { usePerson } from './PersonContext';
 
 const saudacao = () => {
@@ -18,9 +19,10 @@ export function OperationHome() {
   const [listas, setListas] = useState<{ abertas: number; minhas: number } | null>(null);
   const [devolucoes, setDevolucoes] = useState<{ chegaram: number; pendentes: number } | null>(null);
   const tour = useGuidedTour('operacao-inicio', TOURS['operacao-inicio'], true);
+  const full = useFeature('full');
 
   useEffect(() => {
-    fullApi
+    if (full) fullApi
       .lists()
       .then((ls) => {
         const abertas = ls.filter((l) => l.status !== 'completed');
@@ -30,7 +32,7 @@ export function OperationHome() {
     http<{ aguardando_conferencia: number; contestar: number; lancar_estoque: number; chamados_manuais: number }>('/api/v1/central/operacao/atencao')
       .then((a) => setDevolucoes({ chegaram: a.aguardando_conferencia, pendentes: a.contestar + a.lancar_estoque + a.chamados_manuais }))
       .catch(() => setDevolucoes(null));
-  }, [me.id]);
+  }, [me.id, full]);
 
   return (
     <section className="op-home">
@@ -45,14 +47,14 @@ export function OperationHome() {
       </header>
 
       <div className="op-choices">
-        <button type="button" className="op-choice op-choice-full" onClick={() => navigate('/op/full')}>
+        <button type="button" className="op-choice op-choice-full" disabled={!full} onClick={() => navigate('/op/full')}>
           <span className="op-choice-icon" aria-hidden="true"><Icon name="truck" size={30} /></span>
           <strong>Supervisão Full</strong>
           <span className="op-choice-text">Separar os produtos das listas do envio para o Full, bipando cada um, e imprimir as etiquetas na Zebra.</span>
           <span className="op-choice-stat">
-            {listas === null ? 'Carregando as listas…' : listas.abertas === 0 ? 'Nenhuma lista aberta agora' : `${listas.abertas} ${listas.abertas === 1 ? 'lista aberta' : 'listas abertas'}${listas.minhas ? ` · ${listas.minhas} com você` : ''}`}
+            {!full ? 'Em breve' : listas === null ? 'Carregando as listas…' : listas.abertas === 0 ? 'Nenhuma lista aberta agora' : `${listas.abertas} ${listas.abertas === 1 ? 'lista aberta' : 'listas abertas'}${listas.minhas ? ` · ${listas.minhas} com você` : ''}`}
           </span>
-          <em>Separar e imprimir →</em>
+          <em>{full ? 'Separar e imprimir →' : 'Em breve'}</em>
         </button>
         <button type="button" className="op-choice op-choice-dev" onClick={() => navigate('/op/devolucoes')}>
           <span className="op-choice-icon" aria-hidden="true"><Icon name="undo" size={30} /></span>

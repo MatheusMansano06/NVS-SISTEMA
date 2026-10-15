@@ -87,6 +87,8 @@ export interface TenantRowDto {
   mlConnected: boolean;
   subscription: { status: SubscriptionStatus; planName: string | null; price: number | null } | null;
   overdue: number;
+  /** Recursos liberados para a empresa (TENANT_FEATURES). */
+  features: string[];
 }
 
 export interface TenantDetailDto extends TenantRowDto {

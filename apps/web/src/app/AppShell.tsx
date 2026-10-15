@@ -1,3 +1,4 @@
+import type { TenantFeature } from '@nvs/shared';
 import { useState, type ReactNode } from 'react';
 import { useAuth } from '../modules/auth/AuthContext';
 import { ChangePasswordForm } from '../modules/auth/forms/ChangePasswordForm';
@@ -12,7 +13,7 @@ import { NoticesBar } from './NoticesBar';
 import { ThemeSwitch } from '../shared/theme';
 import './shell.css';
 
-const NAV: { label: string; icon: IconName; path?: string; master?: boolean }[] = [
+const NAV: { label: string; icon: IconName; path?: string; master?: boolean; feature?: TenantFeature }[] = [
   { label: 'Dashboard', icon: 'dashboard', path: '/' },
   { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro' },
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
@@ -20,7 +21,7 @@ const NAV: { label: string; icon: IconName; path?: string; master?: boolean }[] 
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
   { label: 'Precificador', icon: 'tag', path: '/precificador' },
   { label: 'Radar de Frete', icon: 'radar', path: '/radar-frete' },
-  { label: 'Supervisão Full', icon: 'truck', path: '/full' },
+  { label: 'Supervisão Full', icon: 'truck', path: '/full', feature: 'full' },
   { label: 'Devoluções', icon: 'undo', path: '/devolucoes' },
   { label: 'Equipe', icon: 'users', path: '/equipe', master: true },
   { label: 'Integrações', icon: 'plug' },
@@ -37,6 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const email = session?.user.email ?? '';
   const person = usePerson();
+  const features = session?.tenant.features ?? [];
   const [changingPin, setChangingPin] = useState(false);
   const who = person?.person.person.name ?? email.split('@')[0] ?? '';
   const path = usePath();
@@ -59,7 +61,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <nav>
           <ul>
-            {NAV.filter((item) => !item.master || person?.person.person.master).map((item) => (
+            {NAV.filter((item) => !item.master || person?.person.person.master)
+              .map((item) => (item.feature && !features.includes(item.feature) ? { ...item, path: undefined } : item))
+              .map((item) => (
               <li key={item.label}>
                 <a
                   href={item.path}

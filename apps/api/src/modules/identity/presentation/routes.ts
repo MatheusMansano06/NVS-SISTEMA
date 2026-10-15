@@ -7,7 +7,9 @@ import {
   loginSchema,
   registerAccountSchema,
   type SessionDto,
+  TENANT_FEATURES,
   type TeamMemberInput,
+  type TenantFeature,
   type UserDto,
 } from '@nvs/shared';
 import { z } from 'zod';
@@ -32,7 +34,7 @@ export const toUserDto = (u: User): UserDto => ({
 
 const toSession = (tenant: Tenant, user: User): SessionDto => ({
   user: toUserDto(user),
-  tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
+  tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, features: (tenant.features ?? []).filter((f): f is TenantFeature => (TENANT_FEATURES as readonly string[]).includes(f)) },
   mustChangePassword: user.mustChangePassword,
 });
 

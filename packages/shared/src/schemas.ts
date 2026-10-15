@@ -67,9 +67,14 @@ export interface UserDto {
   createdAt: string;
 }
 
+/** Recursos liberados por empresa no Painel Master (o resto aparece como "em breve"). */
+export const TENANT_FEATURES = ['full'] as const;
+export type TenantFeature = (typeof TENANT_FEATURES)[number];
+export const TENANT_FEATURE_LABELS: Record<TenantFeature, string> = { full: 'Supervisão Full' };
+
 export interface SessionDto {
   user: UserDto;
-  tenant: { id: string; name: string; slug: string };
+  tenant: { id: string; name: string; slug: string; features: TenantFeature[] };
   mustChangePassword: boolean;
 }
 

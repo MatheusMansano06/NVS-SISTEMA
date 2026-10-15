@@ -160,7 +160,11 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   await app.register(healthRoutes(database));
   // Painel Master (dono do NVS Tech): empresas, mensalidades, cupons, comunicados
   const platform = new PlatformService(database, { today: () => todayIn(), forgetTenant: (id) => tenants.forget(id) });
-  if (await platform.bootstrap(env.PLATFORM_ADMIN_EMAIL, env.PLATFORM_ADMIN_PASSWORD).catch(() => false)) app.log.info('Painel Master: primeira conta criada');
+  const master = await platform.bootstrap(env.PLATFORM_ADMIN_EMAIL, env.PLATFORM_ADMIN_PASSWORD).catch((err) => {
+    app.log.error({ err }, 'Painel Master: conta das variáveis não pôde ser criada/sincronizada');
+    return false;
+  });
+  if (master) app.log.info(master === 'created' ? 'Painel Master: conta criada' : 'Painel Master: conta sincronizada com as variáveis');
   await app.register(platformRoutes(platform, { secureCookies: env.NODE_ENV === 'production' }), { prefix: '/api/v1' });
   const dashboard = new DashboardService(database, new PgSalesRepository(), sharedCache);
   await app.register(salesRoutes(dashboard), { prefix: '/api/v1' });

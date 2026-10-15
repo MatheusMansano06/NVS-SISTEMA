@@ -8,6 +8,7 @@ import {
   invoicePaySchema,
   planSchema,
   subscriptionSchema,
+  TENANT_FEATURES,
 } from '@nvs/shared';
 import { z } from 'zod';
 import { NotFoundError, UnauthorizedError, ValidationError } from '../../../shared/kernel/errors.js';
@@ -83,6 +84,11 @@ export function platformRoutes(service: PlatformService, opts: { secureCookies: 
     app.post('/admin/tenants/:id/status', async (req, reply) => {
       const b = parse(z.object({ status: z.enum(['active', 'suspended']) }), req.body);
       await service.setTenantStatus(await by(req), idOf(req), b.status);
+      return noContent(reply);
+    });
+    app.post('/admin/tenants/:id/features', async (req, reply) => {
+      const b = parse(z.object({ feature: z.enum(TENANT_FEATURES), enabled: z.boolean() }), req.body);
+      await service.setTenantFeature(await by(req), idOf(req), b.feature, b.enabled);
       return noContent(reply);
     });
     app.post('/admin/tenants/:id/users/:userId/reset-password', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req) =>

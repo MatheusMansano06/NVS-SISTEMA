@@ -43,14 +43,21 @@ export class PlatformService {
 
   // ================= administradores
   /** Primeiro administrador vem das variáveis de ambiente, uma única vez (sem administrador nenhum no banco). */
-  async bootstrap(email?: string, password?: string): Promise<boolean> {
+  /**
+   * Conta Master das variáveis da Railway (PLATFORM_ADMIN_EMAIL/PASSWORD): criada no 1º boot e sincronizada a cada
+   * reinício — trocar a senha na Railway passa a valer depois do deploy (e reativa a conta, se estava desativada).
+   */
+  async bootstrap(email?: string, password?: string): Promise<'created' | 'synced' | false> {
     if (!email || !password) return false;
-    const { rows } = await this.db.query<{ n: string }>('SELECT count(*) AS n FROM platform_admins');
-    if (Number(rows[0]?.n) > 0) return false;
-    await this.db.query('INSERT INTO platform_admins (email, name, password_hash) VALUES ($1, $2, $3)', [
-      email.trim().toLowerCase(), 'Master', await hashPassword(password),
-    ]);
-    return true;
+    const mail = email.trim().toLowerCase();
+    const hash = await hashPassword(password);
+    const { rows } = await this.db.query<{ created: boolean }>(
+      `INSERT INTO platform_admins (email, name, password_hash) VALUES ($1, 'Master', $2)
+       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, is_active = true
+       RETURNING (xmax = 0) AS created`,
+      [mail, hash],
+    );
+    return rows[0]?.created ? 'created' : 'synced';
   }
 
   async login(email: string, password: string): Promise<AdminDto> {
@@ -142,7 +149,7 @@ export class PlatformService {
   async tenants(q?: string, id?: string): Promise<TenantRowDto[]> {
     const today = this.deps.today();
     const { rows } = await this.db.query<Json>(
-      `SELECT t.id, t.name, t.cnpj, t.phone, t.status, t.created_at,
+      `SELECT t.id, t.name, t.cnpj, t.phone, t.status, t.created_at, t.features,
               (SELECT li.email FROM login_identities li WHERE li.tenant_id = t.id ORDER BY li.email LIMIT 1) AS owner_email,
               (SELECT count(*) FROM login_identities li WHERE li.tenant_id = t.id) AS users,
               EXISTS (SELECT 1 FROM marketplace_identities mi WHERE mi.tenant_id = t.id) AS ml,
@@ -166,6 +173,7 @@ export class PlatformService {
       users: Number(r.users), mlConnected: Boolean(r.ml),
       subscription: r.sub_status ? { status: r.sub_status, planName: r.plan_name, price: num(r.sub_price) } : null,
       overdue: Number(r.overdue ?? 0),
+      features: r.features ?? [],
     };
   }
 
@@ -205,6 +213,18 @@ export class PlatformService {
     if (!r.rowCount) throw new NotFoundError('Empresa não encontrada');
     await this.deps.forgetTenant(id);
     await this.audit(by, status === 'suspended' ? 'tenant.suspend' : 'tenant.activate', id);
+  }
+
+  /** Liga/desliga um recurso para a empresa (ex.: Supervisão Full); vale na hora para quem já está logado. */
+  async setTenantFeature(by: string, id: string, feature: string, enabled: boolean) {
+    const r = await this.db.query(
+      `UPDATE tenants SET features = CASE WHEN $3 THEN array(SELECT DISTINCT unnest(features || ARRAY[$2::text])) ELSE array_remove(features, $2) END
+        WHERE id = $1`,
+      [id, feature, enabled],
+    );
+    if (!r.rowCount) throw new NotFoundError('Empresa não encontrada');
+    await this.deps.forgetTenant(id);
+    await this.audit(by, enabled ? 'tenant.feature_on' : 'tenant.feature_off', id, { feature });
   }
 
   /** Senha provisória de 8 números: a pessoa entra com ela e o sistema obriga a criar uma nova. */

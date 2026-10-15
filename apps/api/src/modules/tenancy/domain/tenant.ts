@@ -3,6 +3,8 @@ export interface Tenant {
   name: string;
   slug: string;
   status: 'active' | 'suspended';
+  /** Recursos liberados (ex.: "full" = Supervisão Full). */
+  features: string[];
 }
 
 export interface TenantRepository {

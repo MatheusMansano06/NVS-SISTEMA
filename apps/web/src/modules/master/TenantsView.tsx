@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { PlanDto, SubscriptionStatus, TenantDetailDto, TenantRowDto } from '@nvs/shared';
+import { TENANT_FEATURES, TENANT_FEATURE_LABELS, type PlanDto, type SubscriptionStatus, type TenantDetailDto, type TenantFeature, type TenantRowDto } from '@nvs/shared';
 import { int, money } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { Button } from '../../shared/ui/Button';
@@ -74,6 +74,18 @@ export function TenantDetailView({ id, onBack }: { id: string; onBack: () => voi
     }
   }
 
+  async function toggleFeature(f: TenantFeature) {
+    if (!t) return;
+    const on = !t.features.includes(f);
+    try {
+      await masterApi.tenantFeature(id, f, on);
+      setNote(`${TENANT_FEATURE_LABELS[f]} ${on ? 'liberada' : 'voltou para "em breve"'} para ${t.name}.`);
+      void load();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
+
   async function resetPassword(userId: string, name: string) {
     if (!window.confirm(`Gerar uma senha provisória para ${name}? A senha atual deixa de funcionar.`)) return;
     try {
@@ -112,6 +124,20 @@ export function TenantDetailView({ id, onBack }: { id: string; onBack: () => voi
           <b>{t.subscriptionDetail ? SUB_LABEL[t.subscriptionDetail.status] : 'Sem assinatura'}</b>
           <span>{t.subscription ? `${t.subscription.planName ?? 'Valor combinado'} · ${t.subscription.price === null ? '—' : money(t.subscription.price)} · vence dia ${t.subscriptionDetail?.billingDay}` : 'Clique para criar'}{t.subscriptionDetail?.couponCode ? ` · cupom ${t.subscriptionDetail.couponCode}` : ''}</span>
         </button>
+      </section>
+
+      <section className="ms-card">
+        <h2>Recursos liberados</h2>
+        <p className="ms-muted">Desligado, o recurso aparece como “em breve” para a empresa.</p>
+        <div className="ms-features">
+          {TENANT_FEATURES.map((f) => (
+            <label key={f} className="ads-toggle">
+              <input type="checkbox" checked={t.features.includes(f)} onChange={() => void toggleFeature(f)} />
+              <span className="ads-switch" aria-hidden="true" />
+              {TENANT_FEATURE_LABELS[f]}
+            </label>
+          ))}
+        </div>
       </section>
 
       <section className="ms-card">

@@ -108,3 +108,13 @@ button, input { font: inherit; color: inherit; }
 .theme-switch button[aria-checked='true'] { background: var(--surface); color: var(--navy); box-shadow: 0 1px 3px rgba(11,28,77,.18); }
 .theme-switch[data-compact] { padding: 0; border: 0; margin: 0; }
 .theme-switch[data-compact] > div { grid-template-columns: repeat(3, auto); }
+
+/* ============ Recurso ainda não liberado ============ */
+.coming-soon {
+  display: grid; justify-items: center; gap: 8px; max-width: 520px; margin: 48px auto; padding: 36px 28px; border-radius: 32px; text-align: center;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100), 0 22px 44px -32px rgba(11,28,77,.45);
+}
+.coming-soon img { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 4px var(--surface), 0 0 0 7px rgba(31,95,255,.22); }
+.coming-soon span { margin-top: 6px; padding: 3px 12px; border-radius: 99px; background: var(--yellow-soft); color: var(--warn-ink); font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.coming-soon h1 { margin: 0; color: var(--navy); font-size: 1.6rem; letter-spacing: -0.02em; }
+.coming-soon p { margin: 0; color: var(--gray-500); line-height: 1.5; }

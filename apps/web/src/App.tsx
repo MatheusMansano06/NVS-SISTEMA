@@ -7,6 +7,7 @@ import { OnboardingPage } from './modules/onboarding/OnboardingPage';
 import { onboardingApi } from './modules/onboarding/onboarding-api';
 import { usePath } from './app/router';
 import { AppShell } from './app/AppShell';
+import { ComingSoon, useFeature } from './shared/features';
 import type { PersonSessionDto, TeamDto } from '@nvs/shared';
 import { PersonProvider } from './modules/operation/PersonContext';
 import { PinChange } from './modules/operation/PinChange';
@@ -54,13 +55,14 @@ function Pages() {
 
 function Routes() {
   const path = usePath();
+  const full = useFeature('full');
   if (path.startsWith('/skus')) return <SkuPage />;
   if (path.startsWith('/vendas')) return <SalesPage />;
   if (path.startsWith('/precificador')) return <PricingPage />;
   if (path.startsWith('/radar-frete')) return <FreightPage />;
   if (path.startsWith('/equipe')) return <TeamPage />;
   if (path.startsWith('/devolucoes')) return <AppShell><CentralDevolucoes /></AppShell>;
-  if (path.startsWith('/full')) return <AppShell><FullRouter mode="analise" /></AppShell>;
+  if (path.startsWith('/full')) return <AppShell>{full ? <FullRouter mode="analise" /> : <ComingSoon title="Supervisão Full" text="A Supervisão Full (separação das listas do Full com bipagem e impressão das etiquetas) está em fase de testes e será liberada em breve para a sua empresa." />}</AppShell>;
   if (path.startsWith('/anuncios/promocoes')) return <PromotionsPage />;
   if (path.startsWith('/anuncios/marketing')) return <MarketingPage />;
   if (path.startsWith('/anuncios')) return <ListingsPage />;

@@ -164,3 +164,4 @@
 @media (max-width: 720px) { .op-choices { grid-template-columns: 1fr; } .op-choice { min-height: 0; } }
 .station-notices { width: min(1280px, 96vw); justify-self: center; }
 .station-notices:empty { display: none; }
+.op-choice:disabled { cursor: default; opacity: .55; filter: grayscale(.6); transform: none; }

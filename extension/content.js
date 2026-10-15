@@ -184,10 +184,9 @@
 
   function chips(d) {
     const out = [];
-    if (d.createdAt) {
-      const when = d.estimated ? `~${fmtMonth(d.createdAt)}` : fmtDate(d.createdAt);
-      const title = d.estimated ? 'Data estimada pelo número do anúncio (o ML não informa a de outros vendedores)' : 'Data de criação';
-      out.push(`<span class="nvs-chip" title="${title}">📅 ${when}${d.ageDays != null ? ` · ${d.estimated ? '~' : ''}${nf.format(d.ageDays)}d` : ''}</span>`);
+    if (d.ageDays != null) {
+      const when = d.estimated ? `estimado: ~${fmtMonth(d.createdAt)}` : `criado em ${fmtDate(d.createdAt)}`;
+      out.push(`<span class="nvs-chip" title="Dias no ar (${when})">📅 ${d.estimated ? '~' : ''}${nf.format(d.ageDays)} dias</span>`);
     } else out.push('<span class="nvs-chip nvs-dim">📅 —</span>');
     if (d.sold != null) out.push(`<span class="nvs-chip" title="Vendas · média por dia de vida">🛒 ${nf.format(d.sold)}${d.perDay != null ? ` · ${d.estimated ? '~' : ''}${nf2.format(d.perDay)}/dia` : ''}</span>`);
     else if (d.soldText) out.push(`<span class="nvs-chip" title="Vendas mostradas pelo ML (faixa)">🛒 ${esc(d.soldText)}</span>`);
@@ -264,11 +263,11 @@
     const type = own ? d.listingType : p ? TYPE_LABEL[p.listingTypeId] ?? p.listingTypeId : null;
     const created = d.createdAt
       ? d.createdAtEstimated
-        ? `~${fmtMonth(d.createdAt)} (~${nf.format(d.ageDays)} dias) <span class="nvs-dim">· estimada</span>`
-        : `${fmtDate(d.createdAt)} (${nf.format(d.ageDays)} dias)`
+        ? `~${nf.format(d.ageDays)} dias <span class="nvs-dim">· estimado (~${fmtMonth(d.createdAt)})</span>`
+        : `${nf.format(d.ageDays)} dias <span class="nvs-dim">· ${fmtDate(d.createdAt)}</span>`
       : '—';
     const rows = [
-      ['Criado em', created],
+      ['Tempo no ar', created],
       ['Vendas', `${soldTxt}${perDay != null ? ` · ${d.createdAtEstimated ? '~' : ''}${nf2.format(perDay)}/dia` : ''}`],
       ['Tipo', `${catalog == null ? '—' : catalog ? 'Catálogo' : 'Tradicional'}${type ? ` · ${esc(type)}` : ''}`],
     ];

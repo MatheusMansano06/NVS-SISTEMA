@@ -68,3 +68,11 @@
 .nvs-bars { display: flex; align-items: flex-end; gap: 6px; height: 110px; background: #f8fafc; border-radius: 8px; padding: 8px; box-sizing: border-box; }
 .nvs-bar-col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
 .nvs-bar-fill { width: 100%; min-height: 2px; background: #1d4ed8; border-radius: 4px 4px 0 0; opacity: 0.8; }
+.nvs-trend-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.nvs-trend { padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+.nvs-trend.nvs-up { background: #e7f8ee; color: #0a7a3b; }
+.nvs-trend.nvs-down { background: #fdecec; color: #a11d1d; }
+.nvs-trend.nvs-flat { background: #eef2f7; color: #374151; }
+.nvs-line.nvs-up { stroke: #0a7a3b; }
+.nvs-line.nvs-down { stroke: #c0262d; }
+.nvs-line { stroke-width: 2.5; stroke-linecap: round; }

@@ -24,7 +24,7 @@ const NAV: { label: string; icon: IconName; path?: string; master?: boolean; fea
   { label: 'Vendas', icon: 'cart', path: '/vendas', feature: 'vendas' },
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },
   { label: 'Precificador', icon: 'tag', path: '/precificador', feature: 'precificador' },
-  { label: 'Radar de Frete', icon: 'radar', path: '/radar-frete', feature: 'radar_frete' },
+  { label: 'Flex e Radar de Frete', icon: 'radar', path: '/radar-frete', feature: 'radar_frete' },
   { label: 'Supervisão Full', icon: 'truck', path: '/full', feature: 'full' },
   { label: 'Devoluções', icon: 'undo', path: '/devolucoes', feature: 'devolucoes' },
   { label: 'Equipe', icon: 'users', path: '/equipe', master: true },

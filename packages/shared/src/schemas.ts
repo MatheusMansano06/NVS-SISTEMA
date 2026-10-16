@@ -78,7 +78,7 @@ export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: s
   dre: { label: 'DRE', text: 'Resultado do mês, custos da empresa e custo real da equipe.', area: 'Análise' },
   vendas: { label: 'Vendas', text: 'Pedidos, formas de pagamento, estados e DIFAL.', area: 'Análise' },
   precificador: { label: 'Precificador', text: 'Simula preço, tarifa, frete e margem antes de anunciar.', area: 'Análise' },
-  radar_frete: { label: 'Radar de Frete', text: 'Frete pago por anúncio e oportunidades de Flex.', area: 'Análise' },
+  radar_frete: { label: 'Flex e Radar de Frete', text: 'Frete pago por anúncio e oportunidades de Flex.', area: 'Análise' },
   viabilidade: { label: 'Estudo de Viabilidade', text: 'Extensão do Chrome: data, vendas, tipo e visitas de qualquer anúncio do ML.', area: 'Análise' },
   anuncios: { label: 'Meus anúncios', text: 'Lista de anúncios com margem, edição, estoque e preço.', area: 'Anúncios' },
   promocoes: { label: 'Central de Promoção', text: 'Inscrever anúncios nas campanhas do ML vendo a margem.', area: 'Anúncios' },

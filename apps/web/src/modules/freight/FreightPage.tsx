@@ -38,7 +38,7 @@ export function FreightPage() {
         <header className="skus-head">
           <div>
             <p className="dash-kicker">Mercado Livre</p>
-            <h1>Radar de Frete</h1>
+            <h1>Flex e Radar de Frete</h1>
           </div>
           <div className="seg" role="tablist" aria-label="Radar">
             <button type="button" role="tab" aria-checked={tab === 'radar'} onClick={() => setTab('radar')}>

@@ -138,7 +138,7 @@ export const TOURS = {
   ],
   radar: [
     {
-      title: 'Radar de Frete',
+      title: 'Flex e Radar de Frete',
       text:
         'Todo dia eu leio quanto o Mercado Livre está cobrando de frete em cada anúncio com frete grátis.\n' +
         'Serve para pegar aquele caso que ninguém percebe: o frete que era R$ 10 e do nada vai para R$ 40, comendo a margem de todas as vendas.\n' +

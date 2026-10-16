@@ -139,22 +139,23 @@ export function FinanceTable({ filters, initial, version, onConsiderarFc }: Prop
   const [loading, setLoading] = useState(true);
   const [hidden, setHidden] = useState<string[]>(readHidden);
   const [colsOpen, setColsOpen] = useState(false);
+  const [ordem, setOrdem] = useState<LineFilters['ordem']>();
   const ctrl = useRef<AbortController | null>(null);
   const top = useRef<HTMLElement>(null);
 
   useEffect(() => setLf(initial), [initial]);
-  useEffect(() => setPage(1), [lf, filters, pageSize]);
+  useEffect(() => setPage(1), [lf, filters, pageSize, ordem]);
   useEffect(() => {
     ctrl.current?.abort();
     const c = new AbortController();
     ctrl.current = c;
     setLoading(true);
     financeApi
-      .lines(filters, lf, (page - 1) * pageSize, pageSize, c.signal)
+      .lines(filters, { ...lf, ordem }, (page - 1) * pageSize, pageSize, c.signal)
       .then(setData)
       .catch(() => undefined)
       .finally(() => ctrl.current === c && setLoading(false));
-  }, [filters, lf, page, pageSize, version]);
+  }, [filters, lf, ordem, page, pageSize, version]);
 
   const toggleCol = (key: string) =>
     setHidden((h) => {
@@ -167,6 +168,8 @@ export function FinanceTable({ filters, initial, version, onConsiderarFc }: Prop
       return next;
     });
   const cols = COLUMNS.filter((c) => !hidden.includes(c.key));
+  // clique na MC: maior → menor margem, menor → maior, volta à ordem padrão
+  const nextOrdem = () => setOrdem((o) => (o === undefined ? 'mc_desc' : o === 'mc_desc' ? 'mc_asc' : undefined));
 
   return (
     <section className="panel ftable" aria-labelledby="ft-title" ref={top}>
@@ -194,7 +197,7 @@ export function FinanceTable({ filters, initial, version, onConsiderarFc }: Prop
               </div>
             )}
           </div>
-          <a className="btn btn-ghost btn-sm" href={financeApi.exportUrl(filters, lf)} download>
+          <a className="btn btn-ghost btn-sm" href={financeApi.exportUrl(filters, { ...lf, ordem })} download>
             <Icon name="logout" size={16} /> Exportar
           </a>
         </div>
@@ -206,7 +209,21 @@ export function FinanceTable({ filters, initial, version, onConsiderarFc }: Prop
             <tr>
               <th scope="col" className="c-prod">Anúncio · SKU</th>
               {cols.map((c) => (
-                <th key={c.key} scope="col" className={c.cls}>{c.label}</th>
+                <th
+                  key={c.key}
+                  scope="col"
+                  className={c.cls}
+                  aria-sort={c.key === 'mc' ? (ordem === 'mc_desc' ? 'descending' : ordem === 'mc_asc' ? 'ascending' : 'none') : undefined}
+                >
+                  {c.key === 'mc' ? (
+                    <button type="button" className="th-sort" onClick={nextOrdem} title="Ordenar pela margem (MC %)">
+                      {c.label}
+                      <span aria-hidden="true">{ordem === 'mc_desc' ? ' ▼' : ordem === 'mc_asc' ? ' ▲' : ' ⇅'}</span>
+                    </button>
+                  ) : (
+                    c.label
+                  )}
+                </th>
               ))}
             </tr>
           </thead>

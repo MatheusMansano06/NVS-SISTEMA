@@ -17,6 +17,7 @@ export interface LineFilters {
   margem?: MarginBand;
   sku?: string;
   pedido?: string;
+  ordem?: 'mc_desc' | 'mc_asc';
 }
 
 const qs = (f: FinanceFilters, extra: Record<string, string | number | boolean | undefined> = {}) => {

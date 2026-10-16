@@ -136,6 +136,10 @@
 .fin { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0 4px; font-size: .8rem; }
 .fin th { padding: 4px 8px; font-size: .66rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: .03em; text-align: left; line-height: 1.25; vertical-align: bottom; }
 .fin th.num, .fin td.num { text-align: right; }
+.fin .th-sort { all: unset; cursor: pointer; text-align: inherit; border-radius: 4px; }
+.fin .th-sort:hover { color: var(--gray-900, #111); }
+.fin .th-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.fin th[aria-sort='ascending'], .fin th[aria-sort='descending'] { color: var(--gray-900, #111); }
 .fin .c-prod { width: 26%; }
 .fin .c-ped { width: 13%; }
 .fin .c-st { width: 10%; }

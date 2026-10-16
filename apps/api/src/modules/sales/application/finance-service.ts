@@ -243,6 +243,10 @@ export class FinanceService {
         (!f.margem || (l.mcPct !== null && marginBand(l.mcPct) === f.margem)) &&
         (!term || l.sku.toLowerCase().includes(term) || l.title.toLowerCase().includes(term) || l.orderId.includes(term)),
     );
+    if (f.ordem) {
+      const dir = f.ordem === 'mc_desc' ? -1 : 1;
+      filtered.sort((a, b) => (a.mcPct === null ? 1 : b.mcPct === null ? -1 : dir * (a.mcPct - b.mcPct)));
+    }
     return { items: filtered.slice(f.offset, f.offset + f.limit), total: filtered.length };
   }
 

@@ -62,6 +62,8 @@ export const financeLinesQuerySchema = z.object({
   sku: z.string().trim().max(120).optional(),
   pedido: z.string().trim().max(60).optional(),
   q: z.string().trim().max(120).optional(),
+  /** ordenação pela margem de contribuição % (sem custo vai para o fim); ausente = ordem padrão */
+  ordem: z.enum(['mc_desc', 'mc_asc']).optional(),
   offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });

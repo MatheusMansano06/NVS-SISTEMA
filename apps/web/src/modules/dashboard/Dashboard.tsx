@@ -20,6 +20,7 @@ import { useDashboard } from './useDashboard';
 import { SyncProgress } from '../mercado-livre/SyncProgress';
 import { consumeMlReturn } from '../mercado-livre/ml-api';
 import { navigate } from '../../app/router';
+import { DreCard } from '../dre/DreCard';
 import './dashboard.css';
 
 const HIDE_KEY = 'nvs.hideValues';
@@ -213,6 +214,9 @@ export function Dashboard() {
               discountAds={discountAds}
               stamp={data.generatedAt}
             />
+            {!data.isDemo && session?.tenant.features.includes('financeiro') && (
+              <DreCard accountId={filters.accountId} stamp={data.generatedAt} />
+            )}
 
             <section className="minis" aria-label="Outros indicadores">
               <div><span>Pedidos</span><strong>{int(k.orders)}</strong></div>

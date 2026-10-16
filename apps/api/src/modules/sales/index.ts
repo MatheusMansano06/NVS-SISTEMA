@@ -7,6 +7,8 @@ export { PgSkuRepository } from './infrastructure/pg-sku-repository.js';
 export { skuRoutes } from './presentation/sku-routes.js';
 export { FinanceService } from './application/finance-service.js';
 export { financeRoutes } from './presentation/finance-routes.js';
+export { DreService } from './application/dre-service.js';
+export { dreRoutes } from './presentation/dre-routes.js';
 export { TIMEZONE, todayIn } from './domain/period.js';
 export { SalesAnalyticsService } from './application/sales-analytics-service.js';
 export { PgSalesAnalyticsRepository } from './infrastructure/pg-sales-analytics-repository.js';

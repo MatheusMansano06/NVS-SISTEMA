@@ -19,6 +19,7 @@ const listingsHome = (features: TenantFeature[]) => LISTING_TABS.find(([f]) => f
 const NAV: { label: string; icon: IconName; path?: string; master?: boolean; feature?: TenantFeature }[] = [
   { label: 'Dashboard', icon: 'dashboard', path: '/' },
   { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro', feature: 'financeiro' },
+  { label: 'DRE', icon: 'chart', path: '/dre', feature: 'financeiro' },
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
   { label: 'Vendas', icon: 'cart', path: '/vendas', feature: 'vendas' },
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },

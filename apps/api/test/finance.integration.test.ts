@@ -114,6 +114,42 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     expect(s.series).toHaveLength(1);
   });
 
+  it('DRE do mês: vendas automáticas + gastos lançados, com edição e exclusão', async () => {
+    const cookies = await setup();
+    const month = today.slice(0, 7);
+    const post = (payload: object) => app.inject({ method: 'POST', url: '/api/v1/dre/entries', cookies, payload });
+    const aluguel = (await post({ name: 'Aluguel', kind: 'despesa_fixa', category: 'estrutura', basis: 'mensal', amount: 1000, startMonth: month })).json();
+    expect(aluguel).toMatchObject({ name: 'Aluguel', amount: 1000, startMonth: month, endMonth: null });
+    await post({ name: 'Embalagem', kind: 'custo_variavel', category: 'logistica', basis: 'pedido', amount: 2, startMonth: month });
+    expect((await post({ name: 'Errado', kind: 'despesa_fixa', category: 'outros', basis: 'percentual', amount: 150, startMonth: month })).statusCode).toBe(400);
+
+    const ana = (await post({ name: 'Ana', kind: 'despesa_fixa', category: 'pessoas', basis: 'mensal', amount: 1, startMonth: month,
+      details: { role: 'clt', regime: 'simples', salario: 4200 } })).json();
+    expect(ana.amount).toBe(5578.53); // custo real, não o salário
+    await app.inject({ method: 'DELETE', url: `/api/v1/dre/entries/${ana.id}`, cookies });
+
+    const dre = (extra = '') => app.inject({ method: 'GET', url: `/api/v1/dre?month=${month}&fresh=1${extra}`, cookies }).then((r) => r.json());
+    const d = await dre();
+    const total = (id: string) => d.sections.find((s: { id: string }) => s.id === id).total;
+    // receita: A 200 + B 100 (+30 frete comprador, ME1) + C 50 + E 100 (cancelado fora)
+    expect(d.receitaBruta).toBe(480);
+    expect(d.pedidos).toBe(4);
+    // custo: A 80 + B 40 + E 40 = 160; C sem custo estimado pela média (160/400 × 50)
+    expect(total('cmv')).toBe(180);
+    expect(d.cobertura).toMatchObject({ semCustoQtd: 1, estimado: true });
+    // tarifas 55 + frete vendedor 73 (inclui o cancelado) + embalagem 2 × 4 pedidos
+    expect(total('variaveis')).toBe(55 + 73 + 8);
+    expect(total('fixas')).toBe(1000);
+    expect(d.subtotals.lucro_liquido).toBeCloseTo(d.subtotals.receita_liquida - 180 - 136 - 1000, 2);
+    expect(d.lancamentos).toBe(2);
+    expect((await dre('&estimarCusto=false')).sections.find((s: { id: string }) => s.id === 'cmv').total).toBe(160);
+
+    const put = await app.inject({ method: 'PUT', url: `/api/v1/dre/entries/${aluguel.id}`, cookies, payload: { ...aluguel, amount: 1200 } });
+    expect(put.json().amount).toBe(1200);
+    expect((await app.inject({ method: 'DELETE', url: `/api/v1/dre/entries/${aluguel.id}`, cookies })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/dre/entries', cookies })).json()).toHaveLength(1);
+  });
+
   it('tabela linha a linha com filtros, paginação e exportação', async () => {
     const cookies = await setup();
     const all = (await get(cookies, 'lines')).json();

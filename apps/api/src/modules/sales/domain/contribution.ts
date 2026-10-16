@@ -16,6 +16,8 @@ export interface OrderFinance {
 }
 
 const KEEPS_BUYER_FREIGHT = new Set(['me1', 'outros']);
+export const keepsBuyerFreight = (bucket: string, considerarFreteComprador = false) =>
+  considerarFreteComprador || KEEPS_BUYER_FREIGHT.has(bucket);
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 export function contributionMargin(
@@ -23,7 +25,7 @@ export function contributionMargin(
   considerarFreteComprador = false,
 ): { mc: number; mcPct: number; faturamentoLinha: number } {
   const faturamentoLinha = o.produto + o.freteComprador - o.cupom - o.devolucao;
-  const keeps = considerarFreteComprador || KEEPS_BUYER_FREIGHT.has(o.bucket);
+  const keeps = keepsBuyerFreight(o.bucket, considerarFreteComprador);
   const base = keeps ? faturamentoLinha : o.produto - o.cupom - o.devolucao;
   const mc = base - o.custo - o.imposto - o.tarifa - o.freteVendedor;
   return {

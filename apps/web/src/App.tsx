@@ -29,6 +29,7 @@ const SalesPage = page(() => import('./modules/sales/SalesPage'), 'SalesPage');
 const PricingPage = page(() => import('./modules/pricing/PricingPage'), 'PricingPage');
 const FreightPage = page(() => import('./modules/freight/FreightPage'), 'FreightPage');
 const FinancePage = page(() => import('./modules/finance/FinancePage'), 'FinancePage');
+const DrePage = page(() => import('./modules/dre/DrePage'), 'DrePage');
 const FullRouter = page(() => import('./modules/full/FullRouter'), 'FullRouter');
 const CentralDevolucoes = page(() => import('./modules/central/CentralDevolucoes'), 'CentralDevolucoes');
 const OperationApp = page(() => import('./modules/operation/OperationApp'), 'OperationApp');
@@ -64,9 +65,10 @@ const GATED: { prefix: string; feature: TenantFeature; page: () => ReactNode }[]
   { prefix: '/anuncios/marketing', feature: 'marketing', page: () => <MarketingPage /> },
   { prefix: '/anuncios', feature: 'anuncios', page: () => <ListingsPage /> },
   { prefix: '/financeiro', feature: 'financeiro', page: () => <FinancePage /> },
+  { prefix: '/dre', feature: 'financeiro', page: () => <DrePage /> },
 ];
 /** Telas que já trazem o AppShell próprio (as demais são embrulhadas aqui). */
-const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro']);
+const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro', '/dre']);
 
 function Routes() {
   const path = usePath();

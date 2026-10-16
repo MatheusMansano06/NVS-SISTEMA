@@ -13,7 +13,8 @@ import {
 } from '@nvs/shared';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
-import { contributionMargin } from '../domain/contribution.js';
+import { contributionMargin, keepsBuyerFreight } from '../domain/contribution.js';
+import type { DreSales } from '../domain/dre.js';
 import { TIMEZONE } from '../domain/period.js';
 
 interface Row {
@@ -176,6 +177,49 @@ export class FinanceService {
       enriquecimentoPendente: pendente,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Totais do mês para o DRE, com as mesmas regras da MC: canceladas só pesam no frete do vendedor; o frete comprador
+   * entra na receita quando o vendedor recebe e paga o frete. Vendas sem custo: custo e imposto estimados pela
+   * proporção média das vendas com custo.
+   */
+  async dreSales(tenantId: string, q: FinanceQuery): Promise<DreSales> {
+    const s: DreSales = {
+      receitaBruta: 0, cupom: 0, devolucao: 0, imposto: 0, custo: 0, custoEstimado: 0, impostoEstimado: 0,
+      tarifa: 0, freteVendedor: 0, pedidos: 0, unidades: 0, semCustoQtd: 0, semCustoValor: 0,
+    };
+    const cert = { produto: 0, custo: 0, imposto: 0 };
+    const semCusto = { produto: 0, semImposto: 0 };
+    for (const o of await this.computed(tenantId, q)) {
+      s.freteVendedor += o.fv;
+      if (o.status === 'cancelada') continue;
+      s.receitaBruta += o.produto + (keepsBuyerFreight(o.row.bucket, q.considerarFreteComprador) ? o.fc : 0);
+      s.cupom += o.cupom;
+      s.devolucao += o.devolucao;
+      s.tarifa += o.tarifa;
+      s.pedidos++;
+      s.unidades += o.row.items.reduce((a, i) => a + i.qty, 0);
+      if (o.certified) {
+        s.custo += o.custo;
+        s.imposto += o.imposto;
+        cert.produto += o.produto;
+        cert.custo += o.custo;
+        cert.imposto += o.imposto;
+      } else {
+        s.imposto += o.imposto; // a alíquota pode existir mesmo sem custo
+        s.semCustoQtd++;
+        s.semCustoValor += o.produto - o.cupom - o.devolucao;
+        semCusto.produto += o.produto;
+        if (o.imposto === 0) semCusto.semImposto += o.produto;
+      }
+    }
+    if (cert.produto > 0) {
+      s.custoEstimado = (cert.custo / cert.produto) * semCusto.produto;
+      s.impostoEstimado = (cert.imposto / cert.produto) * semCusto.semImposto;
+    }
+    for (const k of Object.keys(s) as (keyof DreSales)[]) s[k] = q2(s[k]);
+    return s;
   }
 
   /** Alerta do Dashboard: vendas aprovadas com custo e margem de contribuição abaixo do mínimo da empresa. */

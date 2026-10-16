@@ -21,6 +21,8 @@ import {
   SkuCostService,
   todayIn,
   FinanceService,
+  DreService,
+  dreRoutes,
   financeRoutes,
   PgSalesAnalyticsRepository,
   SalesAnalyticsService,
@@ -171,7 +173,9 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   await app.register(salesRoutes(dashboard), { prefix: '/api/v1' });
   const skuCosts = new SkuCostService(database, new PgSkuRepository(), sharedCache);
   await app.register(skuRoutes(skuCosts), { prefix: '/api/v1' });
-  await app.register(financeRoutes(new FinanceService(database, sharedCache)), { prefix: '/api/v1' });
+  const finance = new FinanceService(database, sharedCache);
+  await app.register(financeRoutes(finance), { prefix: '/api/v1' });
+  await app.register(dreRoutes(new DreService(database, finance)), { prefix: '/api/v1' });
   await app.register(salesAnalyticsRoutes(new SalesAnalyticsService(database, new PgSalesAnalyticsRepository())), { prefix: '/api/v1' });
 
   const mlConfigured = Boolean(

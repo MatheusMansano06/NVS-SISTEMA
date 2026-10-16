@@ -88,6 +88,22 @@ export const TOURS = {
     { target: '.dash-duo', title: 'Mais vendidos e pausados', text: 'À esquerda os 5 produtos que mais venderam. À direita os anúncios pausados — principalmente os sem estoque, que estão deixando de vender.' },
     { title: 'Tudo certo! 🎉', text: 'Dica: compare sempre com o período anterior. Para entender de onde vem cada número, use a Análise Financeira e a aba Vendas.' },
   ],
+  dre: [
+    {
+      title: 'Resultado do mês (DRE) 📊',
+      text:
+        'Aqui você vê, em linguagem simples, se a loja deu lucro ou prejuízo no mês.\n' +
+        'Serve para enxergar o lucro de verdade: o que vem do Mercado Livre entra sozinho, e você só cadastra os custos da empresa (equipe, aluguel, internet…).\n' +
+        'Vou te mostrar em menos de 1 minuto.',
+    },
+    { target: '.month-nav', title: 'Escolha o mês', text: 'Use as setinhas para ver os meses anteriores. O mês atual mostra o resultado até hoje.' },
+    { target: '.dre-hero', title: 'A resposta principal', text: 'Quanto sobrou (ou faltou) no mês e quanto fica com você de cada R$ 100 vendidos. Embaixo, a comparação com o mês anterior e a previsão de fechamento.' },
+    { target: '.receipt', title: 'Para onde foi o dinheiro', text: 'Como um cupom: começa no que você vendeu, desconta impostos, mercadoria, custos de venda e da empresa, e termina no que sobrou. Toque numa linha para ver os detalhes.' },
+    { target: '.insight', title: 'O que fazer agora', text: 'A dica mais importante do momento: por exemplo, quanto falta vender para não ter prejuízo.' },
+    { target: '.dre-costs-btn', title: 'Meus custos', text: 'O passo a passo para cadastrar equipe, aluguel, internet e outros gastos. Cadastre uma vez: eles entram sozinhos todo mês. Para funcionários, eu calculo o custo real (não é só o salário!).' },
+    { target: '.view-switch', title: 'Resumo ou DRE completo', text: 'Quer ir mais fundo? O “DRE completo” mostra a cascata, os nomes que o contador usa, o ponto de equilíbrio e um simulador.' },
+    { title: 'Pronto! 🎉', text: 'Comece por “Meus custos”: sem os gastos da empresa, o lucro parece maior do que é.' },
+  ],
   financeiro: [
     {
       title: 'Análise Financeira',

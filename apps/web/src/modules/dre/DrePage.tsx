@@ -7,6 +7,8 @@ import { Icon } from '../../shared/ui/Icon';
 import { Modal } from '../../shared/ui/Modal';
 import { mlApi } from '../mercado-livre/ml-api';
 import { useCountUp } from '../dashboard/useCountUp';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import { Waterfall } from './components/DreCharts';
 import { SimpleView } from './components/SimpleView';
 import { BreakEven, WhatIf } from './components/DreInsights';
@@ -134,6 +136,7 @@ export function DrePage() {
   const now = thisMonth();
   const lucro = data?.subtotals.lucro_liquido ?? 0;
   const lucroShown = useCountUp(lucro);
+  const tour = useGuidedTour('dre', TOURS.dre, Boolean(data) && !loading && view === 'simples');
   const margemLiq = data && data.receitaBruta > 0 ? (lucro / data.receitaBruta) * 100 : null;
   const diff = data?.previous ? lucro - data.previous.lucroLiquido : null;
   const per100 = margemLiq ?? 0;
@@ -228,7 +231,7 @@ export function DrePage() {
             )}
             <button
               type="button"
-              className={`btn btn-sm ${data?.lancamentos === 0 ? 'btn-primary' : 'btn-ghost'}`}
+              className={`btn btn-sm dre-costs-btn ${data?.lancamentos === 0 ? 'btn-primary' : 'btn-ghost'}`}
               onClick={() => setSetup(true)}
             >
               Meus custos
@@ -409,6 +412,7 @@ export function DrePage() {
           }}
         />
       </Modal>
+      {tour.element}
     </AppShell>
   );
 }

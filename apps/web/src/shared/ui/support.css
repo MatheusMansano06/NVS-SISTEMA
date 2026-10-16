@@ -1,0 +1,35 @@
+/* Botão de suporte: fixo no topo, centralizado, para não cobrir as ações dos cabeçalhos das telas */
+.support-fab {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--navy);
+  font: 600 13px/1 var(--font);
+  text-decoration: none;
+  box-shadow: 0 0 0 1px var(--gray-100), 0 6px 18px rgb(11 28 77 / 0.12);
+  opacity: 0.85;
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+.support-fab:hover,
+.support-fab:focus-visible {
+  opacity: 1;
+  color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue-soft), 0 8px 22px rgb(31 95 255 / 0.2);
+}
+:root[data-theme='dark'] .support-fab { color: var(--ink); }
+
+/* Celular: só o ícone, para não brigar com o cabeçalho */
+@media (max-width: 640px) {
+  .support-fab { padding: 8px; }
+  .support-fab span { display: none; }
+}
+
+@media print { .support-fab { display: none; } }

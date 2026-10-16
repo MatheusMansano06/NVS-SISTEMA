@@ -8,6 +8,7 @@ import { onboardingApi } from './modules/onboarding/onboarding-api';
 import { usePath } from './app/router';
 import { AppShell } from './app/AppShell';
 import { FeatureGate, useFeatures } from './shared/features';
+import { SupportButton } from './shared/ui/SupportButton';
 import type { PersonSessionDto, TeamDto } from '@nvs/shared';
 import { PersonProvider } from './modules/operation/PersonContext';
 import { PinChange } from './modules/operation/PinChange';
@@ -198,6 +199,7 @@ export function App() {
   }
   return (
     <AuthProvider>
+      <SupportButton />
       <Router />
     </AuthProvider>
   );

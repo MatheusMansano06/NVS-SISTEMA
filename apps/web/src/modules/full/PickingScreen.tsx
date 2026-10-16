@@ -82,7 +82,11 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
         break;
       case 'complete': {
         blink('complete');
-        if (r.item.labelsReady) setPending({ sku: r.item.sku, qty: r.item.qtyPicked, printed: false });
+        if (r.item.labelsReady) {
+          // item fechou: a impressão abre sozinha; o botão fica só para o caso de falhar
+          setPending({ sku: r.item.sku, qty: r.item.qtyPicked, printed: false });
+          void printBrowser(r.item.sku, r.item.qtyPicked);
+        }
         setMsg(r.item.status === 'complete' ? `✓ ${r.item.sku} completo` : `${r.item.sku}: ${WMS_ITEM_STATUS_LABELS[r.item.status].toLowerCase()} (falta ${r.item.shortageQty})`);
         setFocus(undefined);
         break;

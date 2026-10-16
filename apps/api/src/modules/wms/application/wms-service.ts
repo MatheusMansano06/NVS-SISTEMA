@@ -202,14 +202,14 @@ export class WmsService {
     });
   }
 
-  /** Ranking por unidades separadas (bipadas, caixas, falta parcial, desfeitas descontam). */
+  /** Ranking por unidades separadas (bipe, caixa, quantidade, falta parcial; desfeitas descontam). */
   async ranking(tenantId: string, marketplace: WmsMarketplace, batchId?: string): Promise<WmsRankingDto> {
     return this.db.withTenant(tenantId, async (db) => {
       const { rows } = await db.query<{ name: string; total: number }>(
         `SELECT o.name, sum(e.qty_delta)::int AS total
            FROM wms_scan_events e JOIN operators o ON o.id = e.operator_id JOIN wms_lists l ON l.id = e.list_id
           WHERE l.marketplace = $1 AND ($2::uuid IS NULL OR l.batch_id = $2)
-            AND e.event_type IN ('scan', 'scan_box', 'undo', 'shortage', 'manual')
+            AND (e.event_type LIKE 'scan%' OR e.event_type IN ('undo', 'shortage', 'manual'))
           GROUP BY o.name HAVING sum(e.qty_delta) > 0 ORDER BY 2 DESC LIMIT 20`,
         [marketplace, batchId ?? null],
       );

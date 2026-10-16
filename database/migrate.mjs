@@ -86,6 +86,8 @@ try {
     );
     await client.query(`GRANT USAGE ON SCHEMA public TO ${appRole}`);
     await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${appRole}`);
+    // colunas serial (ex.: wms_scan_events.id) precisam do nextval da sequência
+    await client.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${appRole}`);
     await client.query(`REVOKE ALL ON schema_migrations FROM ${appRole}`);
     console.log(`Papel ${appRole} pronto (sem privilégios de administrador).`);
   }

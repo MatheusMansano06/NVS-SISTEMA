@@ -33,9 +33,12 @@ export const wmsInboundSchema = z.object({
 export const wmsScanSchema = z.object({
   barcode: code,
   focusSku: sku.optional(),
-  /** box: uma bipada marca a quantidade informada (ou tudo). */
-  mode: z.enum(['unit', 'box']).default('unit'),
-  /** No modo caixa: quantas unidades achou (vazio = todas). */
+  /**
+   * unit: 1 bipe = 1 unidade · box: 1 bipe = 1 caixa com `qty` unidades (soma até completar) ·
+   * qty: bipe uma vez e informe quantas tem; o que faltar vai para o relatório de faltas.
+   */
+  mode: z.enum(['unit', 'box', 'qty']).default('unit'),
+  /** Caixa: unidades nesta caixa · Quantidade: unidades encontradas (vazio = todas). */
   qty: z.number().int().min(0).max(100_000).optional(),
 });
 export const wmsSkuSchema = z.object({ sku });

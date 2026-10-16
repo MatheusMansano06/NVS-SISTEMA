@@ -565,7 +565,7 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .pk-status[data-item='in_progress'] { background: var(--blue-soft); color: var(--blue); }
 .pk-status[data-item='complete'] { background: var(--ok-soft); color: var(--ok-ink); }
 .pk-status[data-item='partial'], .pk-status[data-item='out_of_stock'] { background: var(--danger-soft); color: var(--danger-ink); }
-.pk-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pk-mode { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .pk-mode button {
   display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 10px; border-radius: 14px; cursor: pointer; font: inherit;
   font-size: .72rem; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; background: var(--surface); color: var(--gray-500);
@@ -576,6 +576,9 @@ button.full-box:hover, button.full-kpi:hover { transform: translateY(-2px); box-
 .pk-mode button[aria-checked='true'] { opacity: 1; color: #fff; box-shadow: 0 8px 18px -12px rgba(11,28,77,.6); }
 .pk-mode button[data-mode='unit'][aria-checked='true'] { background: var(--blue); border-color: var(--blue); }
 .pk-mode button[data-mode='box'][aria-checked='true'] { background: #e39b00; border-color: #e39b00; }
+.pk-mode button[data-mode='qty'][aria-checked='true'] { background: #7c5cff; border-color: #7c5cff; }
+.pk-preview { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--ok-soft); color: var(--ok-ink); font-weight: 750; }
+.pk-preview[data-short] { background: var(--yellow-soft); color: var(--warn-ink); }
 .pk-scan {
   width: 100%; height: 54px; padding: 0 16px; border-radius: 16px; border: 2px solid var(--gray-100); background: var(--gray-50); color: var(--navy);
   font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1rem; font-weight: 800; letter-spacing: .04em; transition: border-color .2s;

@@ -287,7 +287,7 @@ export class WmsService {
     });
   }
 
-  async scan(a: Actor, listId: string, input: { barcode: string; focusSku?: string; mode: 'unit' | 'box'; qty?: number }): Promise<WmsScanResultDto> {
+  async scan(a: Actor, listId: string, input: { barcode: string; focusSku?: string; mode: 'unit' | 'box' | 'qty'; qty?: number }): Promise<WmsScanResultDto> {
     const code = input.barcode.trim();
     const result = await this.db.withTenant(a.tenantId, async (db): Promise<WmsScanResultDto> => {
       const list = await this.repo.list(db, listId, true);
@@ -324,8 +324,13 @@ export class WmsService {
       }
       if (item.qty_picked >= item.qty_required || TERMINAL.has(item.status)) return { status: 'excess', item: toItem(item) };
 
-      const want = input.mode === 'box' ? Math.min(input.qty ?? item.qty_required - item.qty_picked, item.qty_required - item.qty_picked) : 1;
-      if (want <= 0) return this.outOfStockIn(db, a, list, item, 'Caixa sem unidades');
+      const left = item.qty_required - item.qty_picked;
+      const want = input.mode === 'unit' ? 1 : Math.min(input.qty ?? left, left);
+      if (want <= 0) {
+        // quantidade zero = sem estoque; caixa vazia não muda nada
+        if (input.mode === 'qty') return this.outOfStockIn(db, a, list, item, 'Nenhuma unidade encontrada');
+        return { status: 'ok', item: toItem(item) };
+      }
       const upd = (
         await db.query<ItemRow>(
           `UPDATE wms_items SET qty_picked = qty_picked + $2, status = 'in_progress'
@@ -335,11 +340,12 @@ export class WmsService {
       ).rows[0];
       if (!upd) return { status: 'excess', item: toItem((await this.repo.item(db, item.id))!) };
       await this.repo.takeList(db, listId, a.operatorId);
-      await this.repo.event(db, a.tenantId, listId, upd.id, a.operatorId, code, input.mode === 'box' ? 'scan_box' : 'scan', want);
+      await this.repo.event(db, a.tenantId, listId, upd.id, a.operatorId, code, input.mode === 'unit' ? 'scan' : `scan_${input.mode}`, want);
       await this.repo.startBatch(db, listId);
 
-      const boxShort = input.mode === 'box' && input.qty !== undefined && upd.qty_picked < upd.qty_required;
-      if (upd.qty_picked >= upd.qty_required || boxShort) {
+      // modo quantidade: o que foi informado é tudo o que tem; o resto vira falta e as etiquetas saem só para o encontrado
+      const short = input.mode === 'qty' && upd.qty_picked < upd.qty_required;
+      if (upd.qty_picked >= upd.qty_required || short) {
         const done = (
           await db.query<ItemRow>(
             `UPDATE wms_items SET status = $2, shortage_qty = qty_required - qty_picked, completed_at = now(),
@@ -391,15 +397,33 @@ export class WmsService {
     return this.db.withTenant(a.tenantId, async (db) => {
       const { item } = await this.ownItem(db, a, listId, sku);
       if (item.qty_picked <= 0) return toItem(item);
-      const r = (
-        await db.query<ItemRow>(
-          `UPDATE wms_items SET qty_picked = qty_picked - 1, shortage_qty = 0, completed_at = NULL,
-                  status = CASE WHEN qty_picked - 1 = 0 THEN 'pending' ELSE 'in_progress' END
-            WHERE id = $1 RETURNING *`,
+      // desfaz a última bipada inteira (uma caixa de 50 volta as 50), pulando as já desfeitas
+      const events = (
+        await db.query<{ event_type: string; qty_delta: number }>(
+          `SELECT event_type, qty_delta FROM wms_scan_events WHERE item_id = $1 ORDER BY id DESC LIMIT 500`,
           [item.id],
         )
+      ).rows;
+      let undone = 0;
+      let delta = 1;
+      for (const e of events) {
+        if (e.event_type === 'undo') undone++;
+        else if (e.qty_delta > 0 && undone > 0) undone--;
+        else if (e.qty_delta > 0) {
+          delta = e.qty_delta;
+          break;
+        }
+      }
+      delta = Math.min(delta, item.qty_picked);
+      const r = (
+        await db.query<ItemRow>(
+          `UPDATE wms_items SET qty_picked = qty_picked - $2, shortage_qty = 0, completed_at = NULL,
+                  status = CASE WHEN qty_picked - $2 = 0 THEN 'pending' ELSE 'in_progress' END
+            WHERE id = $1 RETURNING *`,
+          [item.id, delta],
+        )
       ).rows[0]!;
-      await this.repo.event(db, a.tenantId, listId, item.id, a.operatorId, 'UNDO', 'undo', -1);
+      await this.repo.event(db, a.tenantId, listId, item.id, a.operatorId, 'UNDO', 'undo', -delta);
       await this.repo.refreshListStatus(db, listId);
       return toItem(r);
     });

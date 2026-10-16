@@ -56,7 +56,7 @@ export const fullApi = {
   shortageStatus: (itemId: string, status: 'pendente' | 'concluido') => http<void>(`/api/v1/wms/shortages/${itemId}/status`, { method: 'PATCH', body: { status } }),
   removeShortage: (itemId: string) => http<void>(`/api/v1/wms/shortages/${itemId}`, { method: 'DELETE' }),
   removeAllShortages: () => http<{ removed: number }>('/api/v1/wms/shortages', { method: 'DELETE' }),
-  scan: (id: string, b: { barcode: string; focusSku?: string; mode?: 'unit' | 'box'; qty?: number }) =>
+  scan: (id: string, b: { barcode: string; focusSku?: string; mode?: 'unit' | 'box' | 'qty'; qty?: number }) =>
     http<WmsScanResultDto>(`/api/v1/wms/lists/${id}/scan`, { body: b }),
   undo: (id: string, sku: string) => http<WmsItemDto>(`/api/v1/wms/lists/${id}/undo`, { body: { sku } }),
   shortage: (id: string, sku: string, qtyFound: number, notes?: string) =>

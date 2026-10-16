@@ -18,6 +18,7 @@ import { ProductDock } from './ProductDock';
 
 type Dialog =
   | { kind: 'box'; code: string; remaining: number }
+  | { kind: 'qty'; code: string; remaining: number }
   | { kind: 'shortage' }
   | { kind: 'oos' }
   | { kind: 'reprint' }
@@ -26,6 +27,13 @@ type Dialog =
   | { kind: 'transfer'; itemId: string; sku: string; owner: string }
   | { kind: 'choose'; items: WmsItemDto[] }
   | { kind: 'items' };
+
+type Mode = 'unit' | 'box' | 'qty';
+const MODE_HINT: Record<Mode, string> = {
+  unit: '1 bipe = 1 unidade.',
+  box: '1 bipe = 1 caixa: informe quantas unidades tem nela. Bipe a próxima caixa até completar.',
+  qty: 'Bipe uma vez e diga quantas tem: imprime só essas e o que faltar vai para o relatório de faltas.',
+};
 
 const errMsg = (err: unknown) => (err instanceof ApiError ? err.message : 'Não foi possível concluir.');
 
@@ -38,7 +46,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
   const [detail, setDetail] = useState<WmsListDetailDto | null>(null);
   const [focus, setFocus] = useState<string | undefined>(initialFocus);
   const [code, setCode] = useState('');
-  const [mode, setMode] = useState<'unit' | 'box'>('box');
+  const [mode, setMode] = useState<Mode>('box');
   const [flash, setFlash] = useState<'ok' | 'error' | 'complete' | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [msg, setMsg] = useState('');
@@ -129,8 +137,13 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
       setMsg('O SKU não vale como bipagem: bipe o código de barras do produto.');
       return;
     }
-    if (mode === 'box') setDialog({ kind: 'box', code: c, remaining: item.qtyRequired - item.qtyPicked });
-    else void run(() => fullApi.scan(listId, { barcode: c, focusSku: focus ?? item.sku, mode: 'unit' }), c);
+    askOrScan(c);
+  }
+  /** Caixa e quantidade perguntam o número antes; unitário bipa direto. */
+  function askOrScan(c: string) {
+    if (!item) return;
+    if (mode === 'unit') void run(() => fullApi.scan(listId, { barcode: c, focusSku: focus ?? item.sku, mode: 'unit' }), c);
+    else setDialog({ kind: mode, code: c, remaining: item.qtyRequired - item.qtyPicked });
   }
 
   /** Abre a impressão do PDF (de um SKU ou, sem SKU, da lista inteira). */
@@ -212,6 +225,9 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
               <button type="button" role="tab" aria-checked={mode === 'box'} data-mode="box" onMouseDown={(e) => e.preventDefault()} onClick={() => setMode('box')}>
                 <i aria-hidden="true">📦</i> Caixa
               </button>
+              <button type="button" role="tab" aria-checked={mode === 'qty'} data-mode="qty" onMouseDown={(e) => e.preventDefault()} onClick={() => setMode('qty')}>
+                <i aria-hidden="true">#</i> Quantidade
+              </button>
             </div>
 
             <input
@@ -226,7 +242,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
               // keyup: o leitor manda Enter no fim; abrir o diálogo no keydown deixava o resto da tecla cair nele
               onKeyUp={(e) => e.key === 'Enter' && onScan()}
             />
-            {mode === 'box' && <p className="pk-hint">1 bipe = 1 caixa: em seguida você informa quantas unidades tem.</p>}
+            <p className="pk-hint">{MODE_HINT[mode]}</p>
 
             <div className="pk-count" aria-live="polite" data-full={item.qtyPicked >= item.qtyRequired || undefined}>
               <p><b>{item.qtyPicked}</b><span>/ {item.qtyRequired} un</span></p>
@@ -240,7 +256,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
               <button type="button" className="pk-btn pk-outline" disabled={busy || item.qtyPicked === 0} onClick={() => void fullApi.undo(listId, item.sku).then(load).catch((e) => setMsg(errMsg(e)))}>
                 ↶ Desfazer último bipe
               </button>
-              <button type="button" className="pk-link pk-small" title="Só para produtos marcados no Master Data como sem código físico" onClick={() => void run(() => fullApi.manualPick(listId, item.sku, mode))}>
+              <button type="button" className="pk-link pk-small" title="Só para produtos marcados no Master Data como sem código físico" onClick={() => void run(() => fullApi.manualPick(listId, item.sku, mode === 'unit' ? 'unit' : 'box'))}>
                 Produto sem código de barras? Separar sem código
               </button>
             </div>
@@ -280,9 +296,9 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
             items={detail.items}
             onClose={() => setDialog(null)}
             onBox={(qty) => {
-              const d = dialog as Extract<Dialog, { kind: 'box' }>;
+              const d = dialog as Extract<Dialog, { kind: 'box' | 'qty' }>;
               setDialog(null);
-              void run(() => fullApi.scan(listId, { barcode: d.code, focusSku: focus ?? item.sku, mode: 'box', qty }), d.code);
+              void run(() => fullApi.scan(listId, { barcode: d.code, focusSku: focus ?? item.sku, mode: d.kind, qty }), d.code);
             }}
             onShortage={(qty, notes) => {
               setDialog(null);
@@ -302,8 +318,7 @@ export function PickingScreen({ listId, focus: initialFocus, onBack, onOpen }: {
               try {
                 await fullApi.linkBarcode(d.code, item.sku);
                 setMsg(`Código ${d.code} vinculado ao ${item.sku}.`);
-                if (mode === 'box') setDialog({ kind: 'box', code: d.code, remaining: item.qtyRequired - item.qtyPicked });
-                else void run(() => fullApi.scan(listId, { barcode: d.code, focusSku: item.sku, mode: 'unit' }), d.code);
+                askOrScan(d.code);
               } catch (e) {
                 setMsg(errMsg(e));
               }
@@ -367,7 +382,7 @@ function DialogBody(p: {
   onPick: (sku: string) => void;
 }) {
   const { dialog: d, item } = p;
-  const [n, setN] = useState(d.kind === 'box' ? d.remaining : d.kind === 'reprint' ? Math.max(1, item.qtyPicked || item.qtyRequired) : item.qtyPicked);
+  const [n, setN] = useState(d.kind === 'box' || d.kind === 'qty' ? d.remaining : d.kind === 'reprint' ? Math.max(1, item.qtyPicked || item.qtyRequired) : item.qtyPicked);
   const [notes, setNotes] = useState('');
   const num = (label: string, max: number) => (
     <label>
@@ -378,13 +393,36 @@ function DialogBody(p: {
   switch (d.kind) {
     case 'box':
       return (
-        <form className="full-modal" onSubmit={(e) => { e.preventDefault(); p.onBox(n); }}>
-          <h2>Quantas unidades de {item.sku}?</h2>
-          <p>Faltam {d.remaining}. Se achou menos, o resto vai como falta. Zero = sem estoque.</p>
-          {num('Unidades encontradas', d.remaining)}
-          <button type="submit" className="full-dark-btn">Confirmar</button>
+        <form className="full-modal" onSubmit={(e) => { e.preventDefault(); if (n > 0) p.onBox(n); }}>
+          <h2>Quantas unidades tem nesta caixa?</h2>
+          <p>{item.sku}: faltam {d.remaining}. Depois é só bipar a próxima caixa.</p>
+          {num('Unidades na caixa', d.remaining)}
+          <p className="pk-preview">{n >= d.remaining ? `✓ Completa o ${item.sku}.` : `Fica em ${item.qtyPicked + n} de ${item.qtyRequired}: faltam ${d.remaining - n}.`}</p>
+          <button type="submit" className="full-dark-btn" disabled={n <= 0}>Confirmar caixa</button>
         </form>
       );
+    case 'qty': {
+      const total = item.qtyPicked + n;
+      const falta = d.remaining - n;
+      return (
+        <form className="full-modal" onSubmit={(e) => { e.preventDefault(); p.onBox(n); }}>
+          <h2>Quantas unidades de {item.sku} você tem?</h2>
+          <p>
+            Pedido: {item.qtyRequired}
+            {item.qtyPicked > 0 && ` (já separadas ${item.qtyPicked})`}. Informe quantas tem agora.
+          </p>
+          {num('Unidades que você tem', d.remaining)}
+          <p className="pk-preview" data-short={falta > 0 || undefined}>
+            {n === 0
+              ? `Nenhuma: as ${d.remaining} vão para o relatório de faltas (sem estoque).`
+              : falta > 0
+                ? `🖨 Imprime ${total} etiqueta(s) · ${falta} vão para o relatório de faltas.`
+                : `✓ Completo: imprime ${total} etiqueta(s).`}
+          </p>
+          <button type="submit" className="full-dark-btn">{falta > 0 ? 'Confirmar e mandar o resto para faltas' : 'Confirmar'}</button>
+        </form>
+      );
+    }
     case 'shortage':
       return (
         <form className="full-modal" onSubmit={(e) => { e.preventDefault(); p.onShortage(n, notes || undefined); }}>

@@ -126,9 +126,17 @@ describe.skipIf(!TEST_DB)('Supervisão Full', () => {
     const labels = await call('GET', `/wms/lists/${listId}/labels.pdf?sku=PROTENIS`, joao);
     expect(labels.headers['content-type']).toBe('application/pdf');
 
-    // modo caixa: achou só 1 de 2 → parcial, falta de 1 no relatório; lista concluída
+    // modo caixa: soma a caixa e continua aberto (pode vir outra caixa)
     const box = (await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: 'YTHH93028', mode: 'box', qty: 1 })).json();
-    expect(box).toMatchObject({ status: 'complete', item: { status: 'partial', qtyPicked: 1, shortageQty: 1 } });
+    expect(box).toMatchObject({ status: 'ok', item: { status: 'in_progress', qtyPicked: 1, shortageQty: 0 } });
+    const box2 = (await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: 'YTHH93028', mode: 'box', qty: 1 })).json();
+    expect(box2).toMatchObject({ status: 'complete', item: { status: 'complete', qtyPicked: 2 } });
+    // desfazer volta a última caixa inteira
+    expect((await call('POST', `/wms/lists/${listId}/undo`, joao, { sku: 'VARAL' })).json()).toMatchObject({ qtyPicked: 1 });
+    expect((await call('POST', `/wms/lists/${listId}/undo`, joao, { sku: 'VARAL' })).json()).toMatchObject({ qtyPicked: 0, status: 'pending' });
+    // modo quantidade: achou só 1 de 2 → parcial, falta de 1 no relatório; lista concluída
+    const qty = (await call('POST', `/wms/lists/${listId}/scan`, joao, { barcode: 'YTHH93028', mode: 'qty', qty: 1 })).json();
+    expect(qty).toMatchObject({ status: 'complete', item: { status: 'partial', qtyPicked: 1, shortageQty: 1, labelsReady: true } });
     const detail = (await call('GET', `/wms/lists/${listId}`, joao)).json();
     expect(detail.list).toMatchObject({ status: 'completed', operatorName: 'João', itemsPicked: 4, itemsTotal: 5 });
     // Relatório de Faltas: quem marcou, quando, lista e marketplace

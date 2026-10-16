@@ -101,7 +101,7 @@
 
 /* ============ Tabela (cabe na tela: colunas agrupadas, sem rolar para o lado) ============ */
 .ftable { display: grid; gap: 14px; container-type: inline-size; }
-.ftable-actions { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+.ftable-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .ftable-actions a { display: inline-flex; align-items: center; gap: 6px; }
 .ftable-actions a svg { transform: rotate(90deg); }
 .cols-menu { position: relative; }

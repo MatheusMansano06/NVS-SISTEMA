@@ -20,6 +20,7 @@
 .btn-primary:active:not(:disabled) { transform: translateY(0) scale(.985); }
 .btn:disabled { cursor: progress; filter: saturate(.8); }
 .btn-ghost { background: var(--gray-100); color: var(--navy); }
+.btn-sm { height: 42px; width: auto; padding: 0 18px; font-size: .88rem; text-decoration: none; }
 .spinner {
   width: 18px; height: 18px; border-radius: 50%;
   border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; animation: spin .7s linear infinite;

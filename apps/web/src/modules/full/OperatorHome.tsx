@@ -3,6 +3,7 @@ import type { WmsFindCandidateDto, WmsListSummaryDto } from '@nvs/shared';
 import { int } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { Modal } from '../../shared/ui/Modal';
+import { ProductThumb } from '../dashboard/components/ProductThumb';
 import { usePerson } from '../operation/PersonContext';
 import { fullApi } from './full-api';
 import { PrinterGate, printerBlocks, usePrinterStatus } from './PrinterGate';
@@ -207,6 +208,7 @@ export function OperatorHome({ onOpen }: { onOpen: (listId: string, sku?: string
               {choices.items.map((c) => (
                 <li key={c.itemId}>
                   <button type="button" onClick={() => void go(c)}>
+                    <ProductThumb src={c.pictureUrl} alt="" size={56} />
                     <span className="oph-dialog-main">
                       <span className="oph-dialog-top">
                         <b>{c.sku}</b>

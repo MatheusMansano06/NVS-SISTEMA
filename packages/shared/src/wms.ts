@@ -181,6 +181,8 @@ export interface WmsFindCandidateDto {
   qtyPicked: number;
   qtyRequired: number;
   status: WmsItemStatus;
+  /** Foto do anúncio com esse SKU, quando houver. */
+  pictureUrl: string | null;
 }
 
 export interface WmsInboundResultDto {

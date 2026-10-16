@@ -266,10 +266,10 @@ export class PgWmsRepository {
   async candidates(db: Queryable, where: string, params: unknown[], order: string): Promise<WmsFindCandidateDto[]> {
     const { rows } = await db.query<{
       item_id: string; sku: string; ml_code: string | null; description: string; list_id: string; list_code: string;
-      operator_name: string | null; qty_picked: number; qty_required: number; status: WmsItemStatus;
+      operator_name: string | null; qty_picked: number; qty_required: number; status: WmsItemStatus; picture_url: string | null;
     }>(
       `SELECT i.id AS item_id, i.sku, i.ml_code, i.description, l.id AS list_id, l.code AS list_code, o.name AS operator_name,
-              i.qty_picked, i.qty_required, i.status
+              i.qty_picked, i.qty_required, i.status, ${PICTURE}
          FROM wms_items i JOIN wms_lists l ON l.id = i.list_id LEFT JOIN operators o ON o.id = l.operator_id
         WHERE ${where} ORDER BY ${order} LIMIT 60`,
       params,
@@ -285,6 +285,7 @@ export class PgWmsRepository {
       qtyPicked: r.qty_picked,
       qtyRequired: r.qty_required,
       status: r.status,
+      pictureUrl: r.picture_url,
     }));
   }
 

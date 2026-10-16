@@ -15,7 +15,10 @@ export function DreCard({ accountId, stamp }: { accountId?: string; stamp?: stri
 
   useEffect(() => {
     const c = new AbortController();
-    dreApi.get(month, { accountId, comparar: false }, c.signal).then(setData).catch(() => undefined);
+    dreApi
+      .get(month, { accountId, comparar: false }, c.signal)
+      .then(setData)
+      .catch(() => undefined);
     return () => c.abort();
   }, [month, accountId, stamp]);
 
@@ -23,9 +26,15 @@ export function DreCard({ accountId, stamp }: { accountId?: string; stamp?: stri
   const lucro = data.subtotals.lucro_liquido;
   const pe = data.pontoEquilibrio;
   return (
-    <section className="panel dre-card-mini" data-neg={lucro < 0 || undefined} aria-labelledby="dre-mini-title">
+    <section
+      className="panel dre-card-mini"
+      data-neg={lucro < 0 || undefined}
+      aria-labelledby="dre-mini-title"
+    >
       <div>
-        <p className="mini-label" id="dre-mini-title">Lucro de {monthLabel(month).split(' ')[0]!.toLowerCase()} (DRE)</p>
+        <p className="mini-label" id="dre-mini-title">
+          Lucro de {monthLabel(month).split(' ')[0]!.toLowerCase()} (DRE)
+        </p>
         <p className="mini-value money">{money(lucro)}</p>
         {data.projecao && (
           <p className="mini-label">
@@ -37,17 +46,26 @@ export function DreCard({ accountId, stamp }: { accountId?: string; stamp?: stri
         <HundredBar data={data} focus={focus} onFocus={setFocus} compact />
         <p>
           {data.lancamentos === 0 ? (
-            <>Ainda sem aluguel, salários e outros gastos da empresa: o lucro real é menor que este.</>
+            <>
+              Ainda sem aluguel, salários e outros gastos da empresa: o lucro real é menor que este.
+            </>
           ) : pe ? (
             data.receitaBruta >= pe ? (
               <>✅ Já passou do ponto de equilíbrio ({money(pe)}).</>
             ) : (
               <>
-                Faltam <b className="money">{money(pe - data.receitaBruta)}</b> em vendas para empatar o mês.
+                Faltam <b className="money">{money(pe - data.receitaBruta)}</b> em vendas para
+                empatar o mês.
               </>
             )
           ) : (
-            <>De cada R$ 100 vendidos, {lucro >= 0 ? 'sobram' : 'faltam'} R$ {Math.abs(data.receitaBruta ? (lucro / data.receitaBruta) * 100 : 0).toFixed(2).replace('.', ',')}.</>
+            <>
+              De cada R$ 100 vendidos, {lucro >= 0 ? 'sobram' : 'faltam'} R${' '}
+              {Math.abs(data.receitaBruta ? (lucro / data.receitaBruta) * 100 : 0)
+                .toFixed(2)
+                .replace('.', ',')}
+              .
+            </>
           )}
         </p>
       </div>

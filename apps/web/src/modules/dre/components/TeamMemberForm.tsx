@@ -19,7 +19,9 @@ const REGIME_KEY = 'nvs.dre.regime';
 const readRegime = (): CompanyRegime => {
   try {
     const v = localStorage.getItem(REGIME_KEY);
-    return (COMPANY_REGIMES as readonly string[]).includes(v ?? '') ? (v as CompanyRegime) : 'simples';
+    return (COMPANY_REGIMES as readonly string[]).includes(v ?? '')
+      ? (v as CompanyRegime)
+      : 'simples';
   } catch {
     return 'simples';
   }
@@ -51,17 +53,29 @@ export function TeamMemberForm({ entry, role: initialRole, month, onDone, onCanc
   const [left, setLeft] = useState(Boolean(entry?.endMonth));
   const [end, setEnd] = useState(entry?.endMonth ?? month);
   const [guess, setGuess] = useState<number | 'skip' | null>(entry ? 'skip' : null);
+  const [why, setWhy] = useState(false);
   const [benefits, setBenefits] = useState(Boolean(d && (d.vt || d.vr || d.saude || d.outros)));
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
 
-  const member: StaffMember = { role, regime, salario: num(salario), vt: num(vt), vr: num(vr), saude: num(saude), outros: num(outros) };
+  const member: StaffMember = {
+    role,
+    regime,
+    salario: num(salario),
+    vt: num(vt),
+    vr: num(vr),
+    saude: num(saude),
+    outros: num(outros),
+  };
   const cost = teamCost(member);
   const s = member.salario;
   const info = TEAM_ROLE_INFO[role];
   const revealed = guess !== null && s > 0;
-  const closest = GUESSES.reduce((a, g) => (Math.abs(g - cost.multiplicador) < Math.abs(a - cost.multiplicador) ? g : a), GUESSES[0]!);
+  const closest = GUESSES.reduce(
+    (a, g) => (Math.abs(g - cost.multiplicador) < Math.abs(a - cost.multiplicador) ? g : a),
+    GUESSES[0]!,
+  );
 
   const pickRegime = (r: CompanyRegime) => {
     setRegime(r);
@@ -78,8 +92,15 @@ export function TeamMemberForm({ entry, role: initialRole, month, onDone, onCanc
     setSaving(true);
     try {
       const body = {
-        name: name.trim(), kind: 'despesa_fixa' as const, category: 'pessoas' as const, basis: 'mensal' as const, amount: cost.total,
-        startMonth: start, endMonth: left ? (end < start ? start : end) : null, notes: null, details: member,
+        name: name.trim(),
+        kind: 'despesa_fixa' as const,
+        category: 'pessoas' as const,
+        basis: 'mensal' as const,
+        amount: cost.total,
+        startMonth: start,
+        endMonth: left ? (end < start ? start : end) : null,
+        notes: null,
+        details: member,
       };
       if (entry) await dreApi.update(entry.id, body);
       else await dreApi.create(body);
@@ -105,7 +126,12 @@ export function TeamMemberForm({ entry, role: initialRole, month, onDone, onCanc
       <span>{label}</span>
       <span className="wiz-money">
         <i>R$</i>
-        <input inputMode="decimal" value={value} placeholder="0,00" onChange={(e) => set(e.target.value.replace(/[^\d.,]/g, ''))} />
+        <input
+          inputMode="decimal"
+          value={value}
+          placeholder="0,00"
+          onChange={(e) => set(e.target.value.replace(/[^\d.,]/g, ''))}
+        />
       </span>
       {hint && <small className="wiz-hint">{hint}</small>}
     </label>
@@ -122,20 +148,33 @@ export function TeamMemberForm({ entry, role: initialRole, month, onDone, onCanc
       <h2>{entry ? `Editar ${entry.name}` : 'Quanto essa pessoa custa de verdade?'}</h2>
       {!entry && (
         <p className="dre-muted">
-          Erro mais comum em DRE: lançar só o salário. Uma pessoa CLT custa bem mais — vamos fazer a conta certa.
+          Erro mais comum em DRE: lançar só o salário. Uma pessoa CLT custa bem mais — vamos fazer a
+          conta certa.
         </p>
       )}
 
       <label className="wiz-field">
         <span>Nome ou função</span>
-        <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Ana — separação de pedidos" data-autofocus />
+        <input
+          value={name}
+          maxLength={80}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ex.: Ana — separação de pedidos"
+          data-autofocus
+        />
       </label>
 
       <div className="wiz-field">
         <span>Tipo de contratação</span>
         <div className="wiz-seg" role="radiogroup" aria-label="Tipo de contratação">
           {TEAM_ROLES.map((r) => (
-            <button key={r} type="button" role="radio" aria-checked={role === r} onClick={() => setRole(r)}>
+            <button
+              key={r}
+              type="button"
+              role="radio"
+              aria-checked={role === r}
+              onClick={() => setRole(r)}
+            >
               {TEAM_ROLE_INFO[r].label}
             </button>
           ))}
@@ -144,24 +183,29 @@ export function TeamMemberForm({ entry, role: initialRole, month, onDone, onCanc
       </div>
 
       {role !== 'pj' && role !== 'estagio' && (
-        <div className="wiz-field">
+        <label className="wiz-field">
           <span>Regime de impostos da sua empresa</span>
-          <div className="wiz-seg" role="radiogroup" aria-label="Regime da empresa">
+          <select value={regime} onChange={(e) => pickRegime(e.target.value as CompanyRegime)}>
             {COMPANY_REGIMES.map((r) => (
-              <button key={r} type="button" role="radio" aria-checked={regime === r} onClick={() => pickRegime(r)}>
+              <option key={r} value={r}>
                 {COMPANY_REGIME_INFO[r].label}
-              </button>
+              </option>
             ))}
-          </div>
+          </select>
           <small className="wiz-hint">
-            {COMPANY_REGIME_INFO[regime].explain} Não sabe? Está no DAS ou pergunte ao contador.
+            Não sabe? Está no DAS ou pergunte ao contador. Loja online costuma ser Simples.
           </small>
-        </div>
+        </label>
       )}
 
       {moneyInput(info.salarioLabel, salario, setSalario)}
 
-      <button type="button" className="link wiz-toggle" aria-expanded={benefits} onClick={() => setBenefits((v) => !v)}>
+      <button
+        type="button"
+        className="link wiz-toggle"
+        aria-expanded={benefits}
+        onClick={() => setBenefits((v) => !v)}
+      >
         {benefits ? '− Benefícios' : '+ Benefícios (vale-transporte, refeição, plano de saúde…)'}
       </button>
       {benefits && (
@@ -171,26 +215,39 @@ export function TeamMemberForm({ entry, role: initialRole, month, onDone, onCanc
               role === 'estagio' ? 'Auxílio-transporte' : 'Vale-transporte (passagens do mês)',
               vt,
               setVt,
-              role === 'estagio' ? 'Obrigatório no estágio.' : 'Informe o total das passagens: o sistema desconta os 6% que a pessoa paga.',
+              role === 'estagio'
+                ? 'Obrigatório no estágio.'
+                : 'Informe o total das passagens: o sistema desconta os 6% que a pessoa paga.',
             )}
           {moneyInput('Vale-refeição / alimentação', vr, setVr)}
           {moneyInput('Plano de saúde (parte da empresa)', saude, setSaude)}
-          {moneyInput(role === 'estagio' ? 'Seguro de vida e outros' : 'Outros (uniforme, cursos…)', outros, setOutros, role === 'estagio' ? 'O seguro do estagiário é obrigatório.' : undefined)}
+          {moneyInput(
+            role === 'estagio' ? 'Seguro de vida e outros' : 'Outros (uniforme, cursos…)',
+            outros,
+            setOutros,
+            role === 'estagio' ? 'O seguro do estagiário é obrigatório.' : undefined,
+          )}
         </div>
       )}
 
       {s > 0 && !revealed && (
         <div className="guess" role="group" aria-label="Adivinhe o custo">
-          <p>🎯 <b>Antes de ver a conta:</b> quanto você acha que essa pessoa custa por mês?</p>
+          <p>
+            🎯 <b>Antes de ver a conta:</b> quanto você acha que essa pessoa custa por mês?
+          </p>
           <div className="guess-opts">
             {GUESSES.map((g) => (
               <button key={g} type="button" onClick={() => setGuess(g)}>
                 {money(s * g)}
-                <small>{g === 1 ? 'só o salário' : `${String(g).replace('.', ',')}× o salário`}</small>
+                <small>
+                  {g === 1 ? 'só o salário' : `${String(g).replace('.', ',')}× o salário`}
+                </small>
               </button>
             ))}
           </div>
-          <button type="button" className="link" onClick={() => setGuess('skip')}>Só me mostra a conta</button>
+          <button type="button" className="link" onClick={() => setGuess('skip')}>
+            Só me mostra a conta
+          </button>
         </div>
       )}
 
@@ -208,46 +265,105 @@ export function TeamMemberForm({ entry, role: initialRole, month, onDone, onCanc
           <div className="cost-reveal-total">
             <span>Custo real por mês</span>
             <strong className="money">{money(cost.total)}</strong>
-            {cost.multiplicador > 1 && <small>{String(cost.multiplicador).replace('.', ',')}× o valor de {money(s)}</small>}
+            {cost.multiplicador > 1 && (
+              <small>
+                {String(cost.multiplicador).replace('.', ',')}× o valor de {money(s)}
+              </small>
+            )}
           </div>
           <ul className="cost-reveal-lines">
-            {cost.lines.map((l) => (
-              <li key={l.key} data-zero={(l.valor === 0 && Boolean(l.zeroReason)) || undefined}>
-                <span>
-                  <b>{l.label}</b>
-                  <small>{l.explain}</small>
-                </span>
-                <span className="money">{l.zeroReason && l.valor === 0 ? <em>{l.zeroReason}</em> : money(l.valor)}</span>
-              </li>
-            ))}
+            {cost.lines
+              .filter((l) => why || !(l.valor === 0 && l.zeroReason === 'não informado'))
+              .map((l) => (
+                <li key={l.key} data-zero={(l.valor === 0 && Boolean(l.zeroReason)) || undefined}>
+                  <span>
+                    <b>{l.label}</b>
+                    {why && <small>{l.explain}</small>}
+                  </span>
+                  <span className="money">
+                    {l.zeroReason && l.valor === 0 ? <em>{l.zeroReason}</em> : money(l.valor)}
+                  </span>
+                </li>
+              ))}
           </ul>
-          <small className="wiz-hint">Alíquotas de referência. Seu contador confirma as da sua empresa (RAT, terceiros, sindicato).</small>
+          <button
+            type="button"
+            className="link wiz-toggle"
+            aria-expanded={why}
+            onClick={() => setWhy((v) => !v)}
+          >
+            {why ? 'Esconder explicações' : 'Entender cada item'}
+          </button>
+          {why && regime && role !== 'pj' && role !== 'estagio' && (
+            <small className="wiz-hint">{COMPANY_REGIME_INFO[regime].explain}</small>
+          )}
+          <small className="wiz-hint">
+            Alíquotas de referência. Seu contador confirma as da sua empresa (RAT, terceiros,
+            sindicato).
+          </small>
         </div>
       )}
 
       <div className="wiz-row">
         <label className="wiz-field">
           <span>Começou a trabalhar em</span>
-          <input type="month" value={start} onChange={(e) => e.target.value && setStart(e.target.value)} />
+          <input
+            type="month"
+            value={start}
+            onChange={(e) => e.target.value && setStart(e.target.value)}
+          />
         </label>
         <label className="wiz-field">
           <span>
-            <input type="checkbox" checked={left} onChange={(e) => setLeft(e.target.checked)} /> Saiu da empresa?
+            <input type="checkbox" checked={left} onChange={(e) => setLeft(e.target.checked)} />{' '}
+            Saiu da empresa?
           </span>
-          <input type="month" disabled={!left} value={end} min={start} onChange={(e) => e.target.value && setEnd(e.target.value)} aria-label="Último mês trabalhado" />
-          {left && <small className="wiz-hint">Último mês que conta no DRE: {monthLabel(end < start ? start : end).toLowerCase()}. Os meses anteriores ficam como estão.</small>}
+          <input
+            type="month"
+            disabled={!left}
+            value={end}
+            min={start}
+            onChange={(e) => e.target.value && setEnd(e.target.value)}
+            aria-label="Último mês trabalhado"
+          />
+          {left && (
+            <small className="wiz-hint">
+              Último mês que conta no DRE: {monthLabel(end < start ? start : end).toLowerCase()}. Os
+              meses anteriores ficam como estão.
+            </small>
+          )}
         </label>
       </div>
 
-      {error && <p className="banner banner-error" role="alert">{error}</p>}
+      {error && (
+        <p className="banner banner-error" role="alert">
+          {error}
+        </p>
+      )}
       <div className="wiz-actions">
         {entry &&
           (confirmDelete ? (
-            <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove()} disabled={saving}>Apagar de todos os meses</button>
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => void remove()}
+              disabled={saving}
+            >
+              Apagar de todos os meses
+            </button>
           ) : (
-            <button type="button" className="link wiz-del" onClick={() => setConfirmDelete(true)} title="Para quem saiu, prefira marcar “Saiu da empresa?”">Excluir</button>
+            <button
+              type="button"
+              className="link wiz-del"
+              onClick={() => setConfirmDelete(true)}
+              title="Para quem saiu, prefira marcar “Saiu da empresa?”"
+            >
+              Excluir
+            </button>
           ))}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Voltar</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+          Voltar
+        </button>
         <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
           {saving ? 'Salvando…' : entry ? 'Salvar' : 'Adicionar à equipe'}
         </button>

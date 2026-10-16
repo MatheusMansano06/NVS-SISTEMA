@@ -18,7 +18,9 @@ export const dreApi = {
     return http<DreDto>(`/api/v1/dre?${p}`, { signal });
   },
   entries: () => http<DreEntryDto[]>('/api/v1/dre/entries'),
-  create: (e: DreEntryInput) => http<DreEntryDto>('/api/v1/dre/entries', { method: 'POST', body: e }),
-  update: (id: string, e: DreEntryInput) => http<DreEntryDto>(`/api/v1/dre/entries/${id}`, { method: 'PUT', body: e }),
+  create: (e: DreEntryInput) =>
+    http<DreEntryDto>('/api/v1/dre/entries', { method: 'POST', body: e }),
+  update: (id: string, e: DreEntryInput) =>
+    http<DreEntryDto>(`/api/v1/dre/entries/${id}`, { method: 'PUT', body: e }),
   remove: (id: string) => http<void>(`/api/v1/dre/entries/${id}`, { method: 'DELETE' }),
 };

@@ -7,18 +7,28 @@ import { Icon } from '../../shared/ui/Icon';
 import { Modal } from '../../shared/ui/Modal';
 import { mlApi } from '../mercado-livre/ml-api';
 import { useCountUp } from '../dashboard/useCountUp';
-import { HundredBar, Waterfall } from './components/DreCharts';
+import { Waterfall } from './components/DreCharts';
+import { SimpleView } from './components/SimpleView';
 import { BreakEven, WhatIf } from './components/DreInsights';
 import { DreStatement } from './components/DreStatement';
 import { EntriesList } from './components/EntriesList';
 import { EntryWizard } from './components/EntryWizard';
 import { CostSetup } from './components/CostSetup';
-import { KIND_HELP, TEMPLATES, monthLabel, shiftMonth, thisMonth, type Template } from './dre-copy';
+import { KIND_HELP, monthLabel, shiftMonth, thisMonth, type Template } from './dre-copy';
 import { dreApi } from './dre-api';
 import '../dashboard/dashboard.css';
 import './dre.css';
 
 const TEC_KEY = 'nvs.dre.tecnico';
+const VIEW_KEY = 'nvs.dre.view';
+type View = 'simples' | 'completo';
+const readView = (): View => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'completo' ? 'completo' : 'simples';
+  } catch {
+    return 'simples';
+  }
+};
 const readTec = () => {
   try {
     return localStorage.getItem(TEC_KEY) === '1';
@@ -36,6 +46,7 @@ export function DrePage() {
   const [accounts, setAccounts] = useState<MlStatusDto['connections']>([]);
   const [estimar, setEstimar] = useState(true);
   const [tecnico, setTecnico] = useState(readTec);
+  const [view, setView] = useState<View>(readView);
   const [data, setData] = useState<DreDto | null>(null);
   const [entries, setEntries] = useState<DreEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +59,10 @@ export function DrePage() {
   const ctrl = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    mlApi.status().then((s) => setAccounts(s.connections)).catch(() => undefined);
+    mlApi
+      .status()
+      .then((s) => setAccounts(s.connections))
+      .catch(() => undefined);
   }, []);
 
   const load = useCallback(
@@ -59,7 +73,14 @@ export function DrePage() {
       setLoading(true);
       setError('');
       try {
-        const [d, e] = await Promise.all([dreApi.get(month, { accountId: accountId || undefined, estimarCusto: estimar, fresh }, c.signal), dreApi.entries()]);
+        const [d, e] = await Promise.all([
+          dreApi.get(
+            month,
+            { accountId: accountId || undefined, estimarCusto: estimar, fresh },
+            c.signal,
+          ),
+          dreApi.entries(),
+        ]);
         setData(d);
         setEntries(e);
       } catch (err) {
@@ -72,6 +93,14 @@ export function DrePage() {
   );
   useEffect(() => void load(), [load]);
 
+  const pickView = (v: View) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* vale só nesta sessão */
+    }
+  };
   const toggleTec = () =>
     setTecnico((v) => {
       try {
@@ -91,7 +120,11 @@ export function DrePage() {
   const pick = (id: DreSectionId | 'lucro') => {
     const target = id === 'lucro' ? 'dre-statement' : `dre-${id}`;
     if (id !== 'lucro') setOpen((s) => new Set(s).add(id));
-    window.setTimeout(() => document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 30);
+    window.setTimeout(
+      () =>
+        document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      30,
+    );
   };
   const saved = () => {
     setWizard(null);
@@ -108,34 +141,55 @@ export function DrePage() {
   return (
     <AppShell>
       <div className="dre" data-loading={loading || undefined}>
-        <header className="dash-head">
+        <header className="dre-top">
           <div>
             <p className="dash-kicker">Financeiro</p>
-            <h1>DRE do mês</h1>
-            <p className="dre-sub">O resultado da sua loja, do que você vendeu até o que sobrou no bolso. Sem economês.</p>
+            <h1>Resultado do mês</h1>
           </div>
-          <div className="dre-actions">
-            <button type="button" className={`btn btn-sm ${data?.lancamentos === 0 ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setSetup(true)}>
-              🧭 Montar meus custos
+          <div className="view-switch" role="tablist" aria-label="Modo de visualização">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'simples'}
+              onClick={() => pickView('simples')}
+            >
+              Resumo
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setManage(true)}>
-              Meus gastos{entries.length ? ` (${entries.length})` : ''}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'completo'}
+              onClick={() => pickView('completo')}
+            >
+              DRE completo
             </button>
-            <button type="button" className={`btn btn-sm ${data?.lancamentos === 0 ? 'btn-ghost' : 'btn-primary'}`} onClick={() => setWizard({})}>+ Lançar gasto</button>
           </div>
         </header>
 
         <div className="dre-toolbar" role="toolbar" aria-label="Mês e opções">
           <div className="month-nav">
-            <button type="button" className="icon-btn" aria-label="Mês anterior" onClick={() => setMonth((m) => shiftMonth(m, -1))}>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Mês anterior"
+              onClick={() => setMonth((m) => shiftMonth(m, -1))}
+            >
               <span aria-hidden="true">‹</span>
             </button>
             <strong aria-live="polite">{monthLabel(month)}</strong>
-            <button type="button" className="icon-btn" aria-label="Próximo mês" disabled={month >= now} onClick={() => setMonth((m) => shiftMonth(m, 1))}>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Próximo mês"
+              disabled={month >= now}
+              onClick={() => setMonth((m) => shiftMonth(m, 1))}
+            >
               <span aria-hidden="true">›</span>
             </button>
             {month !== now && (
-              <button type="button" className="link" onClick={() => setMonth(now)}>ir para o mês atual</button>
+              <button type="button" className="link" onClick={() => setMonth(now)}>
+                mês atual
+              </button>
             )}
           </div>
           <div className="dre-opts">
@@ -145,188 +199,175 @@ export function DrePage() {
                 <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                   <option value="">Todas as contas</option>
                   {accounts.map((a) => (
-                    <option key={a.accountId} value={a.accountId}>{a.nickname}</option>
+                    <option key={a.accountId} value={a.accountId}>
+                      {a.nickname}
+                    </option>
                   ))}
                 </select>
                 <Icon name="chevron" size={16} />
               </label>
             )}
-            <label className="ads-toggle" title="Mostra, ao lado de cada linha, o nome que o contador usa">
-              <input type="checkbox" checked={tecnico} onChange={toggleTec} />
-              <span className="ads-switch" aria-hidden="true" />
-              Nomes do contador
-            </label>
-            <button type="button" className="icon-btn" onClick={() => void load(true)} aria-label="Atualizar" data-spinning={loading || undefined}>
+            {view === 'completo' && (
+              <>
+                <label
+                  className="ads-toggle"
+                  title="Mostra, ao lado de cada linha, o nome que o contador usa"
+                >
+                  <input type="checkbox" checked={tecnico} onChange={toggleTec} />
+                  <span className="ads-switch" aria-hidden="true" />
+                  Nomes do contador
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setManage(true)}
+                >
+                  Lançamentos{entries.length ? ` (${entries.length})` : ''}
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className={`btn btn-sm ${data?.lancamentos === 0 ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setSetup(true)}
+            >
+              Meus custos
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => void load(true)}
+              aria-label="Atualizar"
+              data-spinning={loading || undefined}
+            >
               <Icon name="refresh" />
             </button>
           </div>
         </div>
 
-        {error && <p className="banner banner-error" role="alert">{error}</p>}
+        {error && (
+          <p className="banner banner-error" role="alert">
+            {error}
+          </p>
+        )}
 
         {!data ? (
           <div className="dre-hero skeleton" aria-busy="true" />
         ) : (
           <>
-            <section className="dre-hero" data-neg={lucro < 0 || undefined} aria-label="Resultado do mês">
-              <div className="hero-main">
-                <p className="hero-kicker">{lucro >= 0 ? '💰 Sobrou no bolso' : '⚠️ O mês fechou no vermelho'} em {monthLabel(month).toLowerCase()}</p>
-                <p className="hero-value money">{money(lucroShown)}</p>
-                <p className="hero-chips">
-                  {margemLiq !== null && (
-                    <span className="chip-pill" title="Lucro líquido ÷ vendas">
-                      {margemLiq.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das vendas
-                    </span>
-                  )}
+            <section
+              className="dre-hero"
+              data-neg={lucro < 0 || undefined}
+              aria-label="Resultado do mês"
+            >
+              <p className="hero-kicker">
+                {monthLabel(month)}
+                {data.isCurrentMonth && ` · até o dia ${data.elapsedDays}`}
+              </p>
+              <p className="hero-value">
+                <span>{lucro >= 0 ? 'Sobrou' : 'Faltou'}</span>{' '}
+                <span className="money">{money(Math.abs(lucroShown))}</span>
+              </p>
+              {data.receitaBruta > 0 && (
+                <p className="hero-story">
+                  De cada <b>R$ 100</b> vendidos,{' '}
+                  <b className="money">
+                    R${' '}
+                    {Math.abs(per100).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </b>{' '}
+                  {lucro >= 0 ? 'ficaram com você.' : 'faltaram para pagar as contas.'}
+                </p>
+              )}
+              {(diff !== null || data.projecao) && (
+                <p className="hero-foot">
                   {diff !== null && data.previous && (
-                    <span className="chip-pill" data-pos={diff > 0 || undefined} data-neg={diff < 0 || undefined}>
-                      {diff >= 0 ? '▲' : '▼'} <span className="money">{money(Math.abs(diff))}</span> vs {monthLabel(data.previous.month).split(' ')[0]!.toLowerCase()}
+                    <span data-pos={diff > 0 || undefined} data-neg={diff < 0 || undefined}>
+                      {diff >= 0 ? '▲' : '▼'} <span className="money">{money(Math.abs(diff))}</span>{' '}
+                      {diff >= 0 ? 'a mais' : 'a menos'} que em{' '}
+                      {monthLabel(data.previous.month).split(' ')[0]!.toLowerCase()}
                     </span>
                   )}
                   {data.projecao && (
-                    <span className="chip-pill chip-proj" title="Se as vendas seguirem no ritmo de até hoje; as despesas fixas já contam o mês inteiro">
-                      🔮 No ritmo atual, fecha em <b className="money">{money(data.projecao.lucroLiquido)}</b>
+                    <span title="Se as vendas seguirem no ritmo de até hoje; os custos fixos já contam o mês inteiro">
+                      No ritmo atual, fecha o mês em{' '}
+                      <b className="money">{money(data.projecao.lucroLiquido)}</b>
                     </span>
                   )}
                 </p>
-                <p className="hero-story">
-                  Você vendeu <b className="money">{money(data.receitaBruta)}</b> em {int(data.pedidos)} pedidos.{' '}
-                  {data.receitaBruta > 0 && (
-                    <>
-                      De cada <b>R$ 100</b> vendidos, {lucro >= 0 ? 'sobraram' : 'faltaram'}{' '}
-                      <b className="money">R$ {Math.abs(per100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
-                      {lucro >= 0 ? ' para você.' : ' — a empresa gastou mais do que entrou.'}
-                    </>
-                  )}
-                  {data.isCurrentMonth && <> Mês em andamento ({data.elapsedDays} de {data.daysInMonth} dias).</>}
-                </p>
-              </div>
-              <div className="hero-side">
-                <p className="hero-side-title">De cada R$ 100 vendidos…</p>
-                <HundredBar data={data} focus={focus} onFocus={setFocus} />
-              </div>
+              )}
             </section>
-
-            {data.lancamentos === 0 && (
-              <section className="panel dre-onboard" aria-labelledby="onb-title">
-                <div>
-                  <h2 id="onb-title">Falta o principal: os gastos da sua empresa</h2>
-                  <p>
-                    O que vem do Mercado Livre (vendas, tarifas, frete, Ads) já está aqui automaticamente. Mas o sistema ainda não sabe
-                    quanto você paga de aluguel, salários, internet… Sem isso o lucro parece maior do que é. Em 5 passos rápidos você
-                    cadastra tudo uma vez e, daí para frente, os gastos entram sozinhos todo mês.
-                  </p>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => setSetup(true)}>🧭 Montar meus custos agora</button>
-                  <p className="dre-muted onb-or">ou toque direto num gasto:</p>
-                  <div className="wiz-chips">
-                    {TEMPLATES.filter((t) => t.kind === 'despesa_fixa').slice(0, 8).map((t) => (
-                      <button key={t.name} type="button" className="wiz-chip" onClick={() => setWizard({ template: t })}>
-                        <span aria-hidden="true">{t.emoji}</span> {t.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <img src="/gertrudez.webp" alt="" width="96" height="96" />
-              </section>
-            )}
 
             {data.cobertura.semCustoQtd > 0 && (
-              <p className="costs-note" role="note">
-                <strong>{int(data.cobertura.semCustoQtd)} vendas ({money(data.cobertura.semCustoValor)}) estão sem custo cadastrado.</strong>{' '}
-                {estimar ? 'O custo delas foi estimado pela média das outras vendas.' : 'Elas estão entrando sem custo, e o lucro fica maior do que é.'}{' '}
-                <button type="button" className="link" onClick={() => setEstimar((v) => !v)}>
-                  {estimar ? 'Ver sem estimativa' : 'Estimar o custo'}
-                </button>{' '}
-                ·{' '}
-                <button type="button" className="link" onClick={() => navigate('/skus')}>Cadastrar custos →</button>
+              <p className="dre-note" role="note">
+                ⚠️ {int(data.cobertura.semCustoQtd)} vendas sem custo do produto cadastrado
+                {estimar ? ' — usamos uma estimativa.' : '.'}{' '}
+                <button type="button" className="link" onClick={() => navigate('/skus')}>
+                  Cadastrar custos
+                </button>
+                {view === 'completo' && (
+                  <>
+                    {' · '}
+                    <button type="button" className="link" onClick={() => setEstimar((v) => !v)}>
+                      {estimar ? 'ver sem estimativa' : 'estimar'}
+                    </button>
+                  </>
+                )}
               </p>
             )}
 
-            <section className="panel" aria-labelledby="wf-title">
-              <div className="panel-head">
-                <h2 id="wf-title">Para onde foi o dinheiro</h2>
-                <small className="panel-hint">Toque num degrau para ver o que tem dentro</small>
-              </div>
-              <Waterfall data={data} focus={focus} onFocus={setFocus} onPick={pick} />
-            </section>
-
-            <div className="dre-grid">
-              <section className="panel" aria-labelledby="st-title" id="dre-statement">
-                <div className="panel-head">
-                  <h2 id="st-title">O DRE, linha por linha</h2>
-                  <small className="panel-hint">Toque no <b>?</b> de qualquer linha para entender o que ela é</small>
-                </div>
-                <DreStatement
-                  data={data}
-                  entries={entries}
-                  tecnico={tecnico}
-                  open={open}
-                  onToggle={toggle}
-                  focus={focus}
-                  onFocus={setFocus}
-                  onAdd={(kind) => setWizard({ kind })}
-                  onEdit={(entry) => setWizard({ entry })}
-                />
-              </section>
-              <aside className="dre-side">
-                <BreakEven data={data} onAddFixed={() => setWizard({ kind: 'despesa_fixa' })} />
-                <WhatIf key={`${month}:${accountId}:${data.generatedAt}`} data={data} />
-              </aside>
-            </div>
-
-            <section className="panel dre-learn" aria-labelledby="learn-title">
-              <h2 id="learn-title">📚 Custo ou despesa? Aprenda em 1 minuto</h2>
-              <p className="dre-muted">
-                O teste mais fácil: <b>se você vendesse o dobro, esse gasto mudaria?</b> Se muda junto, é custo variável. Se fica igual,
-                é despesa fixa. Se é juros ou tarifa de banco, é despesa financeira.
-              </p>
-              <div className="learn-cards">
-                {(['custo_variavel', 'despesa_fixa', 'despesa_financeira'] as const).map((k) => (
-                  <div key={k} className="learn-card" data-kind={k}>
-                    <b>{KIND_HELP[k].titulo}</b>
-                    <p>{KIND_HELP[k].frase}</p>
-                    <small>{KIND_HELP[k].exemplos}</small>
+            {view === 'simples' ? (
+              <>
+                <SimpleView data={data} onSetup={() => setSetup(true)} />
+                <details className="panel dre-learn-mini">
+                  <summary>📚 Não entendeu algo? Aprenda o básico em 1 minuto</summary>
+                  <DreLearn />
+                </details>
+              </>
+            ) : (
+              <>
+                <section className="panel" aria-labelledby="wf-title">
+                  <div className="panel-head">
+                    <h2 id="wf-title">Para onde foi o dinheiro</h2>
+                    <small className="panel-hint">Toque num degrau para ver o que tem dentro</small>
                   </div>
-                ))}
-              </div>
-              <div className="learn-faq">
-                <details>
-                  <summary>Por que a “sobra das vendas” (margem de contribuição) é tão importante?</summary>
-                  <p>
-                    Ela mostra se vender vale a pena. Se cada venda deixa uma sobra, vender mais paga a estrutura e vira lucro. Se a sobra é
-                    negativa, cada pedido aumenta o prejuízo: o problema está no preço, no custo do produto ou no frete, não nas despesas fixas.
-                  </p>
-                </details>
-                <details>
-                  <summary>Comprei estoque este mês. Isso entra no DRE?</summary>
-                  <p>
-                    Não na hora da compra. O DRE mostra o custo só dos produtos que foram vendidos no mês. Comprar estoque mexe no caixa, não
-                    no lucro: o custo aparece aos poucos, conforme as peças vendem.
-                  </p>
-                </details>
-                <details>
-                  <summary>Parcela de empréstimo é despesa?</summary>
-                  <p>
-                    Só a parte dos juros. A parte que devolve o dinheiro emprestado não é despesa: é pagamento de dívida. Lance os juros em
-                    “Bancos e juros”.
-                  </p>
-                </details>
-                <details>
-                  <summary>Devo lançar o meu próprio salário?</summary>
-                  <p>
-                    Sim, como “Pró-labore”. Se você trabalha na empresa e não se paga, o lucro parece maior do que é — e você não sabe se o
-                    negócio se sustentaria pagando alguém para fazer o seu trabalho.
-                  </p>
-                </details>
-                <details>
-                  <summary>Lucro é o mesmo que dinheiro na conta?</summary>
-                  <p>
-                    Nem sempre. O DRE mostra se o mês deu lucro; o caixa mostra quando o dinheiro entra e sai. O Mercado Livre libera os valores
-                    dias depois da venda, e compras de estoque saem do caixa antes de virar custo.
-                  </p>
-                </details>
-              </div>
-            </section>
+                  <Waterfall data={data} focus={focus} onFocus={setFocus} onPick={pick} />
+                </section>
+
+                <div className="dre-grid">
+                  <section className="panel" aria-labelledby="st-title" id="dre-statement">
+                    <div className="panel-head">
+                      <h2 id="st-title">O DRE, linha por linha</h2>
+                      <small className="panel-hint">
+                        Toque no <b>?</b> de qualquer linha para entender o que ela é
+                      </small>
+                    </div>
+                    <DreStatement
+                      data={data}
+                      entries={entries}
+                      tecnico={tecnico}
+                      open={open}
+                      onToggle={toggle}
+                      focus={focus}
+                      onFocus={setFocus}
+                      onAdd={(kind) => setWizard({ kind })}
+                      onEdit={(entry) => setWizard({ entry })}
+                    />
+                  </section>
+                  <aside className="dre-side">
+                    <BreakEven data={data} onAddFixed={() => setWizard({ kind: 'despesa_fixa' })} />
+                    <WhatIf key={`${month}:${accountId}:${data.generatedAt}`} data={data} />
+                  </aside>
+                </div>
+
+                <section className="panel dre-learn" aria-labelledby="learn-title">
+                  <h2 id="learn-title">📚 Custo ou despesa? Aprenda em 1 minuto</h2>
+                  <DreLearn />
+                </section>
+              </>
+            )}
           </>
         )}
       </div>
@@ -358,10 +399,79 @@ export function DrePage() {
         <EntriesList
           entries={entries}
           month={month}
-          onNew={() => { setManage(false); setWizard({}); }}
-          onEdit={(entry) => { setManage(false); setWizard({ entry }); }}
+          onNew={() => {
+            setManage(false);
+            setWizard({});
+          }}
+          onEdit={(entry) => {
+            setManage(false);
+            setWizard({ entry });
+          }}
         />
       </Modal>
     </AppShell>
+  );
+}
+
+/** Custo × despesa e dúvidas comuns, em linguagem simples. */
+function DreLearn() {
+  return (
+    <>
+      <p className="dre-muted">
+        O teste mais fácil: <b>se você vendesse o dobro, esse gasto mudaria?</b> Se muda junto, é
+        custo variável. Se fica igual, é despesa fixa. Se é juros ou tarifa de banco, é despesa
+        financeira.
+      </p>
+      <div className="learn-cards">
+        {(['custo_variavel', 'despesa_fixa', 'despesa_financeira'] as const).map((k) => (
+          <div key={k} className="learn-card" data-kind={k}>
+            <b>{KIND_HELP[k].titulo}</b>
+            <p>{KIND_HELP[k].frase}</p>
+            <small>{KIND_HELP[k].exemplos}</small>
+          </div>
+        ))}
+      </div>
+      <div className="learn-faq">
+        <details>
+          <summary>Por que a “sobra das vendas” (margem de contribuição) é tão importante?</summary>
+          <p>
+            Ela mostra se vender vale a pena. Se cada venda deixa uma sobra, vender mais paga a
+            estrutura e vira lucro. Se a sobra é negativa, cada pedido aumenta o prejuízo: o
+            problema está no preço, no custo do produto ou no frete, não nas despesas fixas.
+          </p>
+        </details>
+        <details>
+          <summary>Comprei estoque este mês. Isso entra no DRE?</summary>
+          <p>
+            Não na hora da compra. O DRE mostra o custo só dos produtos que foram vendidos no mês.
+            Comprar estoque mexe no caixa, não no lucro: o custo aparece aos poucos, conforme as
+            peças vendem.
+          </p>
+        </details>
+        <details>
+          <summary>Parcela de empréstimo é despesa?</summary>
+          <p>
+            Só a parte dos juros. A parte que devolve o dinheiro emprestado não é despesa: é
+            pagamento de dívida. Lance os juros em “Bancos e juros”.
+          </p>
+        </details>
+        <details>
+          <summary>Devo lançar o meu próprio salário?</summary>
+          <p>
+            Sim, como “Pró-labore”. Se você trabalha na empresa e não se paga, o lucro parece maior
+            do que é — e você não sabe se o negócio se sustentaria pagando alguém para fazer o seu
+            trabalho.
+          </p>
+        </details>
+        <details>
+          <summary>Lucro é o mesmo que dinheiro na conta?</summary>
+          <p>
+            Nem sempre. O DRE mostra se o mês deu lucro; o caixa mostra quando o dinheiro entra e
+            sai. O Mercado Livre libera os valores dias depois da venda, e compras de estoque saem
+            do caixa antes de virar custo.
+          </p>
+        </details>
+      </div>
+    </>
   );
 }

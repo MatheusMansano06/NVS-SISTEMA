@@ -17,10 +17,16 @@ export function dreRoutes(service: DreService) {
     const read = { preHandler: app.requirePermission('dashboard:read') };
     const write = { preHandler: app.requirePermission('costs:manage') };
 
-    app.get('/dre', read, async (req) => service.dre(req.user.tenantId, parse(dreQuerySchema, req.query)));
+    app.get('/dre', read, async (req) =>
+      service.dre(req.user.tenantId, parse(dreQuerySchema, req.query)),
+    );
     app.get('/dre/entries', read, async (req) => service.list(req.user.tenantId));
     app.post('/dre/entries', write, async (req, reply) =>
-      reply.code(201).send(await service.create(req.user.tenantId, req.user.sub, parse(dreEntrySchema, req.body))),
+      reply
+        .code(201)
+        .send(
+          await service.create(req.user.tenantId, req.user.sub, parse(dreEntrySchema, req.body)),
+        ),
     );
     app.put('/dre/entries/:id', write, async (req) => {
       const { id } = parse(idParam, req.params);
@@ -30,7 +36,8 @@ export function dreRoutes(service: DreService) {
     });
     app.delete('/dre/entries/:id', write, async (req, reply) => {
       const { id } = parse(idParam, req.params);
-      if (!(await service.remove(req.user.tenantId, id))) throw new NotFoundError('Lançamento não encontrado');
+      if (!(await service.remove(req.user.tenantId, id)))
+        throw new NotFoundError('Lançamento não encontrado');
       return reply.code(204).send();
     });
   };

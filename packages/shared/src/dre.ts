@@ -22,7 +22,16 @@ export const DRE_BASIS_LABELS: Record<DreBasis, string> = {
   unico: 'Só uma vez',
 };
 
-export const DRE_CATEGORIES = ['pessoas', 'estrutura', 'sistemas', 'servicos', 'marketing', 'logistica', 'financeiro', 'outros'] as const;
+export const DRE_CATEGORIES = [
+  'pessoas',
+  'estrutura',
+  'sistemas',
+  'servicos',
+  'marketing',
+  'logistica',
+  'financeiro',
+  'outros',
+] as const;
 export type DreCategory = (typeof DRE_CATEGORIES)[number];
 export const DRE_CATEGORY_LABELS: Record<DreCategory, string> = {
   pessoas: 'Pessoas',
@@ -50,17 +59,29 @@ export const dreEntrySchema = z
     /** pessoa da equipe: dados da calculadora de custo real */
     details: staffCostSchema.nullable().optional(),
   })
-  .refine((e) => !e.endMonth || e.endMonth >= e.startMonth, { message: 'O fim deve ser depois do início', path: ['endMonth'] })
-  .refine((e) => e.basis !== 'percentual' || e.amount <= 100, { message: 'Percentual até 100%', path: ['amount'] });
+  .refine((e) => !e.endMonth || e.endMonth >= e.startMonth, {
+    message: 'O fim deve ser depois do início',
+    path: ['endMonth'],
+  })
+  .refine((e) => e.basis !== 'percentual' || e.amount <= 100, {
+    message: 'Percentual até 100%',
+    path: ['amount'],
+  });
 export type DreEntryInput = z.infer<typeof dreEntrySchema>;
 
 export const dreQuerySchema = z.object({
   month,
   accountId: z.string().uuid().optional(),
   /** vendas sem custo cadastrado: estima custo e imposto pela média das vendas com custo */
-  estimarCusto: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  estimarCusto: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   /** compara com o mês anterior (o Dashboard dispensa) */
-  comparar: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  comparar: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   fresh: z.coerce.boolean().optional(),
 });
 export type DreQuery = z.infer<typeof dreQuerySchema>;
@@ -79,13 +100,36 @@ export interface DreEntryDto {
 }
 
 /** Blocos que tiram dinheiro (ou o trazem, na receita), na ordem do DRE. */
-export const DRE_SECTIONS = ['receita', 'deducoes', 'cmv', 'variaveis', 'fixas', 'financeiras'] as const;
+export const DRE_SECTIONS = [
+  'receita',
+  'deducoes',
+  'cmv',
+  'variaveis',
+  'fixas',
+  'financeiras',
+] as const;
 export type DreSectionId = (typeof DRE_SECTIONS)[number];
 /** Resultados parciais: cada um aparece depois do bloco indicado. */
-export const DRE_SUBTOTALS = ['receita_liquida', 'lucro_bruto', 'margem_contribuicao', 'lucro_operacional', 'lucro_liquido'] as const;
+export const DRE_SUBTOTALS = [
+  'receita_liquida',
+  'lucro_bruto',
+  'margem_contribuicao',
+  'lucro_operacional',
+  'lucro_liquido',
+] as const;
 export type DreSubtotalId = (typeof DRE_SUBTOTALS)[number];
 export const DRE_FLOW: (DreSectionId | DreSubtotalId)[] = [
-  'receita', 'deducoes', 'receita_liquida', 'cmv', 'lucro_bruto', 'variaveis', 'margem_contribuicao', 'fixas', 'lucro_operacional', 'financeiras', 'lucro_liquido',
+  'receita',
+  'deducoes',
+  'receita_liquida',
+  'cmv',
+  'lucro_bruto',
+  'variaveis',
+  'margem_contribuicao',
+  'fixas',
+  'lucro_operacional',
+  'financeiras',
+  'lucro_liquido',
 ];
 
 export interface DreItem {
@@ -123,7 +167,12 @@ export interface DreDto {
   /** mês em andamento: fechamento se o ritmo de vendas continuar (fixas já contam o mês inteiro) */
   projecao: { receitaBruta: number; lucroLiquido: number } | null;
   cobertura: { semCustoQtd: number; semCustoValor: number; estimado: boolean };
-  previous: { month: string; receitaBruta: number; lucroLiquido: number; margemContribuicao: number } | null;
+  previous: {
+    month: string;
+    receitaBruta: number;
+    lucroLiquido: number;
+    margemContribuicao: number;
+  } | null;
   lancamentos: number;
   generatedAt: string;
 }

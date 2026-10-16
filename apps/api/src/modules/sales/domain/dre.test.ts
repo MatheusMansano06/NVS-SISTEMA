@@ -18,8 +18,17 @@ const sales: DreSales = {
   semCustoValor: 1_000,
 };
 const entry = (p: Partial<DreEntryDto>): DreEntryDto => ({
-  id: p.name ?? 'x', name: 'x', kind: 'despesa_fixa', category: 'outros', basis: 'mensal', amount: 0,
-  startMonth: '2026-01', endMonth: null, notes: null, details: null, ...p,
+  id: p.name ?? 'x',
+  name: 'x',
+  kind: 'despesa_fixa',
+  category: 'outros',
+  basis: 'mensal',
+  amount: 0,
+  startMonth: '2026-01',
+  endMonth: null,
+  notes: null,
+  details: null,
+  ...p,
 });
 
 describe('DRE simplificado', () => {
@@ -36,7 +45,14 @@ describe('DRE simplificado', () => {
   it('desce da venda até o lucro líquido', () => {
     const d = computeDre(base);
     const t = Object.fromEntries(d.sections.map((s) => [s.id, s.total]));
-    expect(t).toEqual({ receita: 10_000, deducoes: 1_090, cmv: 3_500, variaveis: 2_800, fixas: 1_400, financeiras: 150 });
+    expect(t).toEqual({
+      receita: 10_000,
+      deducoes: 1_090,
+      cmv: 3_500,
+      variaveis: 2_800,
+      fixas: 1_400,
+      financeiras: 150,
+    });
     expect(d.subtotals).toEqual({
       receita_liquida: 8_910,
       lucro_bruto: 5_410,

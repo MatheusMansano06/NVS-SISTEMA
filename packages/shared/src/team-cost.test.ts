@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { teamCost, type StaffMember } from './team-cost.js';
 
-const m = (p: Partial<StaffMember>): StaffMember => ({ role: 'clt', regime: 'simples', salario: 4200, vt: 0, vr: 0, saude: 0, outros: 0, ...p });
-const line = (r: ReturnType<typeof teamCost>, key: string) => r.lines.find((l) => l.key === key)?.valor;
+const m = (p: Partial<StaffMember>): StaffMember => ({
+  role: 'clt',
+  regime: 'simples',
+  salario: 4200,
+  vt: 0,
+  vr: 0,
+  saude: 0,
+  outros: 0,
+  ...p,
+});
+const line = (r: ReturnType<typeof teamCost>, key: string) =>
+  r.lines.find((l) => l.key === key)?.valor;
 
 describe('custo real da equipe', () => {
   it('CLT no Simples: salário + 13º + férias + FGTS + reserva da multa (INSS no DAS)', () => {
@@ -36,6 +46,8 @@ describe('custo real da equipe', () => {
 
   it('pró-labore: 20% de INSS fora do Simples', () => {
     expect(teamCost(m({ role: 'pro_labore', salario: 3000 })).total).toBe(3000);
-    expect(teamCost(m({ role: 'pro_labore', salario: 3000, regime: 'presumido_real' })).total).toBe(3600);
+    expect(teamCost(m({ role: 'pro_labore', salario: 3000, regime: 'presumido_real' })).total).toBe(
+      3600,
+    );
   });
 });

@@ -1,4 +1,10 @@
-import { teamCost, type DreDto, type DreEntryDto, type DreEntryInput, type DreQuery } from '@nvs/shared';
+import {
+  teamCost,
+  type DreDto,
+  type DreEntryDto,
+  type DreEntryInput,
+  type DreQuery,
+} from '@nvs/shared';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { computeDre, projectDre, type DreInput } from '../domain/dre.js';
 import { todayIn } from '../domain/period.js';
@@ -32,7 +38,17 @@ const toDto = (r: EntryRow): DreEntryDto => ({
   details: r.details ?? null,
 });
 // pessoa da equipe: o valor é sempre o custo real calculado (salário + encargos + benefícios)
-const params = (e: DreEntryInput) => [e.name, e.kind, e.category, e.basis, e.details ? teamCost(e.details).total : e.amount, `${e.startMonth}-01`, e.endMonth ? `${e.endMonth}-01` : null, e.notes || null, e.details ? JSON.stringify(e.details) : null];
+const params = (e: DreEntryInput) => [
+  e.name,
+  e.kind,
+  e.category,
+  e.basis,
+  e.details ? teamCost(e.details).total : e.amount,
+  `${e.startMonth}-01`,
+  e.endMonth ? `${e.endMonth}-01` : null,
+  e.notes || null,
+  e.details ? JSON.stringify(e.details) : null,
+];
 
 const daysIn = (month: string) => {
   const [y, m] = month.split('-').map(Number) as [number, number];
@@ -82,7 +98,9 @@ export class DreService {
   }
 
   async remove(tenantId: string, id: string): Promise<boolean> {
-    const { rowCount } = await this.db.withTenant(tenantId, (db) => db.query('DELETE FROM dre_entries WHERE id = $1', [id]));
+    const { rowCount } = await this.db.withTenant(tenantId, (db) =>
+      db.query('DELETE FROM dre_entries WHERE id = $1', [id]),
+    );
     return Boolean(rowCount);
   }
 
@@ -90,7 +108,11 @@ export class DreService {
     const today = this.today();
     const days = daysIn(q.month);
     const isCurrentMonth = today.slice(0, 7) === q.month;
-    const elapsed = isCurrentMonth ? Number(today.slice(8, 10)) : q.month < today.slice(0, 7) ? days : 0;
+    const elapsed = isCurrentMonth
+      ? Number(today.slice(8, 10))
+      : q.month < today.slice(0, 7)
+        ? days
+        : 0;
     const entries = await this.list(tenantId);
 
     const current = await this.input(tenantId, q, q.month, entries);
@@ -99,7 +121,12 @@ export class DreService {
     if (q.comparar) {
       const month = prevMonth(q.month);
       const p = computeDre(await this.input(tenantId, q, month, entries));
-      previous = { month, receitaBruta: p.receitaBruta, lucroLiquido: p.subtotals.lucro_liquido, margemContribuicao: p.subtotals.margem_contribuicao };
+      previous = {
+        month,
+        receitaBruta: p.receitaBruta,
+        lucroLiquido: p.subtotals.lucro_liquido,
+        margemContribuicao: p.subtotals.margem_contribuicao,
+      };
     }
     return {
       ...d,
@@ -108,14 +135,22 @@ export class DreService {
       isCurrentMonth,
       daysInMonth: days,
       elapsedDays: elapsed,
-      projecao: isCurrentMonth && elapsed > 0 && elapsed < days ? projectDre(current, days / elapsed) : null,
+      projecao:
+        isCurrentMonth && elapsed > 0 && elapsed < days
+          ? projectDre(current, days / elapsed)
+          : null,
       previous,
       lancamentos: entries.length,
       generatedAt: new Date().toISOString(),
     };
   }
 
-  private async input(tenantId: string, q: DreQuery, month: string, entries: DreEntryDto[]): Promise<DreInput> {
+  private async input(
+    tenantId: string,
+    q: DreQuery,
+    month: string,
+    entries: DreEntryDto[],
+  ): Promise<DreInput> {
     const from = `${month}-01`;
     const to = `${month}-${String(daysIn(month)).padStart(2, '0')}`;
     const [sales, extra] = await Promise.all([

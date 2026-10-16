@@ -148,6 +148,11 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     expect(put.json().amount).toBe(1200);
     expect((await app.inject({ method: 'DELETE', url: `/api/v1/dre/entries/${aluguel.id}`, cookies })).statusCode).toBe(204);
     expect((await app.inject({ method: 'GET', url: '/api/v1/dre/entries', cookies })).json()).toHaveLength(1);
+
+    // desligado no Painel Master: a API também bloqueia
+    const tenantId = (await app.inject({ method: 'GET', url: '/api/v1/auth/me', cookies })).json().tenant.id;
+    await db.query(`UPDATE tenants SET features = array_remove(features, 'dre') WHERE id = $1`, [tenantId]);
+    expect((await app.inject({ method: 'GET', url: `/api/v1/dre?month=${month}`, cookies })).statusCode).toBe(403);
   });
 
   it('tabela linha a linha com filtros, paginação e exportação', async () => {

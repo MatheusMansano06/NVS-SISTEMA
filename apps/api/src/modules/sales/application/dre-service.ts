@@ -5,6 +5,7 @@ import {
   type DreEntryInput,
   type DreQuery,
 } from '@nvs/shared';
+import { AppError } from '../../../shared/kernel/errors.js';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { computeDre, projectDre, type DreInput } from '../domain/dre.js';
 import { todayIn } from '../domain/period.js';
@@ -59,6 +60,12 @@ const prevMonth = (month: string) => {
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 };
 
+class FeatureLockedError extends AppError {
+  constructor() {
+    super('O DRE ainda não está liberado para a sua empresa.', 'FEATURE_LOCKED', 403);
+  }
+}
+
 /** DRE simplificado: vendas do marketplace (automático) + gastos lançados pela empresa. */
 export class DreService {
   constructor(
@@ -66,6 +73,15 @@ export class DreService {
     private readonly finance: FinanceService,
     private readonly today: () => string = () => todayIn(),
   ) {}
+
+  /** Recurso liberado no Painel Master (por empresa ou plano). */
+  async ensureFeature(tenantId: string): Promise<void> {
+    const r = await this.db.query<{ features: string[] }>(
+      'SELECT features FROM tenants WHERE id = $1',
+      [tenantId],
+    );
+    if (!r.rows[0]?.features.includes('dre')) throw new FeatureLockedError();
+  }
 
   async list(tenantId: string): Promise<DreEntryDto[]> {
     const { rows } = await this.db.withTenant(tenantId, (db) =>

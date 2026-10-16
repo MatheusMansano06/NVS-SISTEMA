@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { dreEntrySchema, dreQuerySchema } from '@nvs/shared';
 import { z } from 'zod';
 import { NotFoundError, ValidationError } from '../../../shared/kernel/errors.js';
@@ -14,8 +14,9 @@ const idParam = z.object({ id: z.string().uuid() });
 /** DRE simplificado: resultado do mês e os gastos (custos e despesas) lançados pela empresa. */
 export function dreRoutes(service: DreService) {
   return async (app: FastifyInstance) => {
-    const read = { preHandler: app.requirePermission('dashboard:read') };
-    const write = { preHandler: app.requirePermission('costs:manage') };
+    const enabled = async (req: FastifyRequest) => service.ensureFeature(req.user.tenantId);
+    const read = { preHandler: [app.requirePermission('dashboard:read'), enabled] };
+    const write = { preHandler: [app.requirePermission('costs:manage'), enabled] };
 
     app.get('/dre', read, async (req) =>
       service.dre(req.user.tenantId, parse(dreQuerySchema, req.query)),

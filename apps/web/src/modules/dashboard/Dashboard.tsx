@@ -214,7 +214,7 @@ export function Dashboard() {
               discountAds={discountAds}
               stamp={data.generatedAt}
             />
-            {!data.isDemo && session?.tenant.features.includes('financeiro') && (
+            {!data.isDemo && session?.tenant.features.includes('dre') && (
               <DreCard accountId={filters.accountId} stamp={data.generatedAt} />
             )}
 

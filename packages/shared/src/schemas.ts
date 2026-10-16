@@ -71,10 +71,11 @@ export interface UserDto {
  * Recursos que o Painel Master libera por empresa (e que cada plano inclui); o que não estiver liberado aparece como
  * "em breve". Dashboard, Cadastro de SKUs, Integrações e Equipe são a base e ficam sempre ligados.
  */
-export const TENANT_FEATURES = ['financeiro', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full', 'viabilidade'] as const;
+export const TENANT_FEATURES = ['financeiro', 'dre', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full', 'viabilidade'] as const;
 export type TenantFeature = (typeof TENANT_FEATURES)[number];
 export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: string; area: 'Análise' | 'Anúncios' | 'Operação' }> = {
   financeiro: { label: 'Análise Financeira', text: 'Margem de contribuição venda a venda, composição e exportação.', area: 'Análise' },
+  dre: { label: 'DRE', text: 'Resultado do mês, custos da empresa e custo real da equipe.', area: 'Análise' },
   vendas: { label: 'Vendas', text: 'Pedidos, formas de pagamento, estados e DIFAL.', area: 'Análise' },
   precificador: { label: 'Precificador', text: 'Simula preço, tarifa, frete e margem antes de anunciar.', area: 'Análise' },
   radar_frete: { label: 'Radar de Frete', text: 'Frete pago por anúncio e oportunidades de Flex.', area: 'Análise' },

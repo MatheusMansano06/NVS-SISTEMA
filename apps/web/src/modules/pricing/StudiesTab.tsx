@@ -11,7 +11,8 @@ import { ApiError } from '../../shared/http';
 import { useAuth } from '../auth/AuthContext';
 import { skusApi } from '../skus/skus-api';
 import { parse, toInput } from './num';
-import { studiesApi } from './pricing-api';
+import { CategoryBrowser } from './CategoryBrowser';
+import { pricingApi, studiesApi } from './pricing-api';
 
 interface Form {
   title: string;
@@ -28,13 +29,17 @@ interface Form {
   length: string;
   weightKg: string;
   target: string;
+  category: Category | null;
+  listingType: 'gold_special' | 'gold_pro' | null;
 }
+
+interface Category { id: string | null; name: string; feeClassic: number | null; feePremium: number | null }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 const blank = (taxPct: string): Form => ({
   title: '', link: '', supplier: '', notes: '', feePct: '', taxPct, packaging: '0,50',
-  cost: '', price: '', height: '', width: '', length: '', weightKg: '', target: '15',
+  cost: '', price: '', height: '', width: '', length: '', weightKg: '', target: '15', category: null, listingType: null,
 });
 
 const fromDto = (s: PricingStudyDto): Form => ({
@@ -52,6 +57,8 @@ const fromDto = (s: PricingStudyDto): Form => ({
   length: toInput(s.length).replace(/,00$/, ''),
   weightKg: toInput(s.weightKg, 3),
   target: s.targetPct === null ? '' : toInput(s.targetPct).replace(/,00$/, ''),
+  category: s.categoryName ? { id: s.categoryId, name: s.categoryName, feeClassic: s.feeClassic, feePremium: s.feePremium } : null,
+  listingType: s.listingType,
 });
 
 const text = (s: string) => s.trim() || null;
@@ -70,7 +77,15 @@ const toPayload = (f: Form): SavePricingStudyInput => ({
   length: parse(f.length),
   weightKg: parse(f.weightKg),
   targetPct: parse(f.target),
+  categoryId: f.category?.id ?? null,
+  categoryName: f.category?.name ?? null,
+  feeClassic: f.category?.feeClassic ?? null,
+  feePremium: f.category?.feePremium ?? null,
+  listingType: f.category ? f.listingType : null,
 });
+
+const typeFee = (c: Category, t: 'gold_special' | 'gold_pro') => (t === 'gold_pro' ? c.feePremium : c.feeClassic);
+const feeText = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
 
@@ -85,6 +100,7 @@ export function StudiesTab() {
   const [form, setForm] = useState<Form>(() => blank(''));
   const [save, setSave] = useState<SaveState>('idle');
   const [error, setError] = useState('');
+  const [browsing, setBrowsing] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -185,6 +201,23 @@ export function StudiesTab() {
     }
   }
 
+  function chooseType(t: 'gold_special' | 'gold_pro', c = form.category) {
+    const fee = c && typeFee(c, t);
+    if (!c || fee == null) return;
+    edit({ category: c, listingType: t, feePct: feeText(fee) });
+  }
+
+  async function pickCategory(id: string) {
+    try {
+      const info = await pricingApi.category(id);
+      const c = { id: info.id, name: info.path.map((p) => p.name).join(' › ') || info.name, feeClassic: info.feeClassic, feePremium: info.feePremium };
+      setBrowsing(false);
+      chooseType(form.listingType ?? 'gold_special', c);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível abrir a categoria.');
+    }
+  }
+
   function applyTarget() {
     const t = parse(form.target);
     if (t === null || input.cost === null) {
@@ -202,7 +235,7 @@ export function StudiesTab() {
   const term = q.trim().toLowerCase();
   const shown = (items ?? []).filter((s) => !term || [s.title, s.supplier ?? ''].some((v) => v.toLowerCase().includes(term)));
 
-  const field = (k: keyof Form, label: string, opts: { prefix?: string; suffix?: string; placeholder?: string; decimal?: boolean } = {}) => (
+  const field = (k: Exclude<keyof Form, 'category' | 'listingType'>, label: string, opts: { prefix?: string; suffix?: string; placeholder?: string; decimal?: boolean } = {}) => (
     <label className="sku-input">
       <small>{label}</small>
       <span className="sku-field">
@@ -292,11 +325,53 @@ export function StudiesTab() {
               <div className="pstudy-row pstudy-row-3">
                 {field('cost', 'Custo do produto', { prefix: 'R$', placeholder: '0,00', decimal: true })}
                 {field('price', 'Valor de venda', { prefix: 'R$', placeholder: '0,00', decimal: true })}
-                {field('feePct', 'Comissão da categoria', { suffix: '%', placeholder: 'ex.: 11,5', decimal: true })}
+                <label className="sku-input">
+                  <small>
+                    Comissão {form.listingType ? `· ${form.listingType === 'gold_pro' ? 'Premium' : 'Clássico'}` : ''}
+                    <button type="button" className="link pstudy-open" onClick={() => setBrowsing((v) => !v)}>
+                      {browsing ? 'fechar lista' : form.category ? 'trocar categoria' : 'escolher na lista'}
+                    </button>
+                  </small>
+                  <span className="sku-field">
+                    <input inputMode="decimal" value={form.feePct} placeholder="ex.: 11,5" onChange={(e) => edit({ feePct: e.target.value, listingType: null })} />
+                    <i>%</i>
+                  </span>
+                </label>
                 {field('taxPct', 'Imposto', { suffix: '%', decimal: true })}
                 {field('packaging', 'Embalagem', { prefix: 'R$', decimal: true })}
               </div>
-              <p className="lprice-note">A comissão aparece no anúncio do ML (Clássico ou Premium) para a categoria do produto.</p>
+              {form.category && (
+                <div className="pcat-chosen pstudy-cat">
+                  <span>
+                    <small>Categoria</small>
+                    <strong>{form.category.name}</strong>
+                  </span>
+                  <div className="seg" role="radiogroup" aria-label="Tipo de anúncio">
+                    {(['gold_special', 'gold_pro'] as const).map((t) => {
+                      const fee = typeFee(form.category!, t);
+                      return (
+                        <button key={t} type="button" role="radio" aria-checked={form.listingType === t} disabled={fee == null} onClick={() => chooseType(t)}>
+                          {t === 'gold_pro' ? 'Premium' : 'Clássico'} <span>{fee == null ? '—' : `${feeText(fee)}%`}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button type="button" className="link" onClick={() => edit({ category: null, listingType: null })}>remover</button>
+                </div>
+              )}
+              {browsing && (
+                <CategoryBrowser
+                  title="Categoria do produto"
+                  onPick={(id) => void pickCategory(id)}
+                  onSkip={() => {
+                    setBrowsing(false);
+                    chooseType(form.listingType ?? 'gold_special', { id: null, name: 'Sem categoria (tarifa média)', feeClassic: 12, feePremium: 17 });
+                  }}
+                />
+              )}
+              {!form.category && !browsing && (
+                <p className="lprice-note">Digite a % da comissão ou escolha a categoria na lista para puxar a tarifa do Clássico ou do Premium.</p>
+              )}
             </section>
 
             <section className="scard">

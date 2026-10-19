@@ -189,6 +189,13 @@ export const savePricingStudySchema = z.object({
   length: optCm,
   weightKg: z.number().min(0).max(5000).nullable(),
   targetPct: z.number().min(0).max(90).nullable().default(null),
+  /** Categoria escolhida na lista do ML (opcional: a comissão também pode ser digitada). */
+  categoryId: z.string().regex(/^MLB\d+$/).nullable().default(null),
+  categoryName: z.string().trim().max(300).nullable().default(null),
+  feeClassic: z.number().min(0).max(50).nullable().default(null),
+  feePremium: z.number().min(0).max(50).nullable().default(null),
+  /** Tipo cuja tarifa preencheu a comissão; null = digitada à mão. */
+  listingType: z.enum(['gold_special', 'gold_pro']).nullable().default(null),
 });
 export type SavePricingStudyInput = z.infer<typeof savePricingStudySchema>;
 

@@ -40,6 +40,11 @@ const study = {
   length: null,
   weightKg: 0.5,
   targetPct: 15,
+  categoryId: 'MLB1714',
+  categoryName: 'Informática › Mouses',
+  feeClassic: 11.5,
+  feePremium: 16.5,
+  listingType: 'gold_special',
 };
 
 describe.skipIf(!TEST_DB)('Precificador › Viabilidade (pesquisas)', () => {
@@ -66,6 +71,7 @@ describe.skipIf(!TEST_DB)('Precificador › Viabilidade (pesquisas)', () => {
     expect(created.statusCode).toBe(200);
     const s = created.json();
     expect(s.margin).toBe(7.48);
+    expect(s).toMatchObject({ categoryName: 'Informática › Mouses', feePremium: 16.5, listingType: 'gold_special' });
 
     const updated = await app.inject({ method: 'PUT', url: `/api/v1/pricing/studies/${s.id}`, cookies, payload: { ...study, price: 100, weightKg: 1 } });
     expect(updated.json().margin).toBe(19.55); // R$ 100 já cai na faixa 100–119,99: frete 16,45;

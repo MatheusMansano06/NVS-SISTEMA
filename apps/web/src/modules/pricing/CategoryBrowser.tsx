@@ -11,7 +11,7 @@ const feeChips = (n: CategoryNodeDto) => (
 );
 
 /** Todas as categorias do ML em árvore (ou busca), com a % de tarifa de cada uma já à vista. */
-export function CategoryBrowser({ onPick, onSkip }: { onPick: (id: string) => void; onSkip: () => void }) {
+export function CategoryBrowser({ onPick, onSkip, title = '1. Categoria do produto' }: { onPick: (id: string) => void; onSkip: () => void; title?: string }) {
   const [level, setLevel] = useState<CategoryLevelDto | null>(null);
   const [parent, setParent] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
@@ -47,7 +47,7 @@ export function CategoryBrowser({ onPick, onSkip }: { onPick: (id: string) => vo
     <section className="scard pcat">
       <header className="scard-head">
         <div>
-          <h2>1. Categoria do produto</h2>
+          <h2>{title}</h2>
           <p>A tarifa do ML muda por categoria. Navegue pelas pastas ou busque; a % de cada uma já aparece.</p>
         </div>
       </header>

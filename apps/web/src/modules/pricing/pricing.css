@@ -104,3 +104,7 @@
 @media (max-width: 1100px) { .pstudy-grid { grid-template-columns: 1fr; } .pstudy-result { position: static; } }
 @media (max-width: 860px) { .pstudy { grid-template-columns: 1fr; } .pstudy-list { position: static; } .pstudy-list ul { max-height: 260px; } }
 @media (max-width: 640px) { .pstudy-row, .pstudy-row-3 { grid-template-columns: 1fr; } }
+.pstudy-cat { flex-wrap: wrap; }
+.pstudy-cat > span { flex: 1 1 200px; min-width: 0; }
+.pstudy-cat strong { font-size: .86rem; overflow-wrap: anywhere; }
+.pstudy-cat .seg button span { margin-left: 4px; }

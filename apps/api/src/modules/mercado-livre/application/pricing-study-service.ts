@@ -7,6 +7,8 @@ interface Row {
   fee_pct: string; tax_pct: string; packaging: string; cost: string | null; price: string | null;
   height: string | null; width: string | null; length: string | null; weight_kg: string | null; target_pct: string | null;
   margin: string | null; margin_pct: string | null; created_at: Date; updated_at: Date;
+  category_id: string | null; category_name: string | null; fee_classic: string | null; fee_premium: string | null;
+  listing_type: 'gold_special' | 'gold_pro' | null;
 }
 
 const num = (v: string | null) => (v === null ? null : Number(v));
@@ -28,6 +30,11 @@ function toDto(r: Row): PricingStudyDto {
     length: num(r.length),
     weightKg: num(r.weight_kg),
     targetPct: num(r.target_pct),
+    categoryId: r.category_id,
+    categoryName: r.category_name,
+    feeClassic: num(r.fee_classic),
+    feePremium: num(r.fee_premium),
+    listingType: r.listing_type,
     margin: num(r.margin),
     marginPct: num(r.margin_pct),
     createdAt: r.created_at.toISOString(),
@@ -51,8 +58,10 @@ export class PricingStudyService {
     return this.db.withTenant(tenantId, async (db) => {
       const { rows } = await db.query<Row>(
         `INSERT INTO pricing_studies (tenant_id, title, link, supplier, notes, fee_pct, tax_pct, packaging, cost, price,
-                                      height, width, length, weight_kg, target_pct, margin, margin_pct, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *`,
+                                      height, width, length, weight_kg, target_pct, category_id, category_name, fee_classic,
+                                      fee_premium, listing_type, margin, margin_pct, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+         RETURNING *`,
         [tenantId, ...values(s), m.margin, m.marginPct, userId],
       );
       return toDto(rows[0]!);
@@ -65,7 +74,8 @@ export class PricingStudyService {
       const { rows } = await db.query<Row>(
         `UPDATE pricing_studies SET title = $2, link = $3, supplier = $4, notes = $5, fee_pct = $6, tax_pct = $7, packaging = $8,
                 cost = $9, price = $10, height = $11, width = $12, length = $13, weight_kg = $14, target_pct = $15,
-                margin = $16, margin_pct = $17, updated_at = now()
+                category_id = $16, category_name = $17, fee_classic = $18, fee_premium = $19, listing_type = $20,
+                margin = $21, margin_pct = $22, updated_at = now()
           WHERE id = $1 RETURNING *`,
         [id, ...values(s), m.margin, m.marginPct],
       );
@@ -82,5 +92,6 @@ export class PricingStudyService {
 }
 
 function values(s: SavePricingStudyInput) {
-  return [s.title, s.link, s.supplier, s.notes, s.feePct, s.taxPct, s.packaging, s.cost, s.price, s.height, s.width, s.length, s.weightKg, s.targetPct];
+  return [s.title, s.link, s.supplier, s.notes, s.feePct, s.taxPct, s.packaging, s.cost, s.price, s.height, s.width, s.length, s.weightKg, s.targetPct,
+    s.categoryId, s.categoryName, s.feeClassic, s.feePremium, s.listingType];
 }

@@ -1,4 +1,4 @@
-import type { SkuFilter, SkuImportReport, SkuListDto, TaxRateDto } from '@nvs/shared';
+import type { GenerateEansInput, GenerateEansResult, InternalEanDto, InternalEanListDto, SkuFilter, UpdateEanInput, SkuImportReport, SkuListDto, TaxRateDto } from '@nvs/shared';
 import { http } from '../../shared/http';
 
 export const skusApi = {
@@ -15,4 +15,14 @@ export const skusApi = {
   taxRate: () => http<TaxRateDto>('/api/v1/settings/tax-rate'),
   setTaxRate: (ratePct: number) => http<TaxRateDto>('/api/v1/settings/tax-rate', { method: 'PUT', body: { ratePct } }),
   exportUrl: '/api/v1/skus/export',
+  eans: (p: { q?: string; offset: number; limit: number }) => {
+    const qs = new URLSearchParams({ offset: String(p.offset), limit: String(p.limit) });
+    if (p.q) qs.set('q', p.q);
+    return http<InternalEanListDto>(`/api/v1/skus/eans?${qs}`);
+  },
+  generateEans: (items: GenerateEansInput['items']) => http<GenerateEansResult>('/api/v1/skus/eans', { body: { items } }),
+  updateEan: (code: string, patch: UpdateEanInput) => http<InternalEanDto>(`/api/v1/skus/eans/${code}`, { method: 'PATCH', body: patch }),
+  removeEan: (code: string) => http<void>(`/api/v1/skus/eans/${code}`, { method: 'DELETE' }),
+  eanLabelsUrl: (codes: string[], qty: number, format: 'rolo_1col' | 'rolo_2col' | 'a4') =>
+    `/api/v1/skus/eans/labels.pdf?${new URLSearchParams({ codes: codes.join(','), qty: String(qty), format })}`,
 };

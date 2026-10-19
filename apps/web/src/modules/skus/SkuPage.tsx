@@ -7,6 +7,7 @@ import { pct } from '../../shared/format';
 import { Button } from '../../shared/ui/Button';
 import { Icon } from '../../shared/ui/Icon';
 import { Modal } from '../../shared/ui/Modal';
+import { EanTab } from './EanTab';
 import { ImportModal } from './ImportModal';
 import { TaxRateCard } from './TaxRateCard';
 import { Pagination } from '../../shared/ui/Pagination';
@@ -22,6 +23,7 @@ const FILTERS: { id: SkuFilter; label: string }[] = [
 
 /** Cadastro de SKUs: custo unitário e imposto que alimentam lucro, margem e a análise financeira. */
 export function SkuPage() {
+  const [view, setView] = useState<'costs' | 'ean'>(() => (new URLSearchParams(window.location.search).get('aba') === 'ean' ? 'ean' : 'costs'));
   const [filter, setFilter] = useState<SkuFilter>('missing');
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
@@ -95,15 +97,21 @@ export function SkuPage() {
             <p className="dash-kicker">Custos e impostos</p>
             <h1>Cadastro de SKUs</h1>
           </div>
-          <div className="skus-actions">
+          <div className="seg" role="tablist" aria-label="Cadastro de SKUs">
+            <button type="button" role="tab" aria-checked={view === 'costs'} onClick={() => setView('costs')}>Custos</button>
+            <button type="button" role="tab" aria-checked={view === 'ean'} onClick={() => setView('ean')}>Códigos EAN</button>
+          </div>
+          {view === 'costs' && <div className="skus-actions">
             <a className="btn btn-ghost btn-sm" href={skusApi.exportUrl} download>
               <Icon name="logout" size={16} /> Exportar planilha
             </a>
             <Button variant="ghost" className="btn-sm" onClick={() => setImporting(true)}>
               Importar planilha
             </Button>
-          </div>
+          </div>}
         </header>
+
+        {view === 'ean' ? <EanTab /> : <>
 
         {/* quanto do sistema já está "preenchido" com custos */}
         <section className="fill" aria-label="Preenchimento dos custos">
@@ -170,6 +178,7 @@ export function SkuPage() {
         {meta && meta.total > 0 && (
           <Pagination page={page} pageSize={pageSize} total={meta.total} onPage={goTo} onPageSize={setPageSize} label="SKUs" />
         )}
+        </>}
       </div>
 
       <Modal open={importing} onClose={() => setImporting(false)} label="Importar planilha">

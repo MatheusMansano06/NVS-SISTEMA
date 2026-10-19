@@ -30,6 +30,8 @@ import {
   SalesRetention,
   salesRoutes,
   skuRoutes,
+  InternalEanService,
+  eanRoutes,
 } from './modules/sales/index.js';
 import {
   HttpMlApi,
@@ -175,6 +177,7 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   await app.register(salesRoutes(dashboard), { prefix: '/api/v1' });
   const skuCosts = new SkuCostService(database, new PgSkuRepository(), sharedCache);
   await app.register(skuRoutes(skuCosts), { prefix: '/api/v1' });
+  await app.register(eanRoutes(new InternalEanService(database)), { prefix: '/api/v1' });
   const finance = new FinanceService(database, sharedCache);
   await app.register(financeRoutes(finance), { prefix: '/api/v1' });
   await app.register(dreRoutes(new DreService(database, finance)), { prefix: '/api/v1' });

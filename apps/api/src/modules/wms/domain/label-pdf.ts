@@ -79,6 +79,30 @@ export function buildLabelsPdf(items: LabelSpec[], layout: LabelLayout): Promise
   return done;
 }
 
+/** Etiquetas de EAN-13 (Cadastro de SKUs › Códigos EAN), nos mesmos formatos das do Full. */
+export function buildEanLabelsPdf(items: { code: string; description: string | null; sku: string; qty: number }[], layout: LabelLayout): Promise<Buffer> {
+  const labels = items.flatMap((it) => Array.from({ length: Math.max(0, it.qty) }, () => it));
+  const { pageW, pageH, pages } = labelSlots(layout, labels.length);
+  const doc = new PDFDocument({ size: [pageW * PT, pageH * PT], margin: 0, autoFirstPage: false, info: { Title: 'Etiquetas EAN', Producer: 'NVS', Creator: 'NVS' } });
+  const chunks: Buffer[] = [];
+  doc.on('data', (c: Buffer) => chunks.push(c));
+  const done = new Promise<Buffer>((resolve, reject) => {
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+  let n = 0;
+  for (const slots of pages) {
+    doc.addPage({ size: [pageW * PT, pageH * PT], margin: 0 });
+    for (const s of slots) {
+      const it = labels[n++]!;
+      drawEan(doc, { x: s.x, y: s.y, w: layout.widthMm, h: layout.heightMm }, it);
+    }
+  }
+  if (!pages.length) doc.addPage({ size: [pageW * PT, pageH * PT], margin: 0 });
+  doc.end();
+  return done;
+}
+
 type Box = { x: number; y: number; w: number; h: number };
 type Doc = InstanceType<typeof PDFDocument>;
 const clean = (s: string, max: number) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -152,4 +176,43 @@ function fit(doc: Doc, text: string, width: number): string {
   let t = text;
   while (t.length > 1 && doc.widthOfString(`${t}…`) > width) t = t.slice(0, -1);
   return `${t}…`;
+}
+
+/** EAN-13: módulo de até 0,33 mm (100%), zona de silêncio de 11/7 módulos, dígitos legíveis embaixo. */
+function drawEan(doc: Doc, b: Box, it: { code: string; description: string | null; sku: string }) {
+  const pad = Math.min(1.5, b.w * 0.04);
+  const scale = Math.min(b.h / 25, b.w / 40, 1.6);
+  const sbs = (bwipjs.raw({ bcid: 'ean13', text: it.code })[0] as { sbs: number[] }).sbs;
+  const modules = sbs.reduce((s, v) => s + v, 0); // 95
+  const mod = Math.min(0.33, (b.w - 2 * pad) / (modules + 18));
+  const barH = b.h * 0.42;
+  const barW = mod * modules;
+  let x = b.x + (b.w - barW) / 2;
+  const y = b.y + pad;
+  sbs.forEach((width, i) => {
+    if (i % 2 === 0) doc.rect(x * PT, y * PT, width * mod * PT, barH * PT);
+    x += width * mod;
+  });
+  doc.fill('#000');
+  let ty = y + barH + 0.5;
+  const codeSize = 8 * scale;
+  const digits = `${it.code[0]} ${it.code.slice(1, 7)} ${it.code.slice(7)}`;
+  doc.font('Helvetica-Bold').fontSize(codeSize);
+  doc.text(digits, (b.x + (b.w - doc.widthOfString(digits) / PT) / 2) * PT, ty * PT, { lineBreak: false });
+  ty += (codeSize / PT) * 1.15;
+  const textSize = 6.4 * scale;
+  const lineH = (textSize / PT) * 1.15;
+  const skuY = b.y + b.h - pad - lineH;
+  if (it.description) {
+    doc.font('Helvetica').fontSize(textSize).text(clean(it.description, 120), (b.x + pad) * PT, ty * PT, {
+      width: (b.w - 2 * pad) * PT,
+      height: Math.max(lineH, Math.min(2 * lineH, skuY - ty)) * PT,
+      ellipsis: true,
+      lineGap: 0,
+    });
+  }
+  if (it.sku) {
+    doc.font('Helvetica-Bold').fontSize(textSize);
+    doc.text(fit(doc, `SKU: ${clean(it.sku, 60)}`, (b.w - 2 * pad) * PT), (b.x + pad) * PT, skuY * PT, { lineBreak: false });
+  }
 }

@@ -14,3 +14,5 @@ export { SalesAnalyticsService } from './application/sales-analytics-service.js'
 export { PgSalesAnalyticsRepository } from './infrastructure/pg-sales-analytics-repository.js';
 export { salesAnalyticsRoutes } from './presentation/sales-analytics-routes.js';
 export { SalesRetention, retentionCutoff, DETAIL_MONTHS } from './application/sales-retention.js';
+export { InternalEanService } from './application/internal-ean-service.js';
+export { eanRoutes } from './presentation/ean-routes.js';

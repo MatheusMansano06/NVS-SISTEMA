@@ -133,3 +133,79 @@ a.btn-ghost svg { transform: rotate(90deg); }
 .import-hint { margin: 4px 0 8px; color: var(--gray-500); font-size: .86rem; }
 .import-unknown { max-height: 220px; overflow: auto; margin: 0 0 12px; padding: 10px 14px 10px 30px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px #f3c4c9; font-size: .86rem; columns: 2; }
 .import-unknown b { color: var(--danger-ink); }
+
+/* ============ Códigos EAN internos ============ */
+.ean { display: grid; gap: 16px; }
+.ean-hero { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.6fr); border-radius: 30px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); overflow: hidden; }
+.ean-gen { display: grid; gap: 12px; align-content: center; padding: 24px 28px; border-right: 1.5px dashed var(--gray-100); }
+.ean-new { display: flex; align-items: center; gap: 16px; border: 0; cursor: pointer; padding: 14px 16px; border-radius: 22px; background: var(--blue-soft); color: var(--navy); text-align: left; font: inherit; transition: transform .2s, box-shadow .2s; }
+.ean-new:hover:not(:disabled) { transform: translateY(-1px); box-shadow: inset 0 0 0 1.5px var(--blue), 0 14px 26px -20px rgba(31,95,255,.6); }
+.ean-new:disabled { cursor: default; opacity: .7; }
+.ean-new span { display: grid; }
+.ean-new strong { font-size: 1.5rem; letter-spacing: -0.02em; }
+.ean-new small { font-size: .95rem; color: var(--gray-500); font-weight: 600; }
+.ean-gen .link { justify-self: start; font-size: .82rem; }
+.ean-out { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: center; padding: 24px 28px; }
+.ean-out-box { display: flex; align-items: center; min-height: 72px; border: 1.5px dashed var(--gray-100); border-radius: 18px; overflow: hidden; }
+.ean-out-box > code, .ean-out-box > img, .ean-out-box > span { flex: 1; min-width: 0; padding: 8px 14px; }
+.ean-out-box code { font-size: 1.25rem; font-weight: 700; color: var(--navy); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.ean-out-box .ean-icon { align-self: stretch; width: 56px; border-radius: 0; }
+.ean-img { display: block; height: 64px; width: 100%; object-fit: contain; }
+.ean-out-sku { grid-column: 1 / -1; color: var(--gray-500); font-size: .8rem; font-weight: 600; }
+.ean-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 10px; cursor: pointer; background: var(--gray-50); color: var(--navy); font-weight: 700; }
+.ean-icon:hover:not(:disabled) { background: var(--blue-soft); color: var(--blue); }
+.ean-icon:disabled { cursor: default; color: var(--gray-500); opacity: .6; }
+.ean-bulk { display: grid; gap: 10px; }
+.ean-bulk .btn { width: auto; padding: 0 22px; height: 42px; }
+.ean-bulk textarea { width: 100%; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: .85rem; padding: 10px 12px; border: 0; border-radius: 14px; background: var(--gray-50); color: var(--navy); box-shadow: inset 0 0 0 1.5px var(--gray-100); }
+.ean-bulk textarea:focus { outline: none; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--blue); }
+.ean-bulk-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ean-hist { display: grid; gap: 12px; padding: 22px 24px; border-radius: 30px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); }
+.ean-hist-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.ean-hist-head h2 { margin: 0; color: var(--navy); font-size: 1.6rem; line-height: 1; letter-spacing: -0.02em; }
+.ean-hist-head h2 small { display: block; font-size: 1.05rem; font-weight: 700; letter-spacing: 0; }
+.ean-hist-head span { color: var(--navy); }
+.ean-toolbar { flex-wrap: wrap; }
+.ean-print { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ean-print select { height: 38px; border: 0; border-radius: 12px; padding: 0 10px; background: var(--surface); color: var(--navy); font: inherit; font-size: .84rem; box-shadow: inset 0 0 0 1.5px var(--gray-100); }
+.ean-qty { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--gray-500); font-weight: 600; }
+.ean-qty input { width: 52px; height: 38px; border: 0; border-radius: 12px; text-align: center; font: inherit; font-weight: 700; color: var(--navy); background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--gray-100); }
+.ean-print .btn[aria-disabled] { opacity: .5; pointer-events: none; }
+.ean-table { display: grid; }
+.ean-tr { display: grid; grid-template-columns: 24px minmax(150px, 1fr) minmax(0, 1.3fr) minmax(170px, 1fr) 92px auto; gap: 12px; align-items: center; padding: 10px 6px; border-bottom: 1px solid var(--gray-100); }
+.ean-tr[data-selected] { background: var(--blue-soft); border-radius: 12px; }
+.ean-th { font-size: .74rem; font-weight: 700; color: var(--gray-500); }
+.ean-code { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ean-code code { font-size: 1rem; font-weight: 700; color: var(--navy); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.ean-sku { min-width: 0; }
+.ean-sku-btn { display: grid; max-width: 100%; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: inherit; }
+.ean-sku-btn:disabled { cursor: default; }
+.ean-sku-btn strong { color: var(--navy); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ean-sku-btn small { color: var(--gray-500); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ean-sku-btn:hover:not(:disabled) strong { color: var(--blue); }
+.ean-free { border: 0; cursor: pointer; font-size: .82rem; padding: 4px 10px; }
+.ean-free:disabled { cursor: default; }
+.ean-sku-edit { display: grid; gap: 6px; }
+.ean-sku-edit .sku-field { height: 34px; }
+.ean-sku-actions { display: flex; gap: 8px; align-items: center; }
+.ean-sku-edit .sku-error { grid-column: auto; font-size: .72rem; }
+.ean-gtin { display: grid; gap: 2px; }
+.ean-gtin .sku-field { height: 34px; }
+.ean-gtin .sku-field i { color: var(--ok-ink); }
+.ean-gtin .sku-error { grid-column: auto; font-size: .72rem; }
+.ean-date { color: var(--gray-500); font-size: .84rem; font-variant-numeric: tabular-nums; text-align: right; }
+.ean-actions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.ean .link-danger { color: var(--danger); }
+.ean-note { margin: 4px 0 0; font-size: .78rem; line-height: 1.5; color: var(--gray-500); }
+@media (max-width: 960px) {
+  .ean-hero { grid-template-columns: 1fr; }
+  .ean-gen { border-right: 0; border-bottom: 1.5px dashed var(--gray-100); }
+}
+@media (max-width: 860px) {
+  .ean-out { grid-template-columns: 1fr; }
+  .ean-th { display: none; }
+  .ean-tr { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .ean-tr > :nth-child(3), .ean-tr > :nth-child(4), .ean-tr > :nth-child(6) { grid-column: 2 / -1; }
+  .ean-date { text-align: right; }
+  .ean-actions { justify-content: flex-start; }
+}

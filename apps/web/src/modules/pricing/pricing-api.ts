@@ -6,6 +6,8 @@ import type {
   FreightQuoteDto,
   PricingQuoteDto,
   PricingSimulationDto,
+  PricingStudyDto,
+  SavePricingStudyInput,
 } from '@nvs/shared';
 import { http } from '../../shared/http';
 
@@ -26,4 +28,11 @@ export const pricingApi = {
     price: number; cost: number | null; freight: number; taxPct: number; fee: number;
   }) => http<{ id: string; margin: number | null; marginPct: number | null }>('/api/v1/pricing/simulations', { body }),
   remove: (id: string) => http<void>(`/api/v1/pricing/simulations/${id}`, { method: 'DELETE' }),
+};
+
+export const studiesApi = {
+  list: () => http<PricingStudyDto[]>('/api/v1/pricing/studies'),
+  create: (body: SavePricingStudyInput) => http<PricingStudyDto>('/api/v1/pricing/studies', { body }),
+  update: (id: string, body: SavePricingStudyInput) => http<PricingStudyDto>(`/api/v1/pricing/studies/${id}`, { method: 'PUT', body }),
+  remove: (id: string) => http<void>(`/api/v1/pricing/studies/${id}`, { method: 'DELETE' }),
 };

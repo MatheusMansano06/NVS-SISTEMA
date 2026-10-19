@@ -11,6 +11,8 @@ export { MarketingService } from './application/marketing-service.js';
 export { ListingEditorService } from './application/listing-editor-service.js';
 export { PricingService } from './application/pricing-service.js';
 export { pricingRoutes } from './presentation/pricing-routes.js';
+export { PricingStudyService } from './application/pricing-study-service.js';
+export { pricingStudyRoutes } from './presentation/pricing-study-routes.js';
 export { PgCategoryCache } from './infrastructure/pg-category-cache.js';
 export { CachedMlLookups } from './infrastructure/cached-ml-lookups.js';
 export { FlexService } from './application/flex-service.js';

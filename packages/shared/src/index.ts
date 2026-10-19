@@ -16,3 +16,4 @@ export * from './marketing.js';
 export * from './viability.js';
 export * from './dre.js';
 export * from './team-cost.js';
+export * from './pricing-study.js';

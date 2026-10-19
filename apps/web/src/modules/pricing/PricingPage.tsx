@@ -20,6 +20,8 @@ import { listingsApi } from '../listings/listings-api';
 import { skusApi } from '../skus/skus-api';
 import { pricingApi } from './pricing-api';
 import { CategoryBrowser, feeChips } from './CategoryBrowser';
+import { parse, toInput } from './num';
+import { StudiesTab } from './StudiesTab';
 import '../skus/skus.css';
 import '../listings/listings.css';
 import '../sales/sales.css';
@@ -40,18 +42,12 @@ const FALLBACK: Option[] = [
   { type: 'gold_pro', label: 'Premium', feePct: 17, fixedFee: 0, fee: 0 },
 ];
 
-const toInput = (n: number | null | undefined) => (n == null ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-const parse = (s: string): number | null => {
-  const t = s.replace(/[R$\s%]/g, '').replace(/\./g, '').replace(',', '.');
-  const n = Number(t);
-  return t && Number.isFinite(n) ? n : null;
-};
 const readParam = () => new URLSearchParams(window.location.search).get('anuncio') ?? undefined;
 
 /** Precificador: Clássico × Premium lado a lado, preço para margem alvo e simulações salvas. */
 export function PricingPage() {
   const tour = useGuidedTour('precificador', TOURS.precificador, true);
-  const [tab, setTab] = useState<'calc' | 'saved'>('calc');
+  const [tab, setTab] = useState<'calc' | 'saved' | 'study'>(() => (new URLSearchParams(window.location.search).get('aba') === 'viabilidade' ? 'study' : 'calc'));
   const [savedCount, setSavedCount] = useState<number | null>(null);
   useEffect(() => {
     pricingApi.simulations().then((s) => setSavedCount(s.length)).catch(() => undefined);
@@ -69,11 +65,18 @@ export function PricingPage() {
             <button type="button" role="tab" aria-checked={tab === 'saved'} onClick={() => setTab('saved')}>
               Simulações salvas {savedCount !== null && <span>{savedCount}</span>}
             </button>
+            <button type="button" role="tab" aria-checked={tab === 'study'} onClick={() => setTab('study')}>Viabilidade</button>
           </div>
         </header>
-        <HowTo steps={STEPS} storageKey="nvs:howto:precificador" onTour={tour.start} />
+        {tab !== 'study' && <HowTo steps={STEPS} storageKey="nvs:howto:precificador" onTour={tour.start} />}
         {tour.element}
-        {tab === 'calc' ? <Calculator onSaved={() => setSavedCount((n) => (n ?? 0) + 1)} /> : <Saved onCount={setSavedCount} />}
+        {tab === 'calc' ? (
+          <Calculator onSaved={() => setSavedCount((n) => (n ?? 0) + 1)} />
+        ) : tab === 'saved' ? (
+          <Saved onCount={setSavedCount} />
+        ) : (
+          <StudiesTab />
+        )}
       </div>
     </AppShell>
   );

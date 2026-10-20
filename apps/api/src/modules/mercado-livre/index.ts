@@ -17,5 +17,8 @@ export { PgCategoryCache } from './infrastructure/pg-category-cache.js';
 export { CachedMlLookups } from './infrastructure/cached-ml-lookups.js';
 export { FlexService } from './application/flex-service.js';
 export { FreightRadarService } from './application/freight-radar-service.js';
+export { AdsRadarService } from './application/ads-radar-service.js';
+export { AdsRadarQueries } from './application/ads-radar-queries.js';
+export { adsRadarRoutes } from './presentation/ads-radar-routes.js';
 export { ViabilityService } from './application/viability-service.js';
 export { viabilityRoutes } from './presentation/viability-routes.js';

@@ -110,6 +110,48 @@ export interface MlApi {
   adAdvertisers?(token: string): Promise<{ advertiserId: string; siteId: string }[]>;
   /** Mercado Ads: custo total das campanhas num dia (YYYY-MM-DD). O ML guarda 90 dias para trás. */
   adCost?(token: string, advertiserId: string, siteId: string, day: string): Promise<number>;
+  /** Mercado Ads: todas as campanhas (configuração atual) com as métricas de um dia. */
+  adCampaigns?(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdCampaign[]>;
+  /** Mercado Ads: todos os anúncios patrocinados (campanha atual) com as métricas de um dia. */
+  adItems?(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdItem[]>;
+}
+
+/** Métricas do Mercado Ads (as que o Radar ADS guarda; as taxas são recalculadas a partir delas). */
+export interface MlAdMetrics {
+  cost?: number | null;
+  clicks?: number | null;
+  prints?: number | null;
+  direct_amount?: number | null;
+  indirect_amount?: number | null;
+  units_quantity?: number | null;
+  organic_units_quantity?: number | null;
+  organic_units_amount?: number | null;
+  lost_impression_share_by_budget?: number | null;
+}
+
+export interface MlAdCampaign {
+  id: number;
+  name: string;
+  status: string;
+  strategy?: string | null;
+  acos_target?: number | null;
+  roas_target?: number | null;
+  budget?: number | null;
+  daily_budget?: number | null;
+  automatic_budget?: boolean | null;
+  last_updated?: string | null;
+  metrics?: MlAdMetrics | null;
+}
+
+export interface MlAdItem {
+  item_id: string;
+  campaign_id?: number | null;
+  title?: string | null;
+  status?: string | null;
+  price?: number | null;
+  thumbnail?: string | null;
+  logistic_type?: string | null;
+  metrics?: MlAdMetrics | null;
 }
 
 export interface MlFlexSubscription {
@@ -226,6 +268,8 @@ export class MlApiError extends Error {
 
 const API = 'https://api.mercadolibre.com';
 const AUTH = 'https://auth.mercadolivre.com.br/authorization';
+/** Métricas do Mercado Ads pedidas nas buscas do Radar ADS. */
+const AD_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount,units_quantity,organic_units_quantity,organic_units_amount,lost_impression_share_by_budget';
 export const ORDERS_PAGE_SIZE = 50;
 export const LISTINGS_PAGE_SIZE = 100;
 
@@ -612,6 +656,28 @@ export class HttpMlApi implements MlApi, MlRawApi {
       return total;
     }
     return 0;
+  }
+
+  adCampaigns(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdCampaign[]> {
+    return this.adSearch<MlAdCampaign>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search`, day);
+  }
+
+  adItems(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdItem[]> {
+    return this.adSearch<MlAdItem>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/ads/search`, day);
+  }
+
+  /** Busca paginada (50 por página) do Mercado Ads com as métricas de um dia. */
+  private async adSearch<T>(token: string, path: string, day: string): Promise<T[]> {
+    const headers = { authorization: `Bearer ${token}`, accept: 'application/json', 'api-version': '2' };
+    const out: T[] = [];
+    for (let offset = 0; ; offset += 50) {
+      const page = await this.request<{ results?: T[]; paging?: { total?: number } }>(
+        `${path}?limit=50&offset=${offset}&date_from=${day}&date_to=${day}&metrics=${AD_METRICS}`,
+        { headers },
+      );
+      out.push(...(page.results ?? []));
+      if (!page.results?.length || offset + 50 >= (page.paging?.total ?? 0)) return out;
+    }
   }
 
   // ---- chamadas genéricas (pós-venda: reclamações, devoluções, revisões, mediação) — ver MlRawApi

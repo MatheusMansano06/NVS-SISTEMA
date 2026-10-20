@@ -71,7 +71,7 @@ export interface UserDto {
  * Recursos que o Painel Master libera por empresa (e que cada plano inclui); o que não estiver liberado aparece como
  * "em breve". Dashboard, Cadastro de SKUs, Integrações e Equipe são a base e ficam sempre ligados.
  */
-export const TENANT_FEATURES = ['financeiro', 'dre', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full', 'viabilidade'] as const;
+export const TENANT_FEATURES = ['financeiro', 'dre', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full', 'viabilidade', 'radar_ads'] as const;
 export type TenantFeature = (typeof TENANT_FEATURES)[number];
 export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: string; area: 'Análise' | 'Anúncios' | 'Operação' }> = {
   financeiro: { label: 'Análise Financeira', text: 'Margem de contribuição venda a venda, composição e exportação.', area: 'Análise' },
@@ -83,14 +83,15 @@ export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: s
   anuncios: { label: 'Meus anúncios', text: 'Lista de anúncios com margem, edição, estoque e preço.', area: 'Anúncios' },
   promocoes: { label: 'Central de Promoção', text: 'Inscrever anúncios nas campanhas do ML vendo a margem.', area: 'Anúncios' },
   marketing: { label: 'Central de Marketing', text: 'Raio-X das ferramentas do ML (atacado, cupom, ofertas, Ads…).', area: 'Anúncios' },
+  radar_ads: { label: 'Radar ADS', text: 'Regras e metas para as campanhas do Mercado Ads, com alertas.', area: 'Anúncios' },
   devolucoes: { label: 'Central de Devoluções', text: 'Conferência, contestação, B.I e estoque virtual das devoluções.', area: 'Operação' },
   full: { label: 'Supervisão Full', text: 'Separação das listas do Full com bipagem e impressão das etiquetas.', area: 'Operação' },
 };
 export const TENANT_FEATURE_LABELS: Record<TenantFeature, string> = Object.fromEntries(
   TENANT_FEATURES.map((f) => [f, TENANT_FEATURE_INFO[f].label]),
 ) as Record<TenantFeature, string>;
-/** Padrão de empresa nova e de plano novo: tudo, menos o que ainda está em teste (Full e Viabilidade). */
-export const DEFAULT_TENANT_FEATURES: TenantFeature[] = TENANT_FEATURES.filter((f) => f !== 'full' && f !== 'viabilidade');
+/** Padrão de empresa nova e de plano novo: tudo, menos o que ainda está em teste (Full, Viabilidade e Radar ADS). */
+export const DEFAULT_TENANT_FEATURES: TenantFeature[] = TENANT_FEATURES.filter((f) => f !== 'full' && f !== 'viabilidade' && f !== 'radar_ads');
 
 export interface SessionDto {
   user: UserDto;

@@ -18,3 +18,4 @@ export * from './dre.js';
 export * from './team-cost.js';
 export * from './pricing-study.js';
 export * from './ean.js';
+export * from './ads-radar.js';

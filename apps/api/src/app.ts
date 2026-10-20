@@ -48,6 +48,9 @@ import {
   CachedMlLookups,
   FlexService,
   FreightRadarService,
+  AdsRadarService,
+  AdsRadarQueries,
+  adsRadarRoutes,
   pricingRoutes,
   PricingStudyService,
   pricingStudyRoutes,
@@ -82,6 +85,8 @@ declare module 'fastify' {
     radar: FreightRadarService | null;
     returnsSync: ReturnsSync | null;
     marketing: MarketingService | null;
+    /** Radar ADS (null sem ML configurado ou sem as leituras do Mercado Ads no cliente). */
+    adsRadar: AdsRadarService | null;
     requirePermission: (
       p: Permission,
     ) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -217,6 +222,10 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   const rawMl = mlClient && 'rawGet' in mlClient ? (mlClient as unknown as MlRawApi) : null;
   const marketing = ml && rawMl ? new MarketingService(database, ml, rawMl, sharedCache, app.log, { paceMs: env.NODE_ENV === 'test' ? 0 : undefined }) : null;
   app.decorate('marketing', marketing);
+  const adsApi = mlClient?.adCampaigns && mlClient.adItems ? { adCampaigns: mlClient.adCampaigns.bind(mlClient), adItems: mlClient.adItems.bind(mlClient) } : null;
+  const adsRadar = ml && adsApi ? new AdsRadarService(database, ml, adsApi, app.log, { paceMs: env.NODE_ENV === 'test' ? 0 : undefined }) : null;
+  app.decorate('adsRadar', adsRadar);
+  await app.register(adsRadarRoutes(new AdsRadarQueries(database), adsRadar), { prefix: '/api/v1' });
   await app.register(
     listingRoutes(
       listingService,

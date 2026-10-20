@@ -29,6 +29,7 @@ const MarketingPage = page(() => import('./modules/listings/MarketingPage'), 'Ma
 const SalesPage = page(() => import('./modules/sales/SalesPage'), 'SalesPage');
 const PricingPage = page(() => import('./modules/pricing/PricingPage'), 'PricingPage');
 const FreightPage = page(() => import('./modules/freight/FreightPage'), 'FreightPage');
+const AdsRadarPage = page(() => import('./modules/ads-radar/AdsRadarPage'), 'AdsRadarPage');
 const FinancePage = page(() => import('./modules/finance/FinancePage'), 'FinancePage');
 const DrePage = page(() => import('./modules/dre/DrePage'), 'DrePage');
 const FullRouter = page(() => import('./modules/full/FullRouter'), 'FullRouter');
@@ -60,6 +61,7 @@ const GATED: { prefix: string; feature: TenantFeature; page: () => ReactNode }[]
   { prefix: '/vendas', feature: 'vendas', page: () => <SalesPage /> },
   { prefix: '/precificador', feature: 'precificador', page: () => <PricingPage /> },
   { prefix: '/radar-frete', feature: 'radar_frete', page: () => <FreightPage /> },
+  { prefix: '/radar-ads', feature: 'radar_ads', page: () => <AdsRadarPage /> },
   { prefix: '/devolucoes', feature: 'devolucoes', page: () => <CentralDevolucoes /> },
   { prefix: '/full', feature: 'full', page: () => <FullRouter mode="analise" /> },
   { prefix: '/anuncios/promocoes', feature: 'promocoes', page: () => <PromotionsPage /> },
@@ -69,7 +71,7 @@ const GATED: { prefix: string; feature: TenantFeature; page: () => ReactNode }[]
   { prefix: '/dre', feature: 'dre', page: () => <DrePage /> },
 ];
 /** Telas que já trazem o AppShell próprio (as demais são embrulhadas aqui). */
-const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro', '/dre']);
+const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/radar-ads', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro', '/dre']);
 
 function Routes() {
   const path = usePath();

@@ -9,7 +9,7 @@ import {
 } from '@nvs/shared';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { NotFoundError, ValidationError } from '../../../shared/kernel/errors.js';
-import { extractPdfText } from '../../wms/infrastructure/pdf-text.js';
+import { extractPdfText } from '../../wms/index.js';
 
 interface Row {
   id: string; title: string; link: string | null; supplier: string | null; notes: string | null;

@@ -20,5 +20,7 @@ export { FreightRadarService } from './application/freight-radar-service.js';
 export { AdsRadarService } from './application/ads-radar-service.js';
 export { AdsRadarQueries } from './application/ads-radar-queries.js';
 export { adsRadarRoutes } from './presentation/ads-radar-routes.js';
+export { ProductRadarQueries } from './application/product-radar-queries.js';
+export { productRadarRoutes } from './presentation/product-radar-routes.js';
 export { ViabilityService } from './application/viability-service.js';
 export { viabilityRoutes } from './presentation/viability-routes.js';

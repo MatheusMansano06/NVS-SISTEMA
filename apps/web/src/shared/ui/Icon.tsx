@@ -21,6 +21,7 @@ const PATHS = {
   logout: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10',
   close: 'M6 6l12 12M18 6 6 18',
   chevron: 'M6 9l6 6 6-6',
+  trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4',
 } as const;
 
 export type IconName = keyof typeof PATHS;

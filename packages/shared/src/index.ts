@@ -19,3 +19,4 @@ export * from './team-cost.js';
 export * from './pricing-study.js';
 export * from './ean.js';
 export * from './ads-radar.js';
+export * from './product-radar.js';

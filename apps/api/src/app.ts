@@ -51,6 +51,8 @@ import {
   AdsRadarService,
   AdsRadarQueries,
   adsRadarRoutes,
+  ProductRadarQueries,
+  productRadarRoutes,
   pricingRoutes,
   PricingStudyService,
   pricingStudyRoutes,
@@ -226,6 +228,7 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   const adsRadar = ml && adsApi ? new AdsRadarService(database, ml, adsApi, app.log, { paceMs: env.NODE_ENV === 'test' ? 0 : undefined }) : null;
   app.decorate('adsRadar', adsRadar);
   await app.register(adsRadarRoutes(new AdsRadarQueries(database), adsRadar), { prefix: '/api/v1' });
+  await app.register(productRadarRoutes(new ProductRadarQueries(database)), { prefix: '/api/v1' });
   await app.register(
     listingRoutes(
       listingService,

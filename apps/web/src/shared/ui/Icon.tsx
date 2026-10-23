@@ -21,6 +21,9 @@ const PATHS = {
   logout: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10',
   close: 'M6 6l12 12M18 6 6 18',
   chevron: 'M6 9l6 6 6-6',
+  folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  upload: 'M12 15V4M7 9l5-5 5 5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3',
+  plus: 'M12 5v14M5 12h14',
 } as const;
 
 export type IconName = keyof typeof PATHS;

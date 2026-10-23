@@ -10,6 +10,7 @@ import {
 } from '@nvs/shared';
 import { money, pct } from '../../shared/format';
 import { ApiError } from '../../shared/http';
+import { Icon } from '../../shared/ui/Icon';
 import { Modal } from '../../shared/ui/Modal';
 import { useAuth } from '../auth/AuthContext';
 import { skusApi } from '../skus/skus-api';
@@ -125,6 +126,9 @@ export function StudiesTab() {
   const [suppliers, setSuppliers] = useState<PricingSupplierDto[]>([]);
   const [folder, setFolder] = useState<Folder>('all');
   const [importing, setImporting] = useState(false);
+  /** Campo de nome aberto: 'new' = criando pasta; id = renomeando. */
+  const [naming, setNaming] = useState<{ id: string; value: string } | null>(null);
+  const [pctDraft, setPctDraft] = useState('');
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -268,13 +272,19 @@ export function StudiesTab() {
     }
   }
 
-  async function newSupplier() {
-    const name = window.prompt('Nome do fornecedor (vira uma pasta):')?.trim();
-    if (!name) return;
-    const pct = parse(window.prompt(`Quanto somar ao preço da cotação de ${name}? (IPI/ST/frete de compra, em %)`, '0') ?? '') ?? 0;
+  async function saveName() {
+    const n = naming;
+    const name = n?.value.trim();
+    setNaming(null);
+    if (!n || !name) return;
+    if (n.id !== 'new') {
+      const sup = suppliers.find((x) => x.id === n.id);
+      if (sup && name !== sup.name) void editSupplier(sup, { name });
+      return;
+    }
     try {
-      const sup = await suppliersApi.create({ name, costMarkupPct: pct });
-      setSuppliers((prev) => [...prev, sup].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+      const sup = await suppliersApi.create({ name, costMarkupPct: 0 });
+      setSuppliers((prev) => [...prev, sup].sort((x, y) => x.name.localeCompare(y.name, 'pt-BR')));
       setFolder(sup.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível criar o fornecedor.');
@@ -290,20 +300,21 @@ export function StudiesTab() {
       setItems(fresh);
       const open = selected && fresh.find((s) => s.id === selected);
       if (open) setForm(fromDto(open));
+      return saved;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível salvar o fornecedor.');
+      return null;
     }
   }
 
-  function renameSupplier(sup: PricingSupplierDto) {
-    const name = window.prompt('Novo nome do fornecedor:', sup.name)?.trim();
-    if (name && name !== sup.name) void editSupplier(sup, { name });
-  }
+  // o campo de % acompanha a pasta aberta
+  useEffect(() => setPctDraft(current ? pctText(current.costMarkupPct) : ''), [current?.id, current?.costMarkupPct]);
 
-  function changeMarkup(sup: PricingSupplierDto) {
-    const v = window.prompt(`% somado ao preço da cotação de ${sup.name} (IPI/ST/frete de compra):`, pctText(sup.costMarkupPct));
-    const pct = v === null ? null : parse(v);
-    if (pct !== null && pct !== sup.costMarkupPct) void editSupplier(sup, { costMarkupPct: pct });
+  function savePct() {
+    const pct = parse(pctDraft);
+    if (!current) return;
+    if (pct === null || pct < 0 || pct > 100) setPctDraft(pctText(current.costMarkupPct));
+    else if (pct !== current.costMarkupPct) void editSupplier(current, { costMarkupPct: pct });
   }
 
   async function removeSupplier(sup: PricingSupplierDto) {
@@ -317,6 +328,12 @@ export function StudiesTab() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível excluir a pasta.');
     }
+  }
+
+  /** A cotação trouxe o IPI: usa o % dela na pasta (e o modal mostra o custo já com ele). */
+  async function useQuotePct(pct: number) {
+    if (!current) return null;
+    return editSupplier(current, { costMarkupPct: pct });
   }
 
   function imported(created: PricingStudyDto[]) {
@@ -360,35 +377,79 @@ export function StudiesTab() {
         {canManage && (
           <button type="button" className="btn btn-primary" onClick={startNew}>+ Nova pesquisa</button>
         )}
-        <nav className="pfolders" aria-label="Pastas por fornecedor">
-          <button type="button" aria-pressed={folder === 'all'} onClick={() => setFolder('all')}>Todas <span>{items?.length ?? 0}</span></button>
-          {suppliers.map((x) => (
-            <button key={x.id} type="button" aria-pressed={folder === x.id} onClick={() => setFolder(x.id)}>
-              {x.name} <span>{count((s) => same(s.supplier, x.name))}</span>
-            </button>
-          ))}
-          {noSupplier > 0 && (
-            <button type="button" aria-pressed={folder === 'none'} onClick={() => setFolder('none')}>Sem fornecedor <span>{noSupplier}</span></button>
+        <section className="pfolders" aria-label="Pastas por fornecedor">
+          <header>
+            <small>Pastas</small>
+            {canManage && (
+              <button type="button" className="pfolders-add" onClick={() => setNaming({ id: 'new', value: '' })}>
+                <Icon name="plus" size={14} /> Fornecedor
+              </button>
+            )}
+          </header>
+          {naming?.id === 'new' && (
+            <form className="pfolders-name" onSubmit={(e) => { e.preventDefault(); void saveName(); }}>
+              <input autoFocus placeholder="Nome do fornecedor" value={naming.value} maxLength={200}
+                onChange={(e) => setNaming({ id: 'new', value: e.target.value })}
+                onKeyDown={(e) => e.key === 'Escape' && setNaming(null)}
+                onBlur={() => !naming.value.trim() && setNaming(null)} />
+              <button type="submit" className="act act-strong">Criar</button>
+            </form>
           )}
-          {canManage && <button type="button" className="pfolders-add" onClick={() => void newSupplier()}>+ Fornecedor</button>}
-        </nav>
+          <ul>
+            {[
+              { id: 'all' as Folder, name: 'Todas as pesquisas', n: items?.length ?? 0, pct: null as number | null },
+              ...suppliers.map((x) => ({ id: x.id as Folder, name: x.name, n: count((s) => same(s.supplier, x.name)), pct: x.costMarkupPct })),
+              ...(noSupplier > 0 ? [{ id: 'none' as Folder, name: 'Sem fornecedor', n: noSupplier, pct: null }] : []),
+            ].map((f) => (
+              <li key={f.id}>
+                <button type="button" aria-current={folder === f.id || undefined} onClick={() => setFolder(f.id)}>
+                  <Icon name="folder" size={16} />
+                  <span>{f.name}</span>
+                  {f.pct ? <em>+{pctText(f.pct)}%</em> : null}
+                  <b>{f.n}</b>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
         {current && (
-          <div className="pfolder">
-            <span>
-              <strong>{current.name}</strong>
-              <small>Custo = cotação + {pctText(current.costMarkupPct)}%</small>
-            </span>
+          <section className="pfolder" aria-label={`Pasta ${current.name}`}>
+            {naming?.id === current.id ? (
+              <form className="pfolders-name" onSubmit={(e) => { e.preventDefault(); void saveName(); }}>
+                <input autoFocus value={naming.value} maxLength={200}
+                  onChange={(e) => setNaming({ id: current.id, value: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Escape' && setNaming(null)} />
+                <button type="submit" className="act act-strong">Salvar</button>
+              </form>
+            ) : (
+              <h3>{current.name}</h3>
+            )}
+            <label className="pfolder-pct">
+              <span>
+                Acréscimo no custo
+                <small>IPI, ST ou frete de compra que a cotação não soma</small>
+              </span>
+              <span className="sku-field">
+                <input inputMode="decimal" value={pctDraft} disabled={!canManage}
+                  onChange={(e) => setPctDraft(e.target.value)}
+                  onBlur={savePct}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+                <i>%</i>
+              </span>
+            </label>
             {canManage && (
               <>
-                <button type="button" className="act act-strong" onClick={() => setImporting(true)}>Importar cotação</button>
-                <span className="pfolder-links">
-                  <button type="button" className="link" onClick={() => changeMarkup(current)}>alterar %</button>
-                  <button type="button" className="link" onClick={() => renameSupplier(current)}>renomear</button>
-                  <button type="button" className="link link-danger" onClick={() => void removeSupplier(current)}>excluir pasta</button>
-                </span>
+                <button type="button" className="pfolder-import" onClick={() => setImporting(true)}>
+                  <Icon name="upload" size={18} />
+                  <span>Importar cotação<small>Excel (.xls, .xlsx), CSV ou PDF</small></span>
+                </button>
+                <div className="pfolder-links">
+                  <button type="button" onClick={() => setNaming({ id: current.id, value: current.name })}>Renomear</button>
+                  <button type="button" className="danger" onClick={() => void removeSupplier(current)}>Excluir pasta</button>
+                </div>
               </>
             )}
-          </div>
+          </section>
         )}
         <label className="search">
           <span className="sr-only">Buscar pesquisa</span>
@@ -398,7 +459,7 @@ export function StudiesTab() {
         {items && items.length > 0 && !shown.length && (
           <p className="pstudy-empty">{current ? `Nada em ${current.name} ainda. Importe a cotação ou crie uma ficha com esse fornecedor.` : 'Nenhuma pesquisa encontrada.'}</p>
         )}
-        <ul>
+        <ul className="pstudy-items">
           {shown.map((s) => (
             <li key={s.id}>
               <button type="button" aria-current={s.id === selected || undefined} onClick={() => open(s)}>
@@ -590,7 +651,7 @@ export function StudiesTab() {
       </div>
 
       <Modal open={importing} onClose={() => setImporting(false)} label="Importar cotação do fornecedor" wide>
-        {current && <QuoteImport supplier={current} taxPct={parse(companyTax) ?? 0} onDone={imported} />}
+        {current && <QuoteImport supplier={current} taxPct={parse(companyTax) ?? 0} onDone={imported} onUsePct={useQuotePct} />}
       </Modal>
     </div>
   );

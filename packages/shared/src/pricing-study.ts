@@ -196,6 +196,11 @@ export const savePricingStudySchema = z.object({
   feePremium: z.number().min(0).max(50).nullable().default(null),
   /** Tipo cuja tarifa preencheu a comissão; null = digitada à mão. */
   listingType: z.enum(['gold_special', 'gold_pro']).nullable().default(null),
+  /** Preço na cotação do fornecedor; quando preenchido, o custo = ele + % do fornecedor (calculado no servidor). */
+  supplierCost: optMoney.default(null),
+  /** Cotação de onde a ficha veio e o nome do item nela. */
+  quoteRef: z.string().trim().max(200).nullable().default(null),
+  quoteItem: z.string().trim().max(200).nullable().default(null),
 });
 export type SavePricingStudyInput = z.infer<typeof savePricingStudySchema>;
 

@@ -108,3 +108,37 @@
 .pstudy-cat > span { flex: 1 1 200px; min-width: 0; }
 .pstudy-cat strong { font-size: .86rem; overflow-wrap: anywhere; }
 .pstudy-cat .seg button span { margin-left: 4px; }
+
+/* Viabilidade › pastas por fornecedor e importação da cotação */
+.pfolders { display: flex; flex-wrap: wrap; gap: 6px; }
+.pfolders button { border: 0; cursor: pointer; font: inherit; font-size: .78rem; font-weight: 600; padding: 6px 10px; border-radius: 999px; background: var(--surface); color: var(--gray-700, var(--navy)); box-shadow: 0 0 0 1px var(--gray-100); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pfolders button span { margin-left: 4px; color: var(--gray-500); font-weight: 700; }
+.pfolders button[aria-pressed='true'] { background: var(--navy); color: #fff; box-shadow: none; }
+.pfolders button[aria-pressed='true'] span { color: rgba(255, 255, 255, .7); }
+.pfolders .pfolders-add { background: transparent; color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.pfolder { display: grid; gap: 8px; padding: 12px; border-radius: 16px; background: var(--blue-soft); }
+.pfolder > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.pfolder strong { color: var(--navy); font-size: .92rem; overflow-wrap: anywhere; }
+.pfolder small { font-size: .74rem; color: var(--gray-500); }
+.pfolder .act { justify-self: start; }
+.pfolder-links { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .76rem; }
+.pfolder-links .link { display: inline; width: auto; padding: 0; text-align: left; }
+.pquote-origin { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 14px; background: var(--gray-50); }
+.pquote-origin > span { display: grid; gap: 2px; min-width: 0; }
+.pquote-origin small { font-size: .72rem; color: var(--gray-500); overflow-wrap: anywhere; }
+.pquote-origin strong { color: var(--navy); font-size: .86rem; }
+.pquote { display: grid; gap: 14px; }
+.pquote h2 { margin: 0; color: var(--navy); }
+.pquote .lead { margin: 0; }
+.pquote-drop { position: relative; display: grid; gap: 4px; justify-items: center; padding: 22px 16px; border: 1.5px dashed var(--gray-200, var(--gray-100)); border-radius: 16px; cursor: pointer; text-align: center; color: var(--navy); font-weight: 600; }
+.pquote-drop:hover { border-color: var(--blue); background: var(--blue-soft); }
+.pquote-drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pquote-drop small { font-weight: 400; color: var(--gray-500); font-size: .76rem; }
+.pquote-table { max-height: 46vh; overflow: auto; border-radius: 14px; box-shadow: 0 0 0 1px var(--gray-100); }
+.pquote-table table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.pquote-table th { position: sticky; top: 0; background: var(--surface); text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-500); padding: 8px; }
+.pquote-table td { padding: 4px 8px; border-top: 1px solid var(--gray-100); color: var(--navy); white-space: nowrap; }
+.pquote-table td input:not([type='checkbox']) { width: 100%; min-width: 90px; font: inherit; border: 0; border-radius: 8px; padding: 6px 8px; background: var(--gray-50); color: var(--navy); }
+.pquote-table td:nth-child(2) { width: 100%; }
+.pquote-table td:nth-child(2) input { min-width: 180px; }
+.pquote-table tr[data-off] td { opacity: .45; }

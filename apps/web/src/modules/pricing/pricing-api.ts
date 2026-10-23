@@ -4,10 +4,13 @@ import type {
   CategoryNodeDto,
   CategoryOptionDto,
   FreightQuoteDto,
+  ImportQuoteInput,
   PricingQuoteDto,
   PricingSimulationDto,
   PricingStudyDto,
+  PricingSupplierDto,
   SavePricingStudyInput,
+  SavePricingSupplierInput,
 } from '@nvs/shared';
 import { http } from '../../shared/http';
 
@@ -35,4 +38,13 @@ export const studiesApi = {
   create: (body: SavePricingStudyInput) => http<PricingStudyDto>('/api/v1/pricing/studies', { body }),
   update: (id: string, body: SavePricingStudyInput) => http<PricingStudyDto>(`/api/v1/pricing/studies/${id}`, { method: 'PUT', body }),
   remove: (id: string) => http<void>(`/api/v1/pricing/studies/${id}`, { method: 'DELETE' }),
+  importQuote: (body: ImportQuoteInput) => http<PricingStudyDto[]>('/api/v1/pricing/studies/import', { body }),
+  quotePdf: (pdfBase64: string) => http<{ rows: string[][] }>('/api/v1/pricing/quote-pdf', { body: { pdfBase64 } }),
+};
+
+export const suppliersApi = {
+  list: () => http<PricingSupplierDto[]>('/api/v1/pricing/suppliers'),
+  create: (body: SavePricingSupplierInput) => http<PricingSupplierDto>('/api/v1/pricing/suppliers', { body }),
+  update: (id: string, body: SavePricingSupplierInput) => http<PricingSupplierDto>(`/api/v1/pricing/suppliers/${id}`, { method: 'PUT', body }),
+  remove: (id: string) => http<void>(`/api/v1/pricing/suppliers/${id}`, { method: 'DELETE' }),
 };

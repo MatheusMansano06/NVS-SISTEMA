@@ -17,5 +17,6 @@ export * from './viability.js';
 export * from './dre.js';
 export * from './team-cost.js';
 export * from './pricing-study.js';
+export * from './pricing-supplier.js';
 export * from './ean.js';
 export * from './ads-radar.js';

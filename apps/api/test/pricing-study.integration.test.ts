@@ -86,6 +86,33 @@ describe.skipIf(!TEST_DB)('Precificador › Viabilidade (pesquisas)', () => {
     expect((await app.inject({ method: 'DELETE', url: `/api/v1/pricing/studies/${s.id}`, cookies })).statusCode).toBe(204);
   });
 
+  it('fornecedor vira pasta: importa cotação com o % somado e refaz o custo quando o % muda', async () => {
+    const cookies = await login();
+    const sup = (await app.inject({ method: 'POST', url: '/api/v1/pricing/suppliers', cookies, payload: { name: 'Wester', costMarkupPct: 11 } })).json();
+    expect((await app.inject({ method: 'POST', url: '/api/v1/pricing/suppliers', cookies, payload: { name: 'wester', costMarkupPct: 0 } })).statusCode).toBe(400);
+
+    const imp = await app.inject({
+      method: 'POST', url: '/api/v1/pricing/studies/import', cookies,
+      payload: { supplierId: sup.id, quoteRef: 'Orçamento 10/2026', taxPct: 9, packaging: 0.5, items: [{ title: 'Rabeta Fan', supplierCost: 40 }] },
+    });
+    expect(imp.statusCode).toBe(200);
+    const [s] = imp.json();
+    expect(s).toMatchObject({ supplier: 'Wester', supplierCost: 40, cost: 44.4, quoteRef: 'Orçamento 10/2026', quoteItem: 'Rabeta Fan' });
+
+    // ficha com outro nome de fornecedor cria a pasta sozinha
+    await app.inject({ method: 'POST', url: '/api/v1/pricing/studies', cookies, payload: { ...study, supplier: 'Nova Loja' } });
+    const names = (await app.inject({ method: 'GET', url: '/api/v1/pricing/suppliers', cookies })).json().map((x: { name: string }) => x.name);
+    expect(names).toEqual(['Nova Loja', 'Wester']);
+
+    await app.inject({ method: 'PUT', url: `/api/v1/pricing/suppliers/${sup.id}`, cookies, payload: { name: 'Wester Peças', costMarkupPct: 20 } });
+    const after = (await app.inject({ method: 'GET', url: '/api/v1/pricing/studies', cookies })).json().find((x: { id: string }) => x.id === s.id);
+    expect(after).toMatchObject({ supplier: 'Wester Peças', cost: 48 });
+
+    expect((await app.inject({ method: 'DELETE', url: `/api/v1/pricing/suppliers/${sup.id}`, cookies })).statusCode).toBe(204);
+    const orphan = (await app.inject({ method: 'GET', url: '/api/v1/pricing/studies', cookies })).json().find((x: { id: string }) => x.id === s.id);
+    expect(orphan.supplier).toBeNull();
+  });
+
   it('recusa pesquisa sem nome', async () => {
     const cookies = await login();
     const res = await app.inject({ method: 'POST', url: '/api/v1/pricing/studies', cookies, payload: { ...study, title: ' ' } });

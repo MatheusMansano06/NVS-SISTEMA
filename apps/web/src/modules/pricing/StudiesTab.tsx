@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   computePricingStudy,
+  costWithMarkup,
   marginTone,
   priceForStudyMargin,
   type PricingStudyDto,
+  type PricingSupplierDto,
   type SavePricingStudyInput,
 } from '@nvs/shared';
 import { money, pct } from '../../shared/format';
 import { ApiError } from '../../shared/http';
+import { Modal } from '../../shared/ui/Modal';
 import { useAuth } from '../auth/AuthContext';
 import { skusApi } from '../skus/skus-api';
 import { parse, toInput } from './num';
 import { CategoryBrowser } from './CategoryBrowser';
-import { pricingApi, studiesApi } from './pricing-api';
+import { pricingApi, studiesApi, suppliersApi } from './pricing-api';
+import { QuoteImport } from './QuoteImport';
 
 interface Form {
   title: string;
@@ -31,15 +35,20 @@ interface Form {
   target: string;
   category: Category | null;
   listingType: 'gold_special' | 'gold_pro' | null;
+  /** Preço na cotação do fornecedor ('' = custo digitado à mão). */
+  supplierCost: string;
+  quoteRef: string | null;
+  quoteItem: string | null;
 }
 
 interface Category { id: string | null; name: string; feeClassic: number | null; feePremium: number | null }
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
-const blank = (taxPct: string): Form => ({
-  title: '', link: '', supplier: '', notes: '', feePct: '', taxPct, packaging: '0,50',
+const blank = (taxPct: string, supplier = ''): Form => ({
+  title: '', link: '', supplier, notes: '', feePct: '', taxPct, packaging: '0,50',
   cost: '', price: '', height: '', width: '', length: '', weightKg: '', target: '15', category: null, listingType: null,
+  supplierCost: '', quoteRef: null, quoteItem: null,
 });
 
 const fromDto = (s: PricingStudyDto): Form => ({
@@ -59,6 +68,9 @@ const fromDto = (s: PricingStudyDto): Form => ({
   target: s.targetPct === null ? '' : toInput(s.targetPct).replace(/,00$/, ''),
   category: s.categoryName ? { id: s.categoryId, name: s.categoryName, feeClassic: s.feeClassic, feePremium: s.feePremium } : null,
   listingType: s.listingType,
+  supplierCost: toInput(s.supplierCost),
+  quoteRef: s.quoteRef,
+  quoteItem: s.quoteItem,
 });
 
 const text = (s: string) => s.trim() || null;
@@ -82,7 +94,16 @@ const toPayload = (f: Form): SavePricingStudyInput => ({
   feeClassic: f.category?.feeClassic ?? null,
   feePremium: f.category?.feePremium ?? null,
   listingType: f.category ? f.listingType : null,
+  supplierCost: parse(f.supplierCost),
+  quoteRef: f.quoteRef,
+  quoteItem: f.quoteItem,
 });
+
+const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
+const pctText = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+/** Pasta escolhida na lista: todas, as sem fornecedor ou um fornecedor (id). */
+type Folder = 'all' | 'none' | string;
 
 const typeFee = (c: Category, t: 'gold_special' | 'gold_pro') => (t === 'gold_pro' ? c.feePremium : c.feeClassic);
 const feeText = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -101,10 +122,14 @@ export function StudiesTab() {
   const [save, setSave] = useState<SaveState>('idle');
   const [error, setError] = useState('');
   const [browsing, setBrowsing] = useState(false);
+  const [suppliers, setSuppliers] = useState<PricingSupplierDto[]>([]);
+  const [folder, setFolder] = useState<Folder>('all');
+  const [importing, setImporting] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     studiesApi.list().then(setItems).catch(() => setError('Não foi possível carregar suas pesquisas.'));
+    loadSuppliers();
     skusApi
       .taxRate()
       .then((t) => {
@@ -114,6 +139,14 @@ export function StudiesTab() {
       })
       .catch(() => undefined);
   }, []);
+
+  function loadSuppliers() {
+    suppliersApi.list().then(setSuppliers).catch(() => undefined);
+  }
+
+  const current = suppliers.find((x) => x.id === folder) ?? null;
+  const formSupplier = suppliers.find((x) => same(x.name, form.supplier)) ?? null;
+  const markup = formSupplier?.costMarkupPct ?? 0;
 
   const input = toPayload(form);
   const result = computePricingStudy(input);
@@ -144,6 +177,8 @@ export function StudiesTab() {
     try {
       const saved = await studiesApi.update(id, body);
       setItems((prev) => [saved, ...(prev ?? []).filter((s) => s.id !== id)]);
+      if (saved.supplier && !suppliers.some((x) => same(x.name, saved.supplier))) loadSuppliers();
+      setForm((f) => (f.supplierCost && saved.cost !== null ? { ...f, cost: toInput(saved.cost) } : f));
       setSave('saved');
       setError('');
     } catch (err) {
@@ -163,6 +198,7 @@ export function StudiesTab() {
       setItems((prev) => [saved, ...(prev ?? [])]);
       setSelected(saved.id);
       setForm(fromDto(saved));
+      if (saved.supplier && !suppliers.some((x) => same(x.name, saved.supplier))) loadSuppliers();
       setSave('saved');
       setError('');
     } catch (err) {
@@ -184,7 +220,7 @@ export function StudiesTab() {
     window.clearTimeout(timer.current);
     if (selected && save === 'dirty') void persist(selected);
     setSelected(null);
-    setForm(blank(companyTax));
+    setForm(blank(companyTax, current?.name ?? ''));
     setSave('idle');
     setError('');
   }
@@ -232,10 +268,77 @@ export function StudiesTab() {
     }
   }
 
-  const term = q.trim().toLowerCase();
-  const shown = (items ?? []).filter((s) => !term || [s.title, s.supplier ?? ''].some((v) => v.toLowerCase().includes(term)));
+  async function newSupplier() {
+    const name = window.prompt('Nome do fornecedor (vira uma pasta):')?.trim();
+    if (!name) return;
+    const pct = parse(window.prompt(`Quanto somar ao preço da cotação de ${name}? (IPI/ST/frete de compra, em %)`, '0') ?? '') ?? 0;
+    try {
+      const sup = await suppliersApi.create({ name, costMarkupPct: pct });
+      setSuppliers((prev) => [...prev, sup].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+      setFolder(sup.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível criar o fornecedor.');
+    }
+  }
 
-  const field = (k: Exclude<keyof Form, 'category' | 'listingType'>, label: string, opts: { prefix?: string; suffix?: string; placeholder?: string; decimal?: boolean } = {}) => (
+  async function editSupplier(sup: PricingSupplierDto, patch: Partial<PricingSupplierDto>) {
+    try {
+      const saved = await suppliersApi.update(sup.id, { name: patch.name ?? sup.name, costMarkupPct: patch.costMarkupPct ?? sup.costMarkupPct });
+      setSuppliers((prev) => prev.map((x) => (x.id === sup.id ? saved : x)));
+      // o servidor renomeia as fichas e refaz custo/margem das que vieram de cotação
+      const fresh = await studiesApi.list();
+      setItems(fresh);
+      const open = selected && fresh.find((s) => s.id === selected);
+      if (open) setForm(fromDto(open));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível salvar o fornecedor.');
+    }
+  }
+
+  function renameSupplier(sup: PricingSupplierDto) {
+    const name = window.prompt('Novo nome do fornecedor:', sup.name)?.trim();
+    if (name && name !== sup.name) void editSupplier(sup, { name });
+  }
+
+  function changeMarkup(sup: PricingSupplierDto) {
+    const v = window.prompt(`% somado ao preço da cotação de ${sup.name} (IPI/ST/frete de compra):`, pctText(sup.costMarkupPct));
+    const pct = v === null ? null : parse(v);
+    if (pct !== null && pct !== sup.costMarkupPct) void editSupplier(sup, { costMarkupPct: pct });
+  }
+
+  async function removeSupplier(sup: PricingSupplierDto) {
+    if (!window.confirm(`Excluir a pasta “${sup.name}”? As fichas não são apagadas: vão para “Sem fornecedor”.`)) return;
+    try {
+      await suppliersApi.remove(sup.id);
+      setSuppliers((prev) => prev.filter((x) => x.id !== sup.id));
+      setItems((prev) => prev?.map((s) => (same(s.supplier, sup.name) ? { ...s, supplier: null } : s)) ?? null);
+      if (same(form.supplier, sup.name)) setForm((f) => ({ ...f, supplier: '' }));
+      setFolder('all');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível excluir a pasta.');
+    }
+  }
+
+  function imported(created: PricingStudyDto[]) {
+    setImporting(false);
+    setItems((prev) => [...created, ...(prev ?? [])]);
+    if (created[0]) open(created[0]);
+  }
+
+  /** Preço da cotação mudou: o custo acompanha com o % do fornecedor. */
+  function editSupplierCost(v: string) {
+    const c = parse(v);
+    edit({ supplierCost: v, cost: c === null ? '' : toInput(costWithMarkup(c, markup)) });
+  }
+
+  const term = q.trim().toLowerCase();
+  const inFolder = (s: PricingStudyDto) =>
+    folder === 'all' ? true : folder === 'none' ? !s.supplier?.trim() : same(s.supplier, current?.name);
+  const shown = (items ?? []).filter((s) => inFolder(s) && (!term || [s.title, s.supplier ?? '', s.quoteRef ?? ''].some((v) => v.toLowerCase().includes(term))));
+  const count = (f: (s: PricingStudyDto) => boolean) => (items ?? []).filter(f).length;
+  const noSupplier = count((s) => !s.supplier?.trim());
+
+  const field = (k: Exclude<keyof Form, 'category' | 'listingType' | 'quoteRef' | 'quoteItem'>, label: string, opts: { prefix?: string; suffix?: string; placeholder?: string; decimal?: boolean } = {}) => (
     <label className="sku-input">
       <small>{label}</small>
       <span className="sku-field">
@@ -257,17 +360,50 @@ export function StudiesTab() {
         {canManage && (
           <button type="button" className="btn btn-primary" onClick={startNew}>+ Nova pesquisa</button>
         )}
+        <nav className="pfolders" aria-label="Pastas por fornecedor">
+          <button type="button" aria-pressed={folder === 'all'} onClick={() => setFolder('all')}>Todas <span>{items?.length ?? 0}</span></button>
+          {suppliers.map((x) => (
+            <button key={x.id} type="button" aria-pressed={folder === x.id} onClick={() => setFolder(x.id)}>
+              {x.name} <span>{count((s) => same(s.supplier, x.name))}</span>
+            </button>
+          ))}
+          {noSupplier > 0 && (
+            <button type="button" aria-pressed={folder === 'none'} onClick={() => setFolder('none')}>Sem fornecedor <span>{noSupplier}</span></button>
+          )}
+          {canManage && <button type="button" className="pfolders-add" onClick={() => void newSupplier()}>+ Fornecedor</button>}
+        </nav>
+        {current && (
+          <div className="pfolder">
+            <span>
+              <strong>{current.name}</strong>
+              <small>Custo = cotação + {pctText(current.costMarkupPct)}%</small>
+            </span>
+            {canManage && (
+              <>
+                <button type="button" className="act act-strong" onClick={() => setImporting(true)}>Importar cotação</button>
+                <span className="pfolder-links">
+                  <button type="button" className="link" onClick={() => changeMarkup(current)}>alterar %</button>
+                  <button type="button" className="link" onClick={() => renameSupplier(current)}>renomear</button>
+                  <button type="button" className="link link-danger" onClick={() => void removeSupplier(current)}>excluir pasta</button>
+                </span>
+              </>
+            )}
+          </div>
+        )}
         <label className="search">
           <span className="sr-only">Buscar pesquisa</span>
           <input placeholder="Buscar produto ou fornecedor" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
         {items && !items.length && <p className="pstudy-empty">Nenhuma pesquisa ainda. Preencha a ficha ao lado e salve para montar sua lista.</p>}
+        {items && items.length > 0 && !shown.length && (
+          <p className="pstudy-empty">{current ? `Nada em ${current.name} ainda. Importe a cotação ou crie uma ficha com esse fornecedor.` : 'Nenhuma pesquisa encontrada.'}</p>
+        )}
         <ul>
           {shown.map((s) => (
             <li key={s.id}>
               <button type="button" aria-current={s.id === selected || undefined} onClick={() => open(s)}>
                 <strong>{s.title}</strong>
-                <small>{[s.supplier, s.price === null ? null : money(s.price)].filter(Boolean).join(' · ') || '—'}</small>
+                <small>{[folder === 'all' ? s.supplier : null, s.cost === null ? null : `custo ${money(s.cost)}`, s.price === null ? null : money(s.price)].filter(Boolean).join(' · ') || '—'}</small>
                 <b data-tone={marginTone(s.marginPct)}>{s.marginPct === null ? '—' : pct(s.marginPct, 1)}</b>
               </button>
             </li>
@@ -309,7 +445,13 @@ export function StudiesTab() {
               <h3>1. Produto</h3>
               <div className="pstudy-row">
                 {field('title', 'Nome do produto', { placeholder: 'Ex.: Mouse gamer RGB' })}
-                {field('supplier', 'Fornecedor', { placeholder: 'Ex.: Distribuidora X' })}
+                <label className="sku-input">
+                  <small>Fornecedor</small>
+                  <span className="sku-field">
+                    <input list="pstudy-suppliers" value={form.supplier} placeholder="Ex.: Distribuidora X" onChange={(e) => edit({ supplier: e.target.value })} />
+                  </span>
+                  <datalist id="pstudy-suppliers">{suppliers.map((x) => <option key={x.id} value={x.name} />)}</datalist>
+                </label>
               </div>
               <label className="sku-input">
                 <small>
@@ -323,7 +465,17 @@ export function StudiesTab() {
             <section className="scard">
               <h3>2. Números</h3>
               <div className="pstudy-row pstudy-row-3">
-                {field('cost', 'Custo do produto', { prefix: 'R$', placeholder: '0,00', decimal: true })}
+                {form.supplierCost ? (
+                  <label className="sku-input">
+                    <small>Preço na cotação</small>
+                    <span className="sku-field">
+                      <i>R$</i>
+                      <input inputMode="decimal" value={form.supplierCost} onChange={(e) => editSupplierCost(e.target.value)} />
+                    </span>
+                  </label>
+                ) : (
+                  field('cost', 'Custo do produto', { prefix: 'R$', placeholder: '0,00', decimal: true })
+                )}
                 {field('price', 'Valor de venda', { prefix: 'R$', placeholder: '0,00', decimal: true })}
                 <label className="sku-input">
                   <small>
@@ -368,6 +520,18 @@ export function StudiesTab() {
                     chooseType(form.listingType ?? 'gold_special', { id: null, name: 'Sem categoria (tarifa média)', feeClassic: 12, feePremium: 17 });
                   }}
                 />
+              )}
+              {form.supplierCost && (
+                <div className="pquote-origin">
+                  <span>
+                    <small>Custo vindo da cotação{form.quoteRef ? ` “${form.quoteRef}”` : ''}</small>
+                    <strong>
+                      {money(parse(form.supplierCost) ?? 0)} + {pctText(markup)}% {formSupplier ? `(${formSupplier.name})` : ''} = {money(input.cost ?? 0)}
+                    </strong>
+                    {form.quoteItem && !same(form.quoteItem, form.title) && <small>Item na cotação: “{form.quoteItem}”</small>}
+                  </span>
+                  <button type="button" className="link" onClick={() => edit({ supplierCost: '' })}>digitar custo à mão</button>
+                </div>
               )}
               {!form.category && !browsing && (
                 <p className="lprice-note">Digite a % da comissão ou escolha a categoria na lista para puxar a tarifa do Clássico ou do Premium.</p>
@@ -424,6 +588,10 @@ export function StudiesTab() {
           </section>
         </div>
       </div>
+
+      <Modal open={importing} onClose={() => setImporting(false)} label="Importar cotação do fornecedor" wide>
+        {current && <QuoteImport supplier={current} taxPct={parse(companyTax) ?? 0} onDone={imported} />}
+      </Modal>
     </div>
   );
 }

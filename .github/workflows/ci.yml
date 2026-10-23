@@ -9,10 +9,10 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        env: { POSTGRES_USER: nvs, POSTGRES_PASSWORD: nvs_ci, POSTGRES_DB: nvs_test }
+        env: { POSTGRES_PASSWORD: postgres_ci }
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U nvs" --health-interval 5s --health-timeout 3s --health-retries 10
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       DATABASE_URL: postgres://nvs:nvs_ci@localhost:5432/nvs_test
       TEST_DATABASE_URL: postgres://nvs:nvs_ci@localhost:5432/nvs_test
@@ -24,6 +24,14 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # o usuário criado pela imagem é superusuário e ignora o RLS (até com FORCE), o que mistura os dados
+      # das empresas nos testes; a API e as migrations rodam com um papel comum, como no ambiente local
+      - name: Cria papel da aplicação sem superusuário
+        env: { PGPASSWORD: postgres_ci }
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE nvs LOGIN PASSWORD 'nvs_ci'" \
+            -c "CREATE DATABASE nvs_test OWNER nvs"
       - run: npm run db:migrate
       - run: npm test
       - run: npm run build

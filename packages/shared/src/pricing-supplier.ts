@@ -98,6 +98,27 @@ export function parseQuoteRows(rows: string[][]): QuoteRow[] {
   return out;
 }
 
+/**
+ * IPI destacado no rodapé da cotação ("IPI -> 16.237,20" e "Total Geral NF 151.547,20") → % sobre os produtos.
+ * Serve para sugerir o acréscimo da pasta; null quando a cotação não traz os dois valores.
+ */
+export function detectQuoteTaxPct(rows: string[][]): { pct: number; ipi: number } | null {
+  const after = (re: RegExp) => {
+    for (const r of rows) {
+      const i = r.findIndex((c) => re.test(c.trim()));
+      if (i < 0) continue;
+      const v = r.slice(i + 1).map(parseQuoteMoney).find((n) => n !== null);
+      if (v != null) return v;
+    }
+    return null;
+  };
+  const ipi = after(/^(valor\s+(do\s+)?)?ipi\b/i);
+  const total = after(/^(total\s+geral|valor\s+total\s+da\s+nota|total\s+(da\s+)?(nf|nota))/i);
+  if (!ipi || !total || total <= ipi) return null;
+  const pct = Math.round((ipi / (total - ipi)) * 10000) / 100;
+  return pct > 0 && pct <= 50 ? { pct, ipi } : null;
+}
+
 /** CSV com ";" ou "," (detecta pelo cabeçalho), aspas duplas respeitadas. */
 export function csvRows(text: string): string[][] {
   const first = text.split(/\r?\n/, 1)[0] ?? '';

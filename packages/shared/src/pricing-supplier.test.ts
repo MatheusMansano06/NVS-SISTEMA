@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { costWithMarkup, csvRows, parseQuoteMoney, parseQuoteRows } from './pricing-supplier.js';
+import { costWithMarkup, csvRows, detectQuoteTaxPct, parseQuoteMoney, parseQuoteRows } from './pricing-supplier.js';
 
 describe('parseQuoteMoney', () => {
   it('lê valores em real e recusa código ou quantidade', () => {
@@ -43,6 +43,19 @@ describe('parseQuoteRows', () => {
       ['TOTAL', 'R$', '521,50'],
     ];
     expect(parseQuoteRows(rows)).toEqual([{ title: 'Rabeta completa Fan 125', supplierCost: 45.9 }]);
+  });
+});
+
+describe('detectQuoteTaxPct', () => {
+  it('acha o % de IPI no rodapé da cotação (formato Wester)', () => {
+    const rows = [
+      ['Código', 'Descrição', 'Quant.', 'Preço Unitário', 'Total NF'],
+      ['WR5700', 'RABETA ADAPTÁVEL P/ FAN 125', '1000', '31,79', '31790'],
+      ['Observações:', 'COTAÇÃO', '', 'IPI ->', '16237,20'],
+      ['', '', '', 'Total Geral NF', '151547,20'],
+    ];
+    expect(detectQuoteTaxPct(rows)).toEqual({ pct: 12, ipi: 16237.2 });
+    expect(detectQuoteTaxPct(rows.slice(0, 2))).toBeNull();
   });
 });
 

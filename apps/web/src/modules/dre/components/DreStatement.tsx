@@ -10,6 +10,7 @@ import {
 } from '@nvs/shared';
 import { money } from '../../../shared/format';
 import { Icon } from '../../../shared/ui/Icon';
+import { MlReconcile } from './MlReconcile';
 import { KIND_SECTION, SECTION_COPY, SUBTOTAL_COPY, type Copy } from '../dre-copy';
 
 const isSection = (id: string): id is DreSectionId =>
@@ -179,6 +180,7 @@ export function DreStatement({
               </span>
             </div>
             {helpBox(id, copy)}
+            {income && <MlReconcile data={data} />}
             {isOpen && (
               <div className="st-items">
                 {s.items.map((it) => {

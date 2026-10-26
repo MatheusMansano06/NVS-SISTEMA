@@ -1596,3 +1596,7 @@ dialog.modal:has(.wiz, .setup, .entries) {
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+
+/* conciliação com o painel do ML (abaixo de "Você vendeu") */
+.ml-reconcile { margin: 4px 0 6px; padding: 8px 14px; border-radius: 14px; background: var(--gray-50); color: var(--gray-500); font-size: .78rem; line-height: 1.5; }
+.ml-reconcile b { color: var(--navy); font-weight: 650; }

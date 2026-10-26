@@ -16,6 +16,9 @@ const sales: DreSales = {
   unidades: 250,
   semCustoQtd: 10,
   semCustoValor: 1_000,
+  canceladasQtd: 0,
+  canceladasValor: 0,
+  produtoTotal: 10_000,
 };
 const entry = (p: Partial<DreEntryDto>): DreEntryDto => ({
   id: p.name ?? 'x',

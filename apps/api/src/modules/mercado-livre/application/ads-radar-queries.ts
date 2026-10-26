@@ -44,8 +44,8 @@ export class AdsRadarQueries {
       const snap = await loadSnapshot(db, addDays(today, -SCREEN_DAYS));
       const rules = await loadRules(db, false);
       const acc = (
-        await db.query<{ status: AdsRadarOverviewDto['account']['status']; synced: Date | null; backfilled: Date | null }>(
-          `SELECT status, metrics_synced_at AS synced, metrics_backfilled_at AS backfilled FROM ad_accounts ORDER BY checked_at DESC LIMIT 1`,
+        await db.query<{ status: AdsRadarOverviewDto['account']['status']; synced: Date | null; backfilled: Date | null; error: string | null }>(
+          `SELECT status, metrics_synced_at AS synced, metrics_backfilled_at AS backfilled, metrics_error AS error FROM ad_accounts ORDER BY checked_at DESC LIMIT 1`,
         )
       ).rows[0];
       const all = sumByDay([...snap.series.values()].flat());
@@ -56,8 +56,8 @@ export class AdsRadarQueries {
       const unread = Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM ad_rule_events WHERE read_at IS NULL`)).rows[0]!.n);
       return {
         account: acc
-          ? { status: acc.status, syncedAt: acc.synced?.toISOString() ?? null, backfilled: acc.backfilled !== null }
-          : { status: 'sem_conta', syncedAt: null, backfilled: false },
+          ? { status: acc.status, syncedAt: acc.synced?.toISOString() ?? null, backfilled: acc.backfilled !== null, error: acc.error }
+          : { status: 'sem_conta', syncedAt: null, backfilled: false, error: null },
         today,
         last7: kpis(totalsIn(all, windowRange('7d', today))),
         prev7: kpis(totalsIn(all, prev7)),
@@ -228,13 +228,9 @@ export class AdsRadarQueries {
       const series = snap.series.get(key) ?? [];
       const ctx = { acosTarget: c.acos_target === null ? null : Number(c.acos_target) };
       const mine = rules.filter((r) => r.scope !== 'conta' && appliesTo(r, c));
+      // sem regra da empresa a campanha não é julgada (nada de regra padrão escondida)
       let status: AdStatus = 'ok';
-      if (mine.length) {
-        for (const r of mine) status = worst(status, evaluateRule(r.conditions, series, today, ctx).status);
-      } else if (ctx.acosTarget !== null) {
-        const acos = kpis(totalsIn(series, windowRange('7d', today))).acos;
-        status = statusAgainst(acos, 'maior', ctx.acosTarget);
-      }
+      for (const r of mine) status = worst(status, evaluateRule(r.conditions, series, today, ctx).status);
       out.set(key, status);
     }
     return out;

@@ -191,7 +191,7 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(res.json().error.code).toBe('FEATURE_LOCKED');
   });
 
-  it('visão da conta: campanha acima do alvo de ACOS aparece estourada', async () => {
+  it('visão da conta: sem regra da empresa nenhuma campanha é julgada', async () => {
     await db.query(`UPDATE tenants SET features = array_append(features, 'radar_ads') WHERE id = $1`, [tenantId]);
     accountId = await db.withTenant(tenantId, async (c) => {
       const a = await c.query<{ id: string }>(
@@ -220,11 +220,11 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     });
     const o = (await api('GET', '/overview')).json();
     expect(o.account).toMatchObject({ status: 'ok', backfilled: true });
-    expect(o.campaigns).toEqual({ ok: 1, atencao: 0, estourado: 1, total: 2 });
+    expect(o.campaigns).toEqual({ ok: 2, atencao: 0, estourado: 0, total: 2 });
     expect(o.last7).toMatchObject({ cost: 77, tacos: 2.75, acos: 5.5 });
     expect(o.unread).toBe(0);
     const list = (await api('GET', '/campaigns')).json();
-    expect(list.map((c: { name: string; status: string }) => [c.name, c.status])).toEqual([['Campanha A', 'estourado'], ['Campanha B', 'ok']]);
+    expect(list.map((c: { name: string; status: string }) => [c.name, c.status])).toEqual([['Campanha A', 'ok'], ['Campanha B', 'ok']]);
     expect(list[0].trend).toEqual([5, 5, 5, 5, 5, 5, 5]);
   });
 

@@ -7,6 +7,7 @@ import { Icon } from '../../shared/ui/Icon';
 import { Modal } from '../../shared/ui/Modal';
 import { useAuth } from '../auth/AuthContext';
 import { adsRadarApi } from './ads-radar-api';
+import { AdsRadarHome } from './AdsRadarHome';
 import {
   CampaignDrawer, CampaignPanel, EventsPanel, GoalsPanel, OverviewPanel, RobotPanel, RuleEditor, SCOPE_LABEL, STATUS_LABEL, TONE_COLOR,
   conditionText, fmtPct, fmtX, ruleTone, type RuleDraftPreset,
@@ -55,13 +56,14 @@ function ruleNode(r: AdRuleDto, x: number, y: number, onOpen: () => void, only?:
   };
 }
 
-/** Radar ADS: o fluxo da conta abre na tela; campanhas, metas, alertas e regras abrem por clique. */
+/** Radar ADS: abre na tela inicial (resumo + campanhas); clique numa campanha abre o fluxo dela, e o fluxo geral vale para a conta toda. */
 export function AdsRadarPage() {
   const { session } = useAuth();
   const canWrite = session?.user.role !== 'viewer';
   const [overview, setOverview] = useState<AdsRadarOverviewDto | null>(null);
   const [campaigns, setCampaigns] = useState<AdCampaignDto[]>([]);
   const [events, setEvents] = useState<AdEventDto[]>([]);
+  const [view, setView] = useState<'inicio' | 'geral'>('inicio');
   const [selected, setSelected] = useState<AdCampaignDto | null>(null);
   const [detail, setDetail] = useState<AdCampaignDetailDto | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -113,6 +115,11 @@ export function AdsRadarPage() {
     setPanel(null);
     setSelected(c);
   };
+  const goHome = () => {
+    setSelected(null);
+    setView('inicio');
+  };
+  const home = !selected && view === 'inicio';
   const openEvents = async () => {
     setEvents(await adsRadarApi.events(50).catch(() => []));
     setPanel({ kind: 'events' });
@@ -301,13 +308,13 @@ export function AdsRadarPage() {
   const closePanel = () => setPanel(null);
   return (
     <AppShell>
-      <div className="ar">
+      <div className="ar" data-view={home ? 'inicio' : 'fluxo'}>
         <header className="ar-head">
           <div className="ar-brand">
             <span className="ar-brand-ico"><Icon name="target" /></span>
-            <div><b>Radar ADS</b><small>{selected ? selected.name : o ? `${o.campaigns.total} campanhas ativas monitoradas` : 'Mercado Ads'}</small></div>
+            <div><b>Radar ADS</b><small>{selected ? selected.name : !home ? 'Fluxo geral da conta' : o ? `${o.campaigns.total} campanhas ativas · últimos 7 dias` : 'Mercado Ads'}</small></div>
           </div>
-          {o && (
+          {o && !home && (
             <div className="ar-kpis">
               <button type="button" className="ar-kpi" onClick={() => setPanel({ kind: 'overview' })}>
                 Investimento 7d<b>{money(o.last7.cost)}{costDelta !== null && <small style={{ color: costDelta > 0 ? 'var(--danger)' : 'var(--ok)' }}>{costDelta > 0 ? '▲' : '▼'} {Math.abs(Math.round(costDelta * 100))}%</small>}</b>
@@ -321,19 +328,29 @@ export function AdsRadarPage() {
             </div>
           )}
           <div className="ar-spacer" />
-          <button type="button" className="ar-btn" onClick={() => openDrawer('all')}>Campanhas <kbd>⌘K</kbd></button>
+          {!home && <button type="button" className="ar-btn" onClick={() => openDrawer('all')}>Campanhas <kbd>⌘K</kbd></button>}
+          {home && <button type="button" className="ar-btn" onClick={() => setView('geral')}>Fluxo geral</button>}
           {canWrite && <button type="button" className="ar-btn" disabled={syncing} onClick={sync}><Icon name="refresh" size={16} />{syncing ? 'Atualizando…' : 'Atualizar'}</button>}
           {canWrite && !selected && <button type="button" className="ar-btn" onClick={() => setPanel({ kind: 'goals' })}>+ Meta</button>}
-          {canWrite && <button type="button" className="ar-btn primary" onClick={() => newRule(selected ? { scope: 'campanha', campaignId: selected.campaignId, accountId: selected.accountId } : { scope: 'campanhas', campaignId: null, accountId: null })}>+ Regra</button>}
+          {canWrite && !home && <button type="button" className="ar-btn primary" onClick={() => newRule(selected ? { scope: 'campanha', campaignId: selected.campaignId, accountId: selected.accountId } : { scope: 'campanhas', campaignId: null, accountId: null })}>+ Regra</button>}
         </header>
 
         {error ? <p className="ar-banner" data-tone="erro" role="alert">{error}</p> : banner ? <p className="ar-banner" data-tone={banner.tone}>{banner.text}</p> : <div />}
 
+        {home ? (
+          o ? (
+            <AdsRadarHome
+              overview={o} campaigns={campaigns} onOpenCampaign={pick} onOpenGeneral={() => setView('geral')}
+              onOpenGoals={() => setPanel({ kind: 'goals' })} onOpenEvents={openEvents}
+            />
+          ) : !error && <div className="arh-empty">Carregando o Radar…</div>
+        ) : (
         <FlowCanvas nodes={flow.nodes} edges={flow.edges} flowKey={flowKey}>
           <div className="ar-crumb">
+            <button type="button" className="ar-btn" onClick={goHome}>Início</button>
             {selected ? (
-              <><button type="button" className="ar-btn" onClick={() => setSelected(null)}>← Conta</button><span>{selected.name}</span></>
-            ) : <span>Fluxo da conta</span>}
+              <><button type="button" className="ar-btn" onClick={() => { setSelected(null); setView('geral'); }}>Fluxo geral</button><span>{selected.name}</span></>
+            ) : <span>Fluxo geral</span>}
           </div>
           <div className="ar-hint">Arraste o fundo · roda do mouse dá zoom · clique em qualquer bloco</div>
           {!o && !error && <div className="ar-empty">Carregando o Radar…</div>}
@@ -341,7 +358,20 @@ export function AdsRadarPage() {
             open={drawer} campaigns={campaigns} filter={filter} onFilter={setFilter}
             selected={selected ? `${selected.accountId}:${selected.campaignId}` : null} onPick={pick} onClose={() => setDrawer(false)}
           />
+          {flow.nodes.length <= 2 && o && (
+            <div className="ar-start">
+              <b>{selected ? 'Esta campanha ainda não tem regra' : 'Nenhuma regra geral ainda'}</b>
+              <p>{selected ? 'Crie uma regra e o Radar passa a vigiar esta campanha a cada hora.' : 'Regras gerais valem para todas as campanhas. Metas controlam o gasto do mês.'}</p>
+              {canWrite && (
+                <div>
+                  <button type="button" className="ar-btn primary" onClick={() => newRule(selected ? { scope: 'campanha', campaignId: selected.campaignId, accountId: selected.accountId } : { scope: 'campanhas', campaignId: null, accountId: null })}>+ Criar regra</button>
+                  {!selected && <button type="button" className="ar-btn" onClick={() => setPanel({ kind: 'goals' })}>+ Meta de gasto</button>}
+                </div>
+              )}
+            </div>
+          )}
         </FlowCanvas>
+        )}
       </div>
 
       <Modal open={panel?.kind === 'rule'} onClose={closePanel} label="Regra" wide>

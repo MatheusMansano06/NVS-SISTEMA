@@ -32,6 +32,9 @@ import {
   skuRoutes,
   InternalEanService,
   eanRoutes,
+  AbcCurveService,
+  PgAbcCurveRepository,
+  abcCurveRoutes,
 } from './modules/sales/index.js';
 import {
   HttpMlApi,
@@ -187,6 +190,7 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   await app.register(financeRoutes(finance), { prefix: '/api/v1' });
   await app.register(dreRoutes(new DreService(database, finance)), { prefix: '/api/v1' });
   await app.register(salesAnalyticsRoutes(new SalesAnalyticsService(database, new PgSalesAnalyticsRepository())), { prefix: '/api/v1' });
+  await app.register(abcCurveRoutes(new AbcCurveService(database, new PgAbcCurveRepository())), { prefix: '/api/v1' });
 
   const mlConfigured = Boolean(
     env.ML_CLIENT_ID && env.ML_CLIENT_SECRET && env.ML_REDIRECT_URI && env.TOKEN_ENCRYPTION_KEY,

@@ -94,7 +94,7 @@ export class DreService {
     const { rows } = await this.db.withTenant(tenantId, (db) =>
       db.query<EntryRow>(
         `INSERT INTO dre_entries (tenant_id, name, kind, category, basis, amount, start_month, end_month, notes, details, created_by)
-         VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, $11) RETURNING ${COLS}`,
+         VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, $9, $11) RETURNING ${COLS}`,
         [...params(e), tenantId, userId],
       ),
     );

@@ -269,7 +269,10 @@ export class MlApiError extends Error {
 const API = 'https://api.mercadolibre.com';
 const AUTH = 'https://auth.mercadolivre.com.br/authorization';
 /** Métricas do Mercado Ads pedidas nas buscas do Radar ADS. */
-const AD_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount,units_quantity,organic_units_quantity,organic_units_amount,lost_impression_share_by_budget';
+const AD_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount,units_quantity,organic_units_quantity,organic_units_amount';
+const AD_BASE_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount';
+/** Só as campanhas têm parcela de impressões; nos anúncios o ML recusa (400). */
+const AD_CAMPAIGN_METRICS = `${AD_METRICS},lost_impression_share_by_budget`;
 export const ORDERS_PAGE_SIZE = 50;
 export const LISTINGS_PAGE_SIZE = 100;
 
@@ -659,22 +662,28 @@ export class HttpMlApi implements MlApi, MlRawApi {
   }
 
   adCampaigns(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdCampaign[]> {
-    return this.adSearch<MlAdCampaign>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search`, day);
+    return this.adSearch<MlAdCampaign>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search`, day, AD_CAMPAIGN_METRICS);
   }
 
   adItems(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdItem[]> {
-    return this.adSearch<MlAdItem>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/ads/search`, day);
+    return this.adSearch<MlAdItem>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/ads/search`, day, AD_METRICS);
   }
 
   /** Busca paginada (50 por página) do Mercado Ads com as métricas de um dia. */
-  private async adSearch<T>(token: string, path: string, day: string): Promise<T[]> {
+  private async adSearch<T>(token: string, path: string, day: string, metrics: string): Promise<T[]> {
     const headers = { authorization: `Bearer ${token}`, accept: 'application/json', 'api-version': '2' };
     const out: T[] = [];
     for (let offset = 0; ; offset += 50) {
-      const page = await this.request<{ results?: T[]; paging?: { total?: number } }>(
-        `${path}?limit=50&offset=${offset}&date_from=${day}&date_to=${day}&metrics=${AD_METRICS}`,
-        { headers },
-      );
+      const url = (m: string) => `${path}?limit=50&offset=${offset}&date_from=${day}&date_to=${day}&metrics=${m}`;
+      type Page = { results?: T[]; paging?: { total?: number } };
+      // 400 = alguma métrica recusada pelo ML: tenta de novo só com as básicas antes de desistir
+      const page = await this.request<Page>(url(metrics), { headers }).catch((err) => {
+        if (err instanceof MlApiError && err.status === 400 && metrics !== AD_BASE_METRICS) {
+          metrics = AD_BASE_METRICS;
+          return this.request<Page>(url(metrics), { headers });
+        }
+        throw err;
+      });
       out.push(...(page.results ?? []));
       if (!page.results?.length || offset + 50 >= (page.paging?.total ?? 0)) return out;
     }
@@ -743,8 +752,15 @@ export class HttpMlApi implements MlApi, MlRawApi {
         await sleep(500 * 2 ** attempt);
         continue;
       }
-      const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-      throw new MlApiError(body.message || body.error || `HTTP ${res.status}`, res.status, body.error);
+      const raw = await res.text().catch(() => '');
+      let body: { message?: string; error?: string } = {};
+      try {
+        body = JSON.parse(raw) as typeof body;
+      } catch {
+        /* corpo vazio ou não-JSON */
+      }
+      // sem message/error: leva o corpo cru para o log mostrar o motivo do ML
+      throw new MlApiError(body.message || body.error || `HTTP ${res.status}${raw ? `: ${raw.slice(0, 300)}` : ''}`, res.status, body.error);
     }
   }
 }

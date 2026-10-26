@@ -191,12 +191,6 @@ export function AdsRadarPage() {
       edges.push({ from: 'acc', to: 'goal' });
       if (g.status === 'estourado') edges.push({ from: 'goal', to: 'ntf', label: 'sim', hot: true });
       y += 200;
-    } else {
-      nodes.push({
-        id: 'goal', x: 620, y, label: 'Definir metas de investimento', ghost: true, onOpen: () => setPanel({ kind: 'goals' }),
-        children: (<><div className="ar-node-title">+ Metas de gasto</div><div className="ar-node-sub">Mês, ano e objetivo de TACOS</div></>),
-      });
-      y += 130;
     }
     for (const r of rules) {
       nodes.push(ruleNode(r, 620, y, () => editRule(r)));
@@ -204,33 +198,15 @@ export function AdsRadarPage() {
       if (r.enabled) edges.push({ from: `rule-${r.id}`, to: r.scope === 'conta' ? 'ntf' : 'g-estourado', label: 'sim', hot: r.now.estourado > 0 });
       y += 175;
     }
-    if (!rules.some((r) => r.scope === 'campanhas' && r.enabled)) {
-      nodes.push({
-        id: 'rule-ml', x: 620, y, label: 'Regra padrão: ACOS acima do alvo da campanha',
-        onOpen: () => newRule({ scope: 'campanhas', campaignId: null, accountId: null }),
-        children: (
-          <>
-            <Kind icon="◇" bg="var(--gray-100)" fg="var(--gray-500)">Regra padrão</Kind>
-            <div className="ar-node-title">ACOS 7 dias acima do alvo</div>
-            <div className="ar-node-sub">Usa o alvo que cada campanha já tem no ML, enquanto você não cria uma regra própria</div>
-          </>
-        ),
-      });
-      edges.push({ from: 'acc', to: 'rule-ml' }, { from: 'rule-ml', to: 'g-estourado', label: 'sim', hot: overview.campaigns.estourado > 0 });
-      y += 175;
-    }
-    if (canWrite) {
-      nodes.push({
-        id: 'rule-new', x: 620, y, label: 'Criar regra', ghost: true, onOpen: () => newRule({ scope: 'campanhas', campaignId: null, accountId: null }),
-        children: (<><div className="ar-node-title">+ Nova regra</div><div className="ar-node-sub">TACOS, ACOS, ROAS, CPC, gasto…</div></>),
-      });
-    }
+    // só aparece o que a empresa criou: sem regra nem meta, o fluxo fica em Gatilho → Conta
+    if (!rules.length && !goals.length) return { nodes, edges };
 
-    // campanhas por situação
+    // campanhas por situação (só quando alguma regra olha campanhas)
+    const campaignRules = rules.some((r) => r.scope !== 'conta');
     const groups: { s: AdStatus; y: number; sub: string }[] = [
       { s: 'estourado', y: 40, sub: 'acima do limite' }, { s: 'atencao', y: 260, sub: 'perto do limite (85%+)' }, { s: 'ok', y: 470, sub: 'dentro do limite' },
     ];
-    for (const g of groups) {
+    for (const g of campaignRules ? groups : []) {
       const list = active.filter((c) => c.status === g.s);
       nodes.push({
         id: `g-${g.s}`, x: 960, y: g.y, stack: true, label: `${STATUS_LABEL[g.s]}: ${list.length} campanhas`, onOpen: () => openDrawer(g.s),
@@ -245,20 +221,15 @@ export function AdsRadarPage() {
         ),
       });
     }
-    edges.push({ from: 'g-estourado', to: 'ntf', label: 'sim', hot: overview.campaigns.estourado > 0 }, { from: 'g-estourado', to: 'bot' });
+    if (campaignRules) edges.push({ from: 'g-estourado', to: 'ntf', label: 'sim', hot: overview.campaigns.estourado > 0 });
 
     nodes.push({
       id: 'ntf', x: 1300, y: 60, label: `Avisos: ${overview.unread} não lidos`, onOpen: openEvents,
       badge: overview.unread ? { text: `${overview.unread} novo${overview.unread > 1 ? 's' : ''}`, tone: 'estourado' } : null,
       children: (<><Kind icon="🔔" bg="var(--ok-soft)" fg="var(--ok-ink)">Avisar</Kind><div className="ar-node-title">No sistema</div><div className="ar-node-sub">WhatsApp e e-mail chegam depois</div><div className="ar-node-open">Ver alertas →</div></>),
     });
-    nodes.push({
-      id: 'bot', x: 1300, y: 290, locked: true, label: 'Robô: em breve', onOpen: () => setPanel({ kind: 'robot' }),
-      badge: { text: 'Em breve', tone: 'info' },
-      children: (<><Kind icon="⚙" bg="var(--danger-soft)" fg="var(--danger-ink)">Robô</Kind><div className="ar-node-title">Ação automática no Ads</div><div className="ar-node-sub">Pausar, mover, orçamento, ACOS objetivo</div></>),
-    });
     return { nodes, edges };
-  }, [overview, campaigns, canWrite]);
+  }, [overview, campaigns]);
 
   // ---------------------------------------------------------------- fluxo de uma campanha
   const campaignFlow = useMemo((): { nodes: FlowNode[]; edges: FlowEdge[] } => {
@@ -294,41 +265,16 @@ export function AdsRadarPage() {
     });
     edges.push({ from: 'trg', to: 'cmp' });
     let y = 40;
-    const shown = rules.length ? rules : [];
-    for (const r of shown) {
+    for (const r of rules) {
       nodes.push(ruleNode(r, 610, y, () => editRule(r), c.status));
       const hot = r.enabled && c.status === 'estourado';
       edges.push(
         { from: 'cmp', to: `rule-${r.id}` }, { from: `rule-${r.id}`, to: 'ntf', label: 'sim', hot },
-        { from: `rule-${r.id}`, to: 'bot' }, { from: `rule-${r.id}`, to: 'reg', label: 'não' },
+        { from: `rule-${r.id}`, to: 'reg', label: 'não' },
       );
       y += 175;
     }
-    if (!shown.length) {
-      nodes.push({
-        id: 'rule-ml', x: 610, y, label: 'Regra padrão: ACOS acima do alvo', tone: c.status === 'ok' ? null : c.status,
-        badge: c.status === 'estourado' ? { text: 'Estourado', tone: 'estourado' } : null,
-        onOpen: () => newRule({ scope: 'campanha', campaignId: c.campaignId, accountId: c.accountId }),
-        children: (
-          <>
-            <Kind icon="◇" bg="var(--gray-100)" fg="var(--gray-500)">Regra padrão</Kind>
-            <div className="ar-node-title">ACOS 7 dias acima de {fmtPct(c.acosTarget)}</div>
-            <div className="ar-node-sub">Alvo que a campanha já tem no ML</div>
-          </>
-        ),
-      });
-      edges.push(
-        { from: 'cmp', to: 'rule-ml' }, { from: 'rule-ml', to: 'ntf', label: 'sim', hot: c.status === 'estourado' },
-        { from: 'rule-ml', to: 'bot' }, { from: 'rule-ml', to: 'reg', label: 'não' },
-      );
-      y += 175;
-    }
-    if (canWrite) {
-      nodes.push({
-        id: 'rule-new', x: 610, y, ghost: true, label: 'Criar regra para esta campanha', onOpen: () => newRule({ scope: 'campanha', campaignId: c.campaignId, accountId: c.accountId }),
-        children: (<><div className="ar-node-title">+ Regra só desta campanha</div></>),
-      });
-    }
+    if (!rules.length) return { nodes, edges };
     const evs = detail?.events ?? [];
     nodes.push({
       id: 'ntf', x: 930, y: 40, label: 'Avisos desta campanha', onOpen: openEvents,
@@ -336,15 +282,11 @@ export function AdsRadarPage() {
       children: (<><Kind icon="🔔" bg="var(--ok-soft)" fg="var(--ok-ink)">Avisar</Kind><div className="ar-node-title">No sistema</div><div className="ar-node-sub">{evs.length ? `${evs.length} alerta${evs.length > 1 ? 's' : ''} desta campanha` : 'Nenhum alerta ainda'}</div></>),
     });
     nodes.push({
-      id: 'bot', x: 930, y: 250, locked: true, label: 'Robô: em breve', onOpen: () => setPanel({ kind: 'robot' }), badge: { text: 'Em breve', tone: 'info' },
-      children: (<><Kind icon="⚙" bg="var(--danger-soft)" fg="var(--danger-ink)">Robô</Kind><div className="ar-node-title">Pausar anúncios desta campanha</div><div className="ar-node-sub">Desligado · só avisa</div></>),
-    });
-    nodes.push({
-      id: 'reg', x: 930, y: 440, label: 'Senão: só registra',
+      id: 'reg', x: 930, y: 250, label: 'Senão: só registra',
       children: (<><Kind icon="✓" bg="var(--gray-100)" fg="var(--gray-500)">Senão</Kind><div className="ar-node-title">Só registra no histórico</div><div className="ar-node-sub">Os números ficam guardados para a simulação</div></>),
     });
     return { nodes, edges };
-  }, [selected, detail, canWrite]);
+  }, [selected, detail]);
 
   const flow = selected ? campaignFlow : accountFlow;
   const flowKey = selected ? `c:${selected.accountId}:${selected.campaignId}` : 'conta';
@@ -353,6 +295,7 @@ export function AdsRadarPage() {
   const monthGoal = o?.goals.find((g) => g.kind === 'gasto_mes');
   const tacosGoal = o?.goals.find((g) => g.kind === 'tacos');
   const banner = o && (o.account.status !== 'ok' ? { tone: o.account.status === 'erro' || o.account.status === 'sem_permissao' ? 'erro' : undefined, text: ACCOUNT_MSG[o.account.status] }
+    : o.account.error ? { tone: 'erro', text: `O Mercado Livre recusou a leitura das métricas: ${o.account.error}` }
     : !o.account.backfilled ? { tone: undefined, text: 'Primeira leitura em andamento: o Radar está trazendo os últimos 90 dias do Mercado Ads. Os números aparecem em alguns minutos.' } : null);
 
   const closePanel = () => setPanel(null);
@@ -380,6 +323,7 @@ export function AdsRadarPage() {
           <div className="ar-spacer" />
           <button type="button" className="ar-btn" onClick={() => openDrawer('all')}>Campanhas <kbd>⌘K</kbd></button>
           {canWrite && <button type="button" className="ar-btn" disabled={syncing} onClick={sync}><Icon name="refresh" size={16} />{syncing ? 'Atualizando…' : 'Atualizar'}</button>}
+          {canWrite && !selected && <button type="button" className="ar-btn" onClick={() => setPanel({ kind: 'goals' })}>+ Meta</button>}
           {canWrite && <button type="button" className="ar-btn primary" onClick={() => newRule(selected ? { scope: 'campanha', campaignId: selected.campaignId, accountId: selected.accountId } : { scope: 'campanhas', campaignId: null, accountId: null })}>+ Regra</button>}
         </header>
 

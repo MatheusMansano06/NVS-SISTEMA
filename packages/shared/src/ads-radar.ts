@@ -213,7 +213,7 @@ export interface AdEventDto {
 
 export interface AdsRadarOverviewDto {
   /** Situação da leitura: sem anunciante / sem permissão vêm da leitura do investimento. */
-  account: { status: 'ok' | 'sem_anunciante' | 'sem_permissao' | 'erro' | 'sem_conta'; syncedAt: string | null; backfilled: boolean };
+  account: { status: 'ok' | 'sem_anunciante' | 'sem_permissao' | 'erro' | 'sem_conta'; syncedAt: string | null; backfilled: boolean; error: string | null };
   today: string;
   last7: AdKpisDto;
   prev7: AdKpisDto;

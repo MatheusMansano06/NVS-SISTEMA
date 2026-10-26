@@ -113,7 +113,14 @@ describe.skipIf(!TEST_DB)('Radar ADS', () => {
   it('leituras seguintes relêem só os 3 últimos dias', async () => {
     fake.calls.campaigns.length = 0;
     fake.calls.items.length = 0;
+    // anúncio que saiu do Ads no ML (não vem mais na lista) não pode continuar contando na campanha
+    const acc = await db.withTenant(novaes.id, async (c) => (await c.query<{ account_id: string }>(`SELECT account_id FROM ad_items LIMIT 1`)).rows[0]!.account_id);
+    await db.withTenant(novaes.id, (c) =>
+      c.query(`INSERT INTO ad_items (tenant_id, account_id, item_id, campaign_id, title, status) VALUES ($1, $2, 'MLB9', 2, 'Saiu do Ads', 'active')`, [novaes.id, acc]),
+    );
     await service.syncAccount(novaes.id, 'conn', today);
+    expect(await count(`SELECT count(*) AS n FROM ad_items WHERE campaign_id = 2`)).toBe(2);
+    expect(await count(`SELECT count(*) AS n FROM ad_items WHERE item_id = 'MLB9' AND campaign_id IS NULL AND status = 'fora_do_ads'`)).toBe(1);
     expect(fake.calls.campaigns).toHaveLength(3);
     expect(fake.calls.items).toHaveLength(3);
     expect(await count(`SELECT count(*) AS n FROM ad_campaign_daily`)).toBe(180); // regravou, não duplicou

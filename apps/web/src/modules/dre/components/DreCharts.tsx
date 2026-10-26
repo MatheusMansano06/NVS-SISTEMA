@@ -17,7 +17,8 @@ interface Props {
 /** "De cada R$ 100 vendidos": para onde vai cada real. Passar o mouse (ou tocar) destaca a parte no DRE. */
 export function HundredBar({ data, focus, onFocus, compact }: Props & { compact?: boolean }) {
   const base = data.receitaBruta;
-  const lucro = data.subtotals.lucro_liquido;
+  // só o Mercado Livre: a sobra de outras plataformas não sai destes R$ 100
+  const lucro = data.subtotals.lucro_liquido - total(data, 'outras');
   const parts = [
     ...COSTS.map((id) => ({
       id: id as DreSectionId | 'lucro',
@@ -98,6 +99,20 @@ export function Waterfall({
   let level = data.receitaBruta;
   steps.push({ id: 'receita', label: 'Vendeu', v: level, from: 0, to: level });
   for (const id of COSTS) {
+    // a sobra de outras plataformas entra antes da estrutura (sobe o degrau)
+    if (id === 'fixas') {
+      const o = total(data, 'outras');
+      if (o > 0) {
+        steps.push({
+          id: 'outras',
+          label: SECTION_COPY.outras.curto,
+          v: o,
+          from: level,
+          to: level + o,
+        });
+        level += o;
+      }
+    }
     const v = total(data, id);
     steps.push({ id, label: SECTION_COPY[id].curto, v: -v, from: level, to: level - v });
     level -= v;
@@ -115,7 +130,7 @@ export function Waterfall({
   const H = 280;
   const top = 34;
   const bottom = 56;
-  const max = Math.max(data.receitaBruta, 1);
+  const max = Math.max(data.receitaBruta, 1, ...steps.map((s) => Math.max(s.from, s.to)));
   const min = Math.min(0, ...steps.map((s) => s.to));
   const y = (v: number) => top + ((max - v) / (max - min)) * (H - top - bottom);
   const slot = W / steps.length;

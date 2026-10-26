@@ -51,6 +51,15 @@ export const SECTION_COPY: Record<DreSectionId, Copy & { emoji: string; curto: s
       'Gastos que aumentam junto com as vendas: tarifa do Mercado Livre, frete, anúncios, embalagem, etiqueta, motoboy. Vendeu o dobro, gasta (mais ou menos) o dobro. Se não vender nada, eles quase somem.',
     exemplo: 'Cada pedido usa uma caixa de R$ 1,20: 1.000 pedidos = R$ 1.200.',
   },
+  outras: {
+    curto: 'Outras',
+    emoji: '🛍️',
+    label: 'Sobra de outras plataformas',
+    tecnico: 'Outras receitas operacionais',
+    explain:
+      'O que sobrou das vendas fora do Mercado Livre (TikTok Shop, Shopee, loja própria…), já tirando o custo dos produtos, as tarifas e o frete de lá. Você lança à mão, mesmo que seja um valor aproximado, e ele soma no que sobra para pagar as contas. Não entra em “Você vendeu”, que é só o Mercado Livre.',
+    exemplo: 'Vendeu R$ 5.000 na Shopee e sobraram R$ 800 depois de tudo: lance R$ 800.',
+  },
   fixas: {
     curto: 'Estrutura',
     emoji: '🏢',
@@ -108,6 +117,7 @@ export const KIND_SECTION: Record<DreKind, DreSectionId> = {
   custo_variavel: 'variaveis',
   despesa_fixa: 'fixas',
   despesa_financeira: 'financeiras',
+  outra_plataforma: 'outras',
 };
 
 export interface Template {
@@ -225,6 +235,22 @@ export const TEMPLATES: Template[] = [
     basis: 'percentual',
   },
   {
+    name: 'TikTok Shop',
+    emoji: '🎵',
+    kind: 'outra_plataforma',
+    category: 'plataformas',
+    basis: 'unico',
+    dica: 'Quanto sobrou lá neste mês, depois do custo dos produtos, tarifas e frete. Pode ser aproximado.',
+  },
+  {
+    name: 'Shopee',
+    emoji: '🧡',
+    kind: 'outra_plataforma',
+    category: 'plataformas',
+    basis: 'unico',
+    dica: 'Quanto sobrou lá neste mês, depois do custo dos produtos, tarifas e frete. Pode ser aproximado.',
+  },
+  {
     name: 'Juros de empréstimo',
     emoji: '🏦',
     kind: 'despesa_financeira',
@@ -265,6 +291,17 @@ export const KIND_HELP: Record<DreKind, { titulo: string; frase: string; exemplo
     frase: 'É o custo do dinheiro.',
     exemplos: 'Juros, antecipação, tarifa do banco',
   },
+  outra_plataforma: {
+    titulo: 'Outras plataformas',
+    frase: 'O que sobrou das vendas fora do Mercado Livre.',
+    exemplos: 'TikTok Shop, Shopee, loja própria',
+  },
+};
+
+/** Como cada base aparece no cadastro da sobra de outra plataforma (é dinheiro que entra, não gasto). */
+export const OUTRA_BASIS_LABELS: Partial<Record<DreBasis, string>> = {
+  unico: 'Só neste mês',
+  mensal: 'Todo mês, mesmo valor',
 };
 
 /** Mês AAAA-MM no fuso local. */

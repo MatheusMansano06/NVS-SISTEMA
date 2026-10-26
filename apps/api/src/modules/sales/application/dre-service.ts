@@ -156,7 +156,8 @@ export class DreService {
           ? projectDre(current, days / elapsed)
           : null,
       previous,
-      lancamentos: entries.length,
+      // custos da empresa (a sobra de outras plataformas não é custo)
+      lancamentos: entries.filter((e) => e.kind !== 'outra_plataforma').length,
       generatedAt: new Date().toISOString(),
     };
   }

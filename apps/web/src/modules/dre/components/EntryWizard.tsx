@@ -15,12 +15,14 @@ import { money } from '../../../shared/format';
 import {
   KIND_HELP,
   KIND_SECTION,
+  OUTRA_BASIS_LABELS,
   SECTION_COPY,
   TEMPLATES,
   monthLabel,
   type Template,
 } from '../dre-copy';
 import { dreApi } from '../dre-api';
+import { Hint } from '../../../shared/ui/Hint';
 import { TeamMemberForm } from './TeamMemberForm';
 
 type Step = 'pick' | 'classify' | 'basis' | 'form';
@@ -43,6 +45,7 @@ const BASES_BY_KIND: Record<DreKind, DreBasis[]> = {
   custo_variavel: ['pedido', 'percentual', 'mensal', 'unico'],
   despesa_fixa: ['mensal', 'unico'],
   despesa_financeira: ['mensal', 'percentual', 'unico'],
+  outra_plataforma: ['unico', 'mensal'],
 };
 
 /** Lançar gasto sem precisar saber contabilidade: escolhe um modelo ou responde 1–2 perguntas. */
@@ -74,8 +77,8 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
         : {
             name: '',
             kind: kind ?? 'despesa_fixa',
-            category: 'outros',
-            basis: 'mensal',
+            category: kind === 'outra_plataforma' ? 'plataformas' : 'outros',
+            basis: kind === 'outra_plataforma' ? 'unico' : 'mensal',
             amount: 0,
             startMonth: month,
             endMonth: null,
@@ -106,7 +109,14 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
       ...f,
       kind: k,
       basis: BASES_BY_KIND[k][0]!,
-      category: k === 'despesa_financeira' ? 'financeiro' : f.category,
+      category:
+        k === 'despesa_financeira'
+          ? 'financeiro'
+          : k === 'outra_plataforma'
+            ? 'plataformas'
+            : f.category === 'plataformas'
+              ? 'outros'
+              : f.category,
     }));
     setStep(k === 'custo_variavel' ? 'basis' : 'form');
   };
@@ -119,10 +129,12 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
         ? (amount / 100) * sample.receitaBruta
         : amount;
   const section = SECTION_COPY[KIND_SECTION[form.kind]];
+  const outra = form.kind === 'outra_plataforma';
 
   const save = async () => {
     setError('');
-    if (!form.name.trim()) return setError('Dê um nome ao gasto.');
+    if (!form.name.trim())
+      return setError(outra ? 'Dê um nome (ex.: Shopee).' : 'Dê um nome ao gasto.');
     if (amount <= 0) return setError('Informe o valor.');
     setSaving(true);
     try {
@@ -168,9 +180,11 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
     const kinds = kind ? [kind] : DRE_KINDS;
     return (
       <div className="wiz">
-        <h2>Lançar um gasto</h2>
+        <h2>{kind === 'outra_plataforma' ? 'Somar outra plataforma' : 'Lançar um gasto'}</h2>
         <p className="dre-muted">
-          Escolha um dos gastos comuns de quem vende online (já vem classificado) ou crie o seu.
+          {kind === 'outra_plataforma'
+            ? 'Escolha a plataforma ou crie outra.'
+            : 'Escolha um dos gastos comuns de quem vende online (já vem classificado) ou crie o seu.'}
         </p>
         {kinds.map((k) => (
           <div key={k} className="wiz-group" data-kind={k}>
@@ -196,7 +210,7 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
           className="btn btn-primary btn-sm wiz-other"
           onClick={() => setStep(kind ? 'form' : 'classify')}
         >
-          Outro gasto
+          {kind === 'outra_plataforma' ? 'Outra plataforma' : 'Outro gasto'}
         </button>
       </div>
     );
@@ -233,6 +247,11 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
             <small>
               É uma <u>despesa financeira</u>. Ex.: juros de empréstimo, antecipação.
             </small>
+          </button>
+          <button type="button" onClick={() => pickKind('outra_plataforma')}>
+            <span aria-hidden="true">🛍️</span>
+            <b>Não é gasto: é o que sobrou de outra plataforma</b>
+            <small>Soma no resultado. Ex.: TikTok Shop, Shopee, loja própria.</small>
           </button>
         </div>
       </div>
@@ -283,7 +302,15 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
           ← voltar
         </button>
       )}
-      <h2>{entry ? 'Editar gasto' : 'Quanto custa?'}</h2>
+      <h2>
+        {outra
+          ? entry
+            ? 'Editar sobra'
+            : 'Quanto sobrou?'
+          : entry
+            ? 'Editar gasto'
+            : 'Quanto custa?'}
+      </h2>
 
       <div className="wiz-kind" data-kind={form.kind}>
         <span>
@@ -300,14 +327,18 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
           value={form.name}
           maxLength={80}
           onChange={(e) => set('name', e.target.value)}
-          placeholder="Ex.: Aluguel do galpão"
+          placeholder={outra ? 'Ex.: Shopee' : 'Ex.: Aluguel do galpão'}
           data-autofocus={!form.name || undefined}
         />
       </label>
 
       <div className="wiz-field">
-        <span>Como é cobrado</span>
-        <div className="wiz-seg" role="radiogroup" aria-label="Como é cobrado">
+        <span>{outra ? 'Vale para' : 'Como é cobrado'}</span>
+        <div
+          className="wiz-seg"
+          role="radiogroup"
+          aria-label={outra ? 'Vale para' : 'Como é cobrado'}
+        >
           {BASES_BY_KIND[form.kind].map((b) => (
             <button
               key={b}
@@ -316,7 +347,7 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
               aria-checked={form.basis === b}
               onClick={() => set('basis', b)}
             >
-              {DRE_BASIS_LABELS[b]}
+              {(outra && OUTRA_BASIS_LABELS[b]) || DRE_BASIS_LABELS[b]}
             </button>
           ))}
         </div>
@@ -324,11 +355,22 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
 
       <label className="wiz-field">
         <span>
-          {form.basis === 'percentual'
-            ? 'Percentual sobre as vendas'
-            : form.basis === 'pedido'
-              ? 'Valor por pedido'
-              : 'Valor'}
+          {outra ? (
+            <>
+              Quanto sobrou{' '}
+              <Hint label="quanto sobrou">
+                O que ficou para você das vendas nessa plataforma: o que vendeu menos o custo dos
+                produtos, as tarifas e o frete de lá. Pode ser um valor aproximado; dá para corrigir
+                depois.
+              </Hint>
+            </>
+          ) : form.basis === 'percentual' ? (
+            'Percentual sobre as vendas'
+          ) : form.basis === 'pedido' ? (
+            'Valor por pedido'
+          ) : (
+            'Valor'
+          )}
         </span>
         <span className="wiz-money">
           {form.basis !== 'percentual' && <i>R$</i>}
@@ -346,7 +388,7 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
 
       <div className="wiz-row">
         <label className="wiz-field">
-          <span>{form.basis === 'unico' ? 'Mês do pagamento' : 'Começa em'}</span>
+          <span>{form.basis === 'unico' ? (outra ? 'Mês' : 'Mês do pagamento') : 'Começa em'}</span>
           <input
             type="month"
             value={form.startMonth}
@@ -374,23 +416,25 @@ export function EntryWizard({ entry, kind, template, month, sample, onDone, onCl
         )}
       </div>
 
-      <label className="wiz-field">
-        <span>Grupo</span>
-        <select
-          value={form.category}
-          onChange={(e) => set('category', e.target.value as DreEntryInput['category'])}
-        >
-          {DRE_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {DRE_CATEGORY_LABELS[c]}
-            </option>
-          ))}
-        </select>
-      </label>
+      {!outra && (
+        <label className="wiz-field">
+          <span>Grupo</span>
+          <select
+            value={form.category}
+            onChange={(e) => set('category', e.target.value as DreEntryInput['category'])}
+          >
+            {DRE_CATEGORIES.filter((c) => c !== 'plataformas').map((c) => (
+              <option key={c} value={c}>
+                {DRE_CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {amount > 0 && (
         <p className="wiz-preview">
-          Em {monthLabel(month).toLowerCase()} isso dá <b>{money(preview)}</b>
+          Em {monthLabel(month).toLowerCase()} isso {outra ? 'soma' : 'dá'} <b>{money(preview)}</b>
           {form.basis === 'pedido' && <> ({sample.pedidos.toLocaleString('pt-BR')} pedidos)</>}
           {form.basis === 'percentual' && <> (sobre {money(sample.receitaBruta)} vendidos)</>}
           {form.basis === 'unico' && form.startMonth !== month && (

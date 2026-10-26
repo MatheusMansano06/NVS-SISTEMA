@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DreDto, DreSectionId } from '@nvs/shared';
 import { int, money } from '../../../shared/format';
+import { Hint } from '../../../shared/ui/Hint';
 import { SECTION_COPY } from '../dre-copy';
 
 /** Nome curto e exemplos do que entra em cada bloco, para quem nunca viu um DRE. */
@@ -9,13 +10,22 @@ const SIMPLE: Record<DreSectionId, { label: string; ex: string }> = {
   deducoes: { label: 'Impostos e descontos', ex: 'imposto da nota, cupons, devoluções' },
   cmv: { label: 'Mercadoria', ex: 'o que você pagou ao fornecedor pelo que vendeu' },
   variaveis: { label: 'Para vender', ex: 'tarifa do Mercado Livre, frete, anúncios, embalagem' },
+  outras: { label: 'Sobrou de outras plataformas', ex: 'TikTok Shop, Shopee… lançado por você' },
   fixas: { label: 'Para a empresa funcionar', ex: 'equipe, aluguel, internet, contador' },
   financeiras: { label: 'Bancos e juros', ex: 'juros e tarifas do banco' },
 };
 const COSTS: DreSectionId[] = ['deducoes', 'cmv', 'variaveis', 'fixas', 'financeiras'];
 
 /** Resumo para leigos: um "cupom" do mês (vendeu → saiu → sobrou) e uma única dica do que fazer. */
-export function SimpleView({ data, onSetup }: { data: DreDto; onSetup: () => void }) {
+export function SimpleView({
+  data,
+  onSetup,
+  onAddOther,
+}: {
+  data: DreDto;
+  onSetup: () => void;
+  onAddOther: () => void;
+}) {
   const [open, setOpen] = useState<DreSectionId | null>(null);
   const base = data.receitaBruta;
   const lucro = data.subtotals.lucro_liquido;
@@ -24,6 +34,7 @@ export function SimpleView({ data, onSetup }: { data: DreDto; onSetup: () => voi
   const rows = COSTS.filter(
     (id) => sec(id).total > 0 || (id === 'fixas' && data.lancamentos === 0),
   );
+  const outras = sec('outras');
 
   return (
     <>
@@ -83,6 +94,49 @@ export function SimpleView({ data, onSetup }: { data: DreDto; onSetup: () => voi
             </div>
           );
         })}
+        {outras.total > 0 ? (
+          <div className="rc-block" data-sec="outras">
+            <button
+              type="button"
+              className="rc-row rc-plus"
+              aria-expanded={open === 'outras'}
+              onClick={() => setOpen(open === 'outras' ? null : 'outras')}
+            >
+              <span className="rc-label">
+                <span>
+                  <span aria-hidden="true">{SECTION_COPY.outras.emoji}</span> {SIMPLE.outras.label}
+                </span>
+                <small>{SIMPLE.outras.ex}</small>
+              </span>
+              <b className="money">+ {money(outras.total)}</b>
+            </button>
+            {open === 'outras' && (
+              <ul className="rc-items">
+                {outras.items.map((it) => (
+                  <li key={it.key}>
+                    <span>{it.label}</span>
+                    <span className="money">{money(it.valor)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" className="link rc-add" onClick={onAddOther}>
+              + Somar outra plataforma
+            </button>
+          </div>
+        ) : (
+          <p className="rc-other">
+            Vende também na TikTok Shop, Shopee ou em outro lugar?{' '}
+            <button type="button" className="link" onClick={onAddOther}>
+              Somar o que sobrou de lá
+            </button>{' '}
+            <Hint label="somar outras plataformas">
+              Lance quanto sobrou das vendas fora do Mercado Livre (já tirando custo, tarifas e
+              frete de lá). O valor soma no que sobrou para você e ajuda a pagar as contas, sem
+              mudar o “Você vendeu”, que é só o Mercado Livre.
+            </Hint>
+          </p>
+        )}
         <div className="rc-row rc-out" data-neg={lucro < 0 || undefined}>
           <span className="rc-label">
             {lucro >= 0 ? '💰 Sobrou para você' : '⚠️ Faltou (prejuízo)'}

@@ -66,6 +66,15 @@ const STEPS: StepDef[] = [
       'Juros de empréstimo, antecipação e tarifas do banco. Só os juros: a parte que devolve o empréstimo não é despesa.',
     match: (t) => t.kind === 'despesa_financeira',
   },
+  {
+    id: 'plataformas',
+    emoji: '🛍️',
+    title: 'Outras plataformas',
+    kind: 'outra_plataforma',
+    intro:
+      'Vende também na TikTok Shop, Shopee ou em outro lugar? Informe quanto sobrou de lá neste mês (depois do custo dos produtos, tarifas e frete), mesmo que aproximado. Isso soma no resultado para pagar as contas. Não vende? Pode pular.',
+    match: (t) => t.kind === 'outra_plataforma',
+  },
   { id: 'pronto', emoji: '✅', title: 'Pronto', intro: '' },
 ];
 
@@ -74,11 +83,13 @@ const activeIn = (e: DreEntryDto, month: string) =>
     ? e.startMonth === month
     : e.startMonth <= month && (!e.endMonth || e.endMonth >= month);
 const unit = (e: Pick<DreEntryDto, 'basis' | 'amount'>) =>
-  e.basis === 'percentual'
-    ? `${e.amount.toLocaleString('pt-BR')}%`
-    : e.basis === 'pedido'
-      ? `${money(e.amount)}/pedido`
-      : `${money(e.amount)}/mês`;
+  e.basis === 'unico'
+    ? money(e.amount)
+    : e.basis === 'percentual'
+      ? `${e.amount.toLocaleString('pt-BR')}%`
+      : e.basis === 'pedido'
+        ? `${money(e.amount)}/pedido`
+        : `${money(e.amount)}/mês`;
 
 type Sub =
   | { type: 'person'; entry?: DreEntryDto }
@@ -161,7 +172,12 @@ export function CostSetup({
 
   const people = entries.filter((e) => e.category === 'pessoas');
   const fixedTotal = entries
-    .filter((e) => e.kind !== 'custo_variavel' && e.basis === 'mensal' && activeIn(e, month))
+    .filter(
+      (e) =>
+        (e.kind === 'despesa_fixa' || e.kind === 'despesa_financeira') &&
+        e.basis === 'mensal' &&
+        activeIn(e, month),
+    )
     .reduce((a, e) => a + e.amount, 0);
 
   return (
@@ -271,7 +287,9 @@ export function CostSetup({
                               ? 'por pedido'
                               : t.basis === 'percentual'
                                 ? '% das vendas'
-                                : 'por mês'
+                                : t.basis === 'unico'
+                                  ? 'neste mês'
+                                  : 'por mês'
                           }
                           value={values[t.name] ?? ''}
                           aria-label={`Valor de ${t.name}`}
@@ -327,7 +345,7 @@ export function CostSetup({
             className="link"
             onClick={() => setSub({ type: 'entry', kind: def.kind })}
           >
-            + Outro gasto deste tipo
+            {def.kind === 'outra_plataforma' ? '+ Outra plataforma' : '+ Outro gasto deste tipo'}
           </button>
         </div>
       )}
@@ -344,8 +362,8 @@ export function CostSetup({
             <b>Montar meus custos</b> e ajuste: os meses anteriores continuam como estavam.
           </p>
           <p className="dre-muted">
-            {people.filter((e) => activeIn(e, month)).length} pessoas na equipe · {entries.length}{' '}
-            gastos cadastrados
+            {people.filter((e) => activeIn(e, month)).length} pessoas na equipe ·{' '}
+            {entries.filter((e) => e.kind !== 'outra_plataforma').length} gastos cadastrados
           </p>
         </div>
       )}

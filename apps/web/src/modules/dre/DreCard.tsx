@@ -24,6 +24,7 @@ export function DreCard({ accountId, stamp }: { accountId?: string; stamp?: stri
 
   if (!data) return null;
   const lucro = data.subtotals.lucro_liquido;
+  const lucroMl = lucro - (data.sections.find((s) => s.id === 'outras')?.total ?? 0);
   const pe = data.pontoEquilibrio;
   return (
     <section
@@ -60,8 +61,8 @@ export function DreCard({ accountId, stamp }: { accountId?: string; stamp?: stri
             )
           ) : (
             <>
-              De cada R$ 100 vendidos, {lucro >= 0 ? 'sobram' : 'faltam'} R${' '}
-              {Math.abs(data.receitaBruta ? (lucro / data.receitaBruta) * 100 : 0)
+              De cada R$ 100 vendidos no Mercado Livre, {lucroMl >= 0 ? 'sobram' : 'faltam'} R${' '}
+              {Math.abs(data.receitaBruta ? (lucroMl / data.receitaBruta) * 100 : 0)
                 .toFixed(2)
                 .replace('.', ',')}
               .

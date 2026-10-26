@@ -171,6 +171,9 @@ export interface AdCampaignDto {
   /** TACOS dia a dia dos últimos 7 dias (null sem venda). */
   trend: (number | null)[];
   rules: number;
+  /** Anúncios patrocinados na campanha e as fotos dos primeiros (até 4, ativos antes). */
+  items: number;
+  thumbnails: string[];
 }
 
 export interface AdGoalDto {
@@ -221,6 +224,8 @@ export interface AdsRadarOverviewDto {
   goals: AdGoalDto[];
   rules: AdRuleDto[];
   unread: number;
+  /** Últimos 30 dias (hoje incluso), dias sem leitura zerados. */
+  daily: AdDailyDto[];
 }
 
 export interface AdDailyDto {

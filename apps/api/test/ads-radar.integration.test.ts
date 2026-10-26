@@ -226,7 +226,9 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(o.unread).toBe(0);
     const list = (await api('GET', '/campaigns')).json();
     expect(list.map((c: { name: string; status: string }) => [c.name, c.status])).toEqual([['Campanha A', 'ok'], ['Campanha B', 'ok']]);
-    expect(list[0].trend).toEqual([5, 5, 5, 5, 5, 5, 5]);
+    expect(list[0].trend).toEqual([5, 5, 5, 5, 5, 5, null]); // hoje entra na tendência (sem venda no teste)
+    expect(list[0]).toMatchObject({ items: 1, thumbnails: [] });
+    expect(o.daily).toHaveLength(30);
   });
 
   let ruleId = '';

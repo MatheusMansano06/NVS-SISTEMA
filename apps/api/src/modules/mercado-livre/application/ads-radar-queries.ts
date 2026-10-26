@@ -1,5 +1,5 @@
 import {
-  sumAdTotals,
+  EMPTY_AD_TOTALS, sumAdTotals,
   type AdCampaignDetailDto, type AdCampaignDto, type AdEventDto, type AdGoalDto, type AdGoalInput, type AdRuleDto, type AdRuleInput,
   type AdSimulateInput, type AdSimulationDto, type AdStatus, type AdsRadarOverviewDto,
 } from '@nvs/shared';
@@ -67,6 +67,11 @@ export class AdsRadarQueries {
         goals: await this.goalsWith(db, snap, today),
         rules: await this.rulesWith(db, rules, snap, today),
         unread,
+        daily: Array.from({ length: 30 }, (_, i) => {
+          const day = addDays(today, i - 29);
+          const k = kpis(all.find((d) => d.day === day) ?? EMPTY_AD_TOTALS);
+          return { day, cost: k.cost, adsSales: k.adsSales, totalSales: k.totalSales, tacos: k.tacos, acos: k.acos };
+        }),
       };
     });
   }
@@ -76,7 +81,26 @@ export class AdsRadarQueries {
       const snap = await loadSnapshot(db, addDays(today, -SCREEN_DAYS));
       const rules = (await loadRules(db, false)).filter((r) => r.enabled);
       const statuses = this.campaignStatuses(snap, rules, today);
-      return snap.campaigns.map((c) => this.campaignDto(c, snap, rules, statuses, today));
+      // fotos dos anúncios de cada campanha (ativos e que mais gastaram na semana primeiro)
+      const media = new Map(
+        (
+          await db.query<{ account_id: string; campaign_id: string; n: string; thumbs: string[] | null }>(
+            `SELECT i.account_id, i.campaign_id::text, count(*) AS n,
+                    (array_agg(i.thumbnail ORDER BY (i.status = 'active') DESC, coalesce(w.cost, 0) DESC, i.item_id)
+                       FILTER (WHERE i.thumbnail IS NOT NULL))[1:4] AS thumbs
+               FROM ad_items i
+               LEFT JOIN (SELECT account_id, item_id, sum(cost) AS cost FROM ad_item_daily WHERE day >= $1 GROUP BY account_id, item_id) w
+                 ON w.account_id = i.account_id AND w.item_id = i.item_id
+              WHERE i.campaign_id IS NOT NULL
+              GROUP BY i.account_id, i.campaign_id`,
+            [addDays(today, -6)],
+          )
+        ).rows.map((r) => [campaignKey(r.account_id, r.campaign_id), { items: Number(r.n), thumbnails: r.thumbs ?? [] }]),
+      );
+      return snap.campaigns.map((c) => ({
+        ...this.campaignDto(c, snap, rules, statuses, today),
+        ...(media.get(campaignKey(c.account_id, c.campaign_id)) ?? { items: 0, thumbnails: [] }),
+      }));
     });
   }
 
@@ -107,7 +131,11 @@ export class AdsRadarQueries {
         )
       ).rows;
       return {
-        campaign: this.campaignDto(c, snap, enabled, this.campaignStatuses(snap, enabled, today), today),
+        campaign: {
+          ...this.campaignDto(c, snap, enabled, this.campaignStatuses(snap, enabled, today), today),
+          items: items.length,
+          thumbnails: items.flatMap((i) => (i.thumbnail ? [i.thumbnail] : [])).slice(0, 4),
+        },
         series: series.map((d) => {
           const k = kpis(d);
           return { day: d.day, cost: k.cost, adsSales: k.adsSales, totalSales: k.totalSales, tacos: k.tacos, acos: k.acos };
@@ -238,10 +266,12 @@ export class AdsRadarQueries {
     return out;
   }
 
-  private campaignDto(c: CampaignRow, snap: Snapshot, rules: RuleRow[], statuses: Map<string, AdStatus>, today: string): AdCampaignDto {
+  private campaignDto(
+    c: CampaignRow, snap: Snapshot, rules: RuleRow[], statuses: Map<string, AdStatus>, today: string,
+  ): Omit<AdCampaignDto, 'items' | 'thumbnails'> {
     const key = campaignKey(c.account_id, c.campaign_id);
     const series = snap.series.get(key) ?? [];
-    const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 7));
+    const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
     return {
       accountId: c.account_id,
       campaignId: Number(c.campaign_id),

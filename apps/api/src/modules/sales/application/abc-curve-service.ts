@@ -47,7 +47,7 @@ export class AbcCurveService {
 
   async curve(tenantId: string, period: AbcPeriod): Promise<AbcCurveDto> {
     const range = abcRange(period, this.today());
-    const rows = await this.db.withTenant(tenantId, (db) => this.repo.byListing(db, range));
+    const rows = await this.db.withTenant(tenantId, (db) => this.repo.byListing(db, tenantId, range));
     const lines: Line[] = rows.map((row) => ({ row, cents: Number(row.revenue_cents), units: Number(row.units) }));
 
     // empate: decide pela outra medida e, por fim, pelo MLB (mesma ordem sempre)

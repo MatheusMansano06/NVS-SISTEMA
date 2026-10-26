@@ -345,7 +345,7 @@ export function AdsRadarPage() {
         {home ? (
           o ? (
             <AdsRadarHome
-              overview={o} campaigns={campaigns} onOpenCampaign={pick} onOpenGeneral={() => setView('geral')}
+              overview={o} campaigns={campaigns} onOpenCampaign={pick}
               onOpenGoals={() => setPanel({ kind: 'goals' })} onOpenAlerts={() => setPanel({ kind: 'alerts' })}
             />
           ) : !error && <div className="arh-empty">Carregando o Radar…</div>

@@ -229,6 +229,7 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(list[0].trend).toEqual([5, 5, 5, 5, 5, 5, null]); // hoje entra na tendência (sem venda no teste)
     expect(list[0]).toMatchObject({ items: 1, thumbnails: [] });
     expect(o.daily).toHaveLength(30);
+    expect(o.sales).toHaveLength(30);
   });
 
   let ruleId = '';

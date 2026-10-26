@@ -5,7 +5,7 @@ import {
 } from '@nvs/shared';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { AppError, NotFoundError } from '../../../shared/kernel/errors.js';
-import { todayIn } from '../../sales/index.js';
+import { PgSalesRepository, todayIn } from '../../sales/index.js';
 import {
   addDays, evaluateRule, goalPace, goalPeriod, simulateRule, statusAgainst, totalsIn, windowRange,
 } from '../domain/ads-radar.js';
@@ -34,6 +34,8 @@ interface GoalRow {
 
 /** Telas do Radar ADS: visão da conta, campanhas, regras, metas, alertas e simulação. */
 export class AdsRadarQueries {
+  private readonly sales = new PgSalesRepository();
+
   constructor(private readonly db: Database) {}
 
   async ensureFeature(tenantId: string): Promise<void> {
@@ -72,6 +74,9 @@ export class AdsRadarQueries {
           const k = kpis(all.find((d) => d.day === day) ?? EMPTY_AD_TOTALS);
           return { day, cost: k.cost, adsSales: k.adsSales, totalSales: k.totalSales, tacos: k.tacos, acos: k.acos };
         }),
+        sales: (await this.sales.series(db, { range: { from: addDays(today, -29), to: today }, marketplace: 'mercado_livre' }, 'day')).map((p) => ({
+          day: p.bucket.slice(0, 10), revenue: p.revenue, profit: p.profit,
+        })),
       };
     });
   }

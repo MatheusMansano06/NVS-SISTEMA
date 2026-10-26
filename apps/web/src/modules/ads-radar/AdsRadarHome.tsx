@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import type { AdCampaignDto, AdDailyDto, AdsRadarOverviewDto } from '@nvs/shared';
+import type { AdCampaignDto, AdDailyDto, AdSalesDayDto, AdsRadarOverviewDto } from '@nvs/shared';
 import { change, money } from '../../shared/format';
 import { STATUS_LABEL, TONE_COLOR, fmtPct, fmtX } from './AdsRadarPanels';
 
@@ -15,11 +15,63 @@ const inFilter = (c: AdCampaignDto, f: Filter) =>
 const short = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: v >= 10_000 ? 0 : 1 })} mil` : v.toLocaleString('pt-BR', { maximumFractionDigits: 0 }));
 const dayLabel = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
-function totals(days: AdDailyDto[]) {
+/** Totais do período: Ads do Mercado Ads; receita bruta e lucro das vendas do ML (mesma base do Dashboard). */
+function totals(days: AdDailyDto[], sales: AdSalesDayDto[]) {
   const cost = days.reduce((s, d) => s + d.cost, 0);
   const ads = days.reduce((s, d) => s + d.adsSales, 0);
-  const total = days.reduce((s, d) => s + d.totalSales, 0);
-  return { cost, ads, total, acos: ads ? (cost / ads) * 100 : null, tacos: total ? (cost / total) * 100 : null, roas: cost ? ads / cost : null };
+  const total = sales.reduce((s, d) => s + d.revenue, 0);
+  const profit = sales.reduce((s, d) => s + d.profit, 0);
+  return {
+    cost, ads, total, profit, acos: ads ? (cost / ads) * 100 : null, tacos: total ? (cost / total) * 100 : null, roas: cost ? ads / cost : null,
+    margin: total ? (profit / total) * 100 : null,
+  };
+}
+const pct = (v: number | null) => (v === null ? '—' : `${v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%`);
+
+/**
+ * A conta do TACOS no topo: Investimento ÷ Receita bruta × 100 = TACOS, e Margem antes dos Ads − TACOS = Margem pós Ads.
+ * O controle deslizante simula outro investimento (mantendo a receita) e refaz a conta na hora.
+ */
+function TacosHero({ now, period, target }: { now: ReturnType<typeof totals>; period: number; target: number | null }) {
+  const [sim, setSim] = useState<number | null>(null);
+  const cost = sim ?? now.cost;
+  const tacos = now.total ? (cost / now.total) * 100 : null;
+  const after = now.margin === null || tacos === null ? null : now.margin - tacos;
+  const afterValue = now.profit - cost;
+  const max = Math.max(1000, Math.ceil((now.cost * 2) / 100) * 100);
+  const tone = tacos === null ? undefined : target !== null ? (tacos > target ? 'bad' : tacos > target * 0.85 ? 'warn' : 'ok') : undefined;
+  return (
+    <section className="art" aria-label="Conta do TACOS">
+      <div className="art-head">
+        <div>
+          <h2>A conta do TACOS</h2>
+          <p>Quanto dos seus Ads pesa em tudo que você vendeu no Mercado Livre nos últimos {period} dias{sim !== null ? ' — simulando' : ''}.</p>
+        </div>
+        {sim !== null && <button type="button" className="ar-btn" onClick={() => setSim(null)}>Voltar ao real</button>}
+      </div>
+      <div className="art-eq">
+        <div className="art-term" data-sim={sim !== null || undefined}><span>Investimento em Ads</span><b>{money(cost)}</b></div>
+        <i>÷</i>
+        <div className="art-term"><span>Receita bruta</span><b>{money(now.total)}</b></div>
+        <i>× 100 =</i>
+        <div className="art-term art-result" data-tone={tone}><span>TACOS{target !== null ? ` · meta ${pct(target)}` : ''}</span><b>{pct(tacos)}</b></div>
+      </div>
+      <div className="art-eq art-eq2">
+        <div className="art-term"><span>Margem antes dos Ads</span><b>{pct(now.margin)}</b></div>
+        <i>−</i>
+        <div className="art-term"><span>TACOS</span><b>{pct(tacos)}</b></div>
+        <i>=</i>
+        <div className="art-term art-result" data-tone={after === null ? undefined : after < 0 ? 'bad' : after < 10 ? 'warn' : 'ok'}>
+          <span>Margem pós Ads</span><b>{pct(after)}</b><small>{money(afterValue)} de lucro</small>
+        </div>
+      </div>
+      <label className="art-sim">
+        <span>E se o investimento fosse <b>{money(cost)}</b>?</span>
+        <input type="range" min={0} max={max} step={Math.max(10, Math.round(max / 200))} value={Math.min(cost, max)} onChange={(e) => setSim(Number(e.target.value))} />
+        <small><span>R$ 0</span><span>{money(max)}</span></small>
+      </label>
+    </section>
+  );
 }
 
 function Delta({ now, before, inverse }: { now: number | null; before: number | null; inverse?: boolean }) {
@@ -139,12 +191,11 @@ function CampaignCard({ c, onOpen }: { c: AdCampaignDto; onOpen: () => void }) {
 
 /** Tela inicial do Radar ADS: painel do período, atalhos (fluxo geral, alertas, metas) e as campanhas em cartões. */
 export function AdsRadarHome({
-  overview: o, campaigns, onOpenCampaign, onOpenGeneral, onOpenGoals, onOpenAlerts,
+  overview: o, campaigns, onOpenCampaign, onOpenGoals, onOpenAlerts,
 }: {
   overview: AdsRadarOverviewDto;
   campaigns: AdCampaignDto[];
   onOpenCampaign: (c: AdCampaignDto) => void;
-  onOpenGeneral: () => void;
   onOpenGoals: () => void;
   onOpenAlerts: () => void;
 }) {
@@ -153,10 +204,10 @@ export function AdsRadarHome({
   const [sort, setSort] = useState<Sort>('gasto');
   const [q, setQ] = useState('');
   const days = o.daily.slice(-period);
-  const now = totals(days);
-  const prev = o.daily.length >= period * 2 ? totals(o.daily.slice(-period * 2, -period)) : null;
+  const now = totals(days, o.sales.slice(-period));
+  const prev = o.daily.length >= period * 2 ? totals(o.daily.slice(-period * 2, -period), o.sales.slice(-period * 2, -period)) : null;
+  const tacosGoal = o.goals.find((g) => g.kind === 'tacos');
   const adsShare = now.total ? Math.round((now.ads / now.total) * 100) : 0;
-  const generalRules = o.rules.filter((r) => r.scope !== 'campanha').length;
   const month = o.goals.find((g) => g.kind === 'gasto_mes');
 
   const list = useMemo(() => {
@@ -172,6 +223,7 @@ export function AdsRadarHome({
 
   return (
     <div className="arh">
+      <TacosHero key={period} now={now} period={period} target={tacosGoal?.target ?? null} />
       <section className="arh-dash">
         <div className="arh-dash-head">
           <div>
@@ -187,7 +239,6 @@ export function AdsRadarHome({
           <div className="arh-tile" data-c="sky"><span>Vendas com Ads</span><b>{money(now.ads)}</b><Delta now={now.ads} before={prev?.ads ?? null} /></div>
           <div className="arh-tile" data-c="violet"><span>ROAS</span><b>{fmtX(now.roas)}</b><small>a cada R$ 1 investido</small></div>
           <div className="arh-tile" data-c="mint"><span>ACOS</span><b>{fmtPct(now.acos)}</b><small>gasto ÷ vendas com Ads</small></div>
-          <div className="arh-tile" data-c="sun"><span>TACOS</span><b>{fmtPct(now.tacos)}</b><small>gasto ÷ todas as vendas</small></div>
         </div>
         <div className="arh-dash-body">
           <Chart days={days} />
@@ -203,15 +254,6 @@ export function AdsRadarHome({
       </section>
 
       <section className="arh-cards">
-        <button type="button" className="arh-card arh-general" onClick={onOpenGeneral}>
-          <span className="arh-card-ico" aria-hidden="true">⌘</span>
-          <div>
-            <b>Fluxo geral da conta</b>
-            <p>Regras e metas que valem para todas as campanhas de uma vez.</p>
-            <small>{generalRules} regra{generalRules === 1 ? '' : 's'} geral{generalRules === 1 ? '' : 'is'} · {o.goals.length} meta{o.goals.length === 1 ? '' : 's'}</small>
-          </div>
-          <span className="arh-go">Abrir fluxo →</span>
-        </button>
         <button type="button" className="arh-card arh-mini arh-alerts" data-tone={o.unread ? 'estourado' : undefined} onClick={onOpenAlerts}>
           <span>Alertas</span>
           <b>{o.rules.filter((r) => r.enabled).length}<small> ligado{o.rules.filter((r) => r.enabled).length === 1 ? '' : 's'}</small></b>

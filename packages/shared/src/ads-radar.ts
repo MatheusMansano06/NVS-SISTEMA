@@ -226,6 +226,16 @@ export interface AdsRadarOverviewDto {
   unread: number;
   /** Últimos 30 dias (hoje incluso), dias sem leitura zerados. */
   daily: AdDailyDto[];
+  /** Vendas do Mercado Livre nos mesmos 30 dias (pedidos pagos, como no Dashboard): base do TACOS e da margem pós Ads. */
+  sales: AdSalesDayDto[];
+}
+
+export interface AdSalesDayDto {
+  day: string;
+  /** Receita bruta (valor dos pedidos pagos). */
+  revenue: number;
+  /** Lucro antes dos Ads: receita − tarifas − frete − custo − imposto. */
+  profit: number;
 }
 
 export interface AdDailyDto {

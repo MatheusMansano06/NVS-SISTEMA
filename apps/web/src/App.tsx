@@ -70,7 +70,7 @@ const GATED: { prefix: string; feature: TenantFeature; page: () => ReactNode }[]
   { prefix: '/anuncios', feature: 'anuncios', page: () => <ListingsPage /> },
   { prefix: '/financeiro', feature: 'financeiro', page: () => <FinancePage /> },
   { prefix: '/dre', feature: 'dre', page: () => <DrePage /> },
-  { prefix: '/curva-abc', feature: 'vendas', page: () => <AbcPage /> },
+  { prefix: '/curva-abc', feature: 'curva_abc', page: () => <AbcPage /> },
 ];
 /** Telas que já trazem o AppShell próprio (as demais são embrulhadas aqui). */
 const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/radar-ads', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro', '/dre', '/curva-abc']);

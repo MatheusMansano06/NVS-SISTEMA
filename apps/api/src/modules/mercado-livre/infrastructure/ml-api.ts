@@ -268,8 +268,9 @@ export class MlApiError extends Error {
 
 const API = 'https://api.mercadolibre.com';
 const AUTH = 'https://auth.mercadolivre.com.br/authorization';
-/** Métricas do Mercado Ads pedidas nas buscas do Radar ADS. */
-const AD_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount,units_quantity,organic_units_quantity,organic_units_amount,lost_impression_share_by_budget';
+/** Métricas do Mercado Ads pedidas nas buscas do Radar ADS (as mesmas em campanhas e anúncios). */
+const AD_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount,units_quantity,organic_units_quantity,organic_units_amount';
+const AD_BASE_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount';
 export const ORDERS_PAGE_SIZE = 50;
 export const LISTINGS_PAGE_SIZE = 100;
 
@@ -659,22 +660,38 @@ export class HttpMlApi implements MlApi, MlRawApi {
   }
 
   adCampaigns(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdCampaign[]> {
-    return this.adSearch<MlAdCampaign>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search`, day);
+    return this.adSearch<MlAdCampaign>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search`, day, AD_METRICS);
   }
 
   adItems(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdItem[]> {
-    return this.adSearch<MlAdItem>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/ads/search`, day);
+    return this.adSearch<MlAdItem>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/ads/search`, day, AD_METRICS);
   }
 
+  /** Métricas que o ML aceitou em cada busca (descobertas na primeira recusa; valem enquanto o processo vive). */
+  private readonly adMetricsOk = new Map<string, string>();
+
   /** Busca paginada (50 por página) do Mercado Ads com as métricas de um dia. */
-  private async adSearch<T>(token: string, path: string, day: string): Promise<T[]> {
+  private async adSearch<T>(token: string, path: string, day: string, wanted: string): Promise<T[]> {
     const headers = { authorization: `Bearer ${token}`, accept: 'application/json', 'api-version': '2' };
+    const kind = path.endsWith('/campaigns/search') ? 'campaigns' : 'ads';
     const out: T[] = [];
     for (let offset = 0; ; offset += 50) {
-      const page = await this.request<{ results?: T[]; paging?: { total?: number } }>(
-        `${path}?limit=50&offset=${offset}&date_from=${day}&date_to=${day}&metrics=${AD_METRICS}`,
-        { headers },
-      );
+      const url = (m: string, limit = 50) => `${path}?limit=${limit}&offset=${offset}&date_from=${day}&date_to=${day}&metrics=${m}`;
+      type Page = { results?: T[]; paging?: { total?: number } };
+      const metrics = this.adMetricsOk.get(kind) ?? wanted;
+      const page = await this.request<Page>(url(metrics), { headers }).catch(async (err) => {
+        if (!(err instanceof MlApiError && err.status === 400) || this.adMetricsOk.has(kind)) throw err;
+        // 400 = alguma métrica recusada: testa uma a uma sobre as básicas e fica só com as aceitas (sem perder orgânico e unidades)
+        const extra = wanted.split(',').filter((m) => !AD_BASE_METRICS.split(',').includes(m));
+        const ok = [AD_BASE_METRICS];
+        for (const m of extra) {
+          const accepted = await this.request<Page>(url(`${AD_BASE_METRICS},${m}`, 1), { headers }).then(() => true, () => false);
+          if (accepted) ok.push(m);
+        }
+        this.adMetricsOk.set(kind, ok.join(','));
+        console.warn(`Mercado Ads (${kind}): métricas recusadas pelo ML: ${extra.filter((m) => !ok.includes(m)).join(', ') || 'nenhuma'} — ${err.message}`);
+        return this.request<Page>(url(this.adMetricsOk.get(kind)!), { headers });
+      });
       out.push(...(page.results ?? []));
       if (!page.results?.length || offset + 50 >= (page.paging?.total ?? 0)) return out;
     }
@@ -743,8 +760,15 @@ export class HttpMlApi implements MlApi, MlRawApi {
         await sleep(500 * 2 ** attempt);
         continue;
       }
-      const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-      throw new MlApiError(body.message || body.error || `HTTP ${res.status}`, res.status, body.error);
+      const raw = await res.text().catch(() => '');
+      let body: { message?: string; error?: string } = {};
+      try {
+        body = JSON.parse(raw) as typeof body;
+      } catch {
+        /* corpo vazio ou não-JSON */
+      }
+      // sem message/error: leva o corpo cru para o log mostrar o motivo do ML
+      throw new MlApiError(body.message || body.error || `HTTP ${res.status}${raw ? `: ${raw.slice(0, 300)}` : ''}`, res.status, body.error);
     }
   }
 }

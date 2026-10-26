@@ -50,8 +50,14 @@ export class AdsRadarService {
     let days = 0;
     const st = await this.ml.status(tenantId);
     for (const c of st.connections.filter((x) => x.status === 'active')) {
-      days += await this.syncAccount(tenantId, c.id).catch((err) => {
+      days += await this.syncAccount(tenantId, c.id).catch(async (err) => {
         this.log.error({ err, tenantId }, 'Radar ADS: leitura das métricas falhou');
+        // a tela mostra o motivo em vez de "primeira leitura em andamento" para sempre
+        await this.db
+          .withTenant(tenantId, (db) =>
+            db.query(`UPDATE ad_accounts SET metrics_error = $2 WHERE account_id = $1`, [c.accountId, String((err as Error).message).slice(0, 300)]),
+          )
+          .catch(() => undefined);
         return 0;
       });
     }
@@ -77,7 +83,13 @@ export class AdsRadarService {
       const day = addDays(today, -i);
       const { token } = await this.ml.accessToken(tenantId, connectionId);
       const campaigns = await this.api.adCampaigns(token, acc.advertiser_id, SITE, day);
-      const items = i < itemDays ? await this.api.adItems(token, acc.advertiser_id, SITE, day) : null;
+      // anúncios são detalhe: se o ML recusar, segue só com as campanhas
+      const items = i < itemDays
+        ? await this.api.adItems(token, acc.advertiser_id, SITE, day).catch((err) => {
+            this.log.error({ err, tenantId, day }, 'Radar ADS: leitura dos anúncios falhou');
+            return null;
+          })
+        : null;
       await this.db.withTenant(tenantId, async (db) => {
         if (i === 0) await this.saveCurrent(db, tenantId, conn.account_id, campaigns, items ?? []);
         await this.saveDay(db, tenantId, conn.account_id, day, campaigns, items);
@@ -86,7 +98,7 @@ export class AdsRadarService {
     }
     await this.db.withTenant(tenantId, (db) =>
       db.query(
-        `UPDATE ad_accounts SET metrics_synced_at = now(), metrics_backfilled_at = coalesce(metrics_backfilled_at, now()) WHERE account_id = $1`,
+        `UPDATE ad_accounts SET metrics_synced_at = now(), metrics_error = NULL, metrics_backfilled_at = coalesce(metrics_backfilled_at, now()) WHERE account_id = $1`,
         [conn.account_id],
       ),
     );
@@ -119,6 +131,12 @@ export class AdsRadarService {
            campaign_id = EXCLUDED.campaign_id, title = EXCLUDED.title, status = EXCLUDED.status, price = EXCLUDED.price,
            thumbnail = EXCLUDED.thumbnail, logistic_type = EXCLUDED.logistic_type, fetched_at = now()`,
         [tenantId, accountId, JSON.stringify(items.map(({ metrics: _m, ...i }) => i))],
+      );
+      // o ML só lista os anúncios que estão no Ads hoje: quem saiu deixa de contar na campanha antiga
+      await db.query(
+        `UPDATE ad_items SET campaign_id = NULL, status = 'fora_do_ads', fetched_at = now()
+          WHERE account_id = $1 AND campaign_id IS NOT NULL AND NOT (item_id = ANY($2::text[]))`,
+        [accountId, items.map((i) => i.item_id)],
       );
     }
   }

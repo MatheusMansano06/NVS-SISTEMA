@@ -88,6 +88,21 @@ export const TOURS = {
     { target: '.dash-duo', title: 'Mais vendidos e pausados', text: 'À esquerda os 5 produtos que mais venderam. À direita os anúncios pausados — principalmente os sem estoque, que estão deixando de vender.' },
     { title: 'Tudo certo! 🎉', text: 'Dica: compare sempre com o período anterior. Para entender de onde vem cada número, use a Análise Financeira e a aba Vendas.' },
   ],
+  abc: [
+    {
+      title: 'Curva ABC 🔤',
+      text:
+        'Aqui seus anúncios entram numa fila, do que mais vende para o que menos vende, e são separados em 3 grupos.\n' +
+        'A são os campeões (somados, chegam a 80% das vendas), B os intermediários (até 95%) e C o resto.\n' +
+        'Serve para saber onde pôr energia: estoque, preço e Ads primeiro nos A.',
+    },
+    { target: '.abc .abc-period', title: 'Período', text: 'A curva usa só as vendas pagas dos últimos 30, 60 ou 90 dias. Canceladas e devolvidas ficam de fora.' },
+    { target: '.abc .abc-metric', title: 'Faturamento ou unidades', text: 'Por faturamento mostra quem traz o dinheiro; por unidades, quem mais gira no estoque. Um anúncio barato pode ser C em reais e A em unidades.' },
+    { target: '.abc-classes', title: 'Resumo das classes', text: 'Quantos anúncios estão em cada classe e quanto eles somam. Clique num cartão para ver só os anúncios daquela classe.' },
+    { target: '.abc-pareto', title: 'Poucos fazem muito', text: 'A primeira barra é a quantidade de anúncios; a segunda, o quanto eles vendem. Normalmente uma fatia pequena de anúncios faz quase tudo.' },
+    { target: '.abc-list > li:first-child', title: 'Anúncio a anúncio', text: 'Posição na fila, faturamento, unidades, quanto ele representa sozinho (% do total) e somado aos de cima (% acumulado). O acumulado é o que define a classe.' },
+    { title: 'Pronto! 🎉', text: 'Dica: confira se os anúncios A têm estoque e margem boa — qualquer problema neles pesa no mês inteiro. Se esquecer, clique em “Rever com a Gertrudez”.' },
+  ],
   dre: [
     {
       title: 'Resultado do mês (DRE) 📊',
@@ -159,6 +174,29 @@ export const TOURS = {
     { target: '.op-add', title: 'Cadastrar', text: 'Nome, função (Análise, Operação ou as duas) e se é MASTER. Todo mundo começa com o PIN 1234 e troca se quiser.' },
     { target: '.op-list', title: 'A equipe', text: 'Mude a função, torne MASTER, resete o PIN de quem esqueceu (ou errou 5 vezes) e desative quem saiu. Sempre fica pelo menos um MASTER.' },
     { title: 'Na Operação também 🎉', text: 'MASTER que entra na Operação tem o botão “Equipe” lá em cima para cadastrar sem precisar vir na Análise.' },
+  ],
+  'radar-ads': [
+    {
+      title: 'Oi! Este é o Radar ADS 🎯',
+      text:
+        'Aqui você acompanha o Mercado Ads sem abrir o ML: quanto investiu, quanto vendeu e quais campanhas estão saindo do controle.\n' +
+        'O Radar lê o Mercado Ads a cada hora e te avisa quando algo passa do limite que você escolher.\n' +
+        'Vou te mostrar as partes em menos de 1 minuto.',
+    },
+    { target: '.art', title: 'A conta do TACOS', text: 'Investimento em Ads ÷ receita bruta × 100 = TACOS. Logo abaixo: margem antes dos Ads − TACOS = margem pós Ads. Em “Simular investimento” você testa outro valor; o botão − recolhe o quadro.' },
+    { target: '.arh-dash', title: 'Desempenho dos Ads', text: 'Os números da conta no período: investimento, vendas com Ads, ROAS, ACOS e TACOS. A setinha compara com o período anterior.' },
+    { target: '.arh-seg', title: 'Período', text: 'Troque entre 7, 15 e 30 dias. Sempre conta hoje, igual ao painel do Mercado Livre.' },
+    { target: '.arh-chart', title: 'Dia a dia', text: 'Barras azuis são as vendas com Ads e a linha roxa é o investimento. Passe o mouse num dia para ver os valores.' },
+    { target: '.arh-share', title: 'De onde vêm as vendas', text: 'Quanto do faturamento veio dos anúncios patrocinados e quanto veio sem Ads.' },
+    { target: '.arh-alerts', title: 'Alertas', text: 'Escolha quando quer ser avisado, por exemplo “campanhas com TACOS acima de 4%”. É só digitar o número e ligar.' },
+    { target: '.ar-head', title: 'Fluxo geral', text: 'No botão “Fluxo geral” do topo fica o quadro estilo fluxograma com as regras e metas da conta toda.' },
+    { target: '.arc-grid .arc:first-child', title: 'Cada campanha', text: 'Fotos dos anúncios, gasto, vendas e o ACOS comparado com o alvo do ML (verde dentro, vermelho acima). Clique para abrir o fluxo só dela e criar regras.' },
+    {
+      title: 'Pronto! 🎉',
+      text:
+        'Comece ligando o alerta de TACOS e olhando as campanhas com ACOS vermelho — é ali que o dinheiro escapa.\n' +
+        'Se esquecer de algo, clique em “Rever com a Gertrudez” no topo da tela.',
+    },
   ],
   full: [
     {

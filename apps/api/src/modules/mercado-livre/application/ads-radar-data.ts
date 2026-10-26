@@ -1,5 +1,6 @@
 import { EMPTY_AD_TOTALS, adMetric, type AdCondition, type AdKpisDto, type AdRuleScope, type AdTotals } from '@nvs/shared';
 import type { Queryable } from '../../../shared/infrastructure/database.js';
+import { TIMEZONE } from '../../sales/index.js';
 import type { AdDay } from '../domain/ads-radar.js';
 
 /** Leitura comum ao avaliador de regras e às telas do Radar ADS. */
@@ -50,11 +51,30 @@ export async function loadSnapshot(db: Queryable, since: string): Promise<Snapsh
       [since],
     )
   ).rows;
+  // Vendas dos anúncios da campanha por dia, dos pedidos pagos (mesma base do Dashboard). O ML costuma devolver as vendas
+  // orgânicas zeradas; aí "sem Ads" = receita dos pedidos − vendas atribuídas aos Ads, e o TACOS fica gasto ÷ receita bruta.
+  const revenue = new Map(
+    (
+      await db.query<{ account_id: string; campaign_id: string; day: string; revenue: string }>(
+        `SELECT a.account_id, a.campaign_id::text, to_char(o.ordered_at AT TIME ZONE '${TIMEZONE}', 'YYYY-MM-DD') AS day,
+                sum(i.quantity * i.unit_price) AS revenue
+           FROM order_items i
+           JOIN orders o ON o.id = i.order_id
+           JOIN ad_items a ON a.item_id = i.listing_id AND a.account_id = o.account_id
+          WHERE o.status = 'paid' AND a.campaign_id IS NOT NULL AND o.ordered_at >= ($1::date)::timestamp AT TIME ZONE '${TIMEZONE}'
+          GROUP BY 1, 2, 3`,
+        [since],
+      )
+    ).rows.map((r) => [`${campaignKey(r.account_id, r.campaign_id)}:${r.day}`, Number(r.revenue)]),
+  );
   const series = new Map<string, AdDay[]>();
   for (const r of rows) {
+    const ads = Number(r.direct_amount) + Number(r.indirect_amount);
+    const fromOrders = revenue.get(`${campaignKey(r.account_id, r.campaign_id)}:${r.day}`);
+    const organic = Number(r.organic_amount) || (fromOrders === undefined ? 0 : Math.max(0, Math.round((fromOrders - ads) * 100) / 100));
     const d: AdDay = {
       day: r.day, cost: Number(r.cost), clicks: r.clicks, prints: Number(r.prints), directAmount: Number(r.direct_amount),
-      indirectAmount: Number(r.indirect_amount), units: r.units, organicUnits: r.organic_units, organicAmount: Number(r.organic_amount),
+      indirectAmount: Number(r.indirect_amount), units: r.units, organicUnits: r.organic_units, organicAmount: organic,
     };
     const k = campaignKey(r.account_id, r.campaign_id);
     const list = series.get(k);

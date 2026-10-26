@@ -113,7 +113,14 @@ describe.skipIf(!TEST_DB)('Radar ADS', () => {
   it('leituras seguintes relêem só os 3 últimos dias', async () => {
     fake.calls.campaigns.length = 0;
     fake.calls.items.length = 0;
+    // anúncio que saiu do Ads no ML (não vem mais na lista) não pode continuar contando na campanha
+    const acc = await db.withTenant(novaes.id, async (c) => (await c.query<{ account_id: string }>(`SELECT account_id FROM ad_items LIMIT 1`)).rows[0]!.account_id);
+    await db.withTenant(novaes.id, (c) =>
+      c.query(`INSERT INTO ad_items (tenant_id, account_id, item_id, campaign_id, title, status) VALUES ($1, $2, 'MLB9', 2, 'Saiu do Ads', 'active')`, [novaes.id, acc]),
+    );
     await service.syncAccount(novaes.id, 'conn', today);
+    expect(await count(`SELECT count(*) AS n FROM ad_items WHERE campaign_id = 2`)).toBe(2);
+    expect(await count(`SELECT count(*) AS n FROM ad_items WHERE item_id = 'MLB9' AND campaign_id IS NULL AND status = 'fora_do_ads'`)).toBe(1);
     expect(fake.calls.campaigns).toHaveLength(3);
     expect(fake.calls.items).toHaveLength(3);
     expect(await count(`SELECT count(*) AS n FROM ad_campaign_daily`)).toBe(180); // regravou, não duplicou
@@ -191,7 +198,7 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(res.json().error.code).toBe('FEATURE_LOCKED');
   });
 
-  it('visão da conta: campanha acima do alvo de ACOS aparece estourada', async () => {
+  it('visão da conta: sem regra da empresa nenhuma campanha é julgada', async () => {
     await db.query(`UPDATE tenants SET features = array_append(features, 'radar_ads') WHERE id = $1`, [tenantId]);
     accountId = await db.withTenant(tenantId, async (c) => {
       const a = await c.query<{ id: string }>(
@@ -220,12 +227,16 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     });
     const o = (await api('GET', '/overview')).json();
     expect(o.account).toMatchObject({ status: 'ok', backfilled: true });
-    expect(o.campaigns).toEqual({ ok: 1, atencao: 0, estourado: 1, total: 2 });
-    expect(o.last7).toMatchObject({ cost: 77, tacos: 2.75, acos: 5.5 });
+    expect(o.campaigns).toEqual({ ok: 2, atencao: 0, estourado: 0, total: 2 });
+    // 7 dias como no ML: hoje (sem dado aqui) e os 6 anteriores
+    expect(o.last7).toMatchObject({ cost: 66, tacos: 2.75, acos: 5.5 });
     expect(o.unread).toBe(0);
     const list = (await api('GET', '/campaigns')).json();
-    expect(list.map((c: { name: string; status: string }) => [c.name, c.status])).toEqual([['Campanha A', 'estourado'], ['Campanha B', 'ok']]);
-    expect(list[0].trend).toEqual([5, 5, 5, 5, 5, 5, 5]);
+    expect(list.map((c: { name: string; status: string }) => [c.name, c.status])).toEqual([['Campanha A', 'ok'], ['Campanha B', 'ok']]);
+    expect(list[0].trend).toEqual([5, 5, 5, 5, 5, 5, null]); // hoje entra na tendência (sem venda no teste)
+    expect(list[0]).toMatchObject({ items: 1, thumbnails: [] });
+    expect(o.daily).toHaveLength(30);
+    expect(o.sales).toHaveLength(30);
   });
 
   let ruleId = '';
@@ -276,7 +287,10 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(detail.series).toHaveLength(20);
     expect(detail.rules).toHaveLength(1);
     expect(detail.events).toHaveLength(1);
-    expect(detail.items[0]).toMatchObject({ itemId: 'MLB1', title: 'Viseira', last7: { cost: 70 } });
+    expect(detail.items[0]).toMatchObject({ itemId: 'MLB1', title: 'Viseira', last7: { cost: 60 } });
+    expect(detail.items[0]).toMatchObject({ sold: 0, prints: 0, health: null }); // sem impressões no seed: sem régua
+    expect((await api('GET', `/campaigns/${accountId}/1?days=30`)).json().items[0].last7.cost).toBe(200);
+    expect((await api('GET', `/campaigns/${accountId}/1?days=15`)).statusCode).toBe(400);
     expect((await api('GET', `/campaigns/${accountId}/999`)).statusCode).toBe(404);
 
     expect((await api('POST', '/events/read', {})).statusCode).toBe(204);

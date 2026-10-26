@@ -171,6 +171,9 @@ export interface AdCampaignDto {
   /** TACOS dia a dia dos últimos 7 dias (null sem venda). */
   trend: (number | null)[];
   rules: number;
+  /** Anúncios patrocinados na campanha e as fotos dos primeiros (até 4, ativos antes). */
+  items: number;
+  thumbnails: string[];
 }
 
 export interface AdGoalDto {
@@ -213,7 +216,7 @@ export interface AdEventDto {
 
 export interface AdsRadarOverviewDto {
   /** Situação da leitura: sem anunciante / sem permissão vêm da leitura do investimento. */
-  account: { status: 'ok' | 'sem_anunciante' | 'sem_permissao' | 'erro' | 'sem_conta'; syncedAt: string | null; backfilled: boolean };
+  account: { status: 'ok' | 'sem_anunciante' | 'sem_permissao' | 'erro' | 'sem_conta'; syncedAt: string | null; backfilled: boolean; error: string | null };
   today: string;
   last7: AdKpisDto;
   prev7: AdKpisDto;
@@ -221,6 +224,18 @@ export interface AdsRadarOverviewDto {
   goals: AdGoalDto[];
   rules: AdRuleDto[];
   unread: number;
+  /** Últimos 30 dias (hoje incluso), dias sem leitura zerados. */
+  daily: AdDailyDto[];
+  /** Vendas do Mercado Livre nos mesmos 30 dias (pedidos pagos, como no Dashboard): base do TACOS e da margem pós Ads. */
+  sales: AdSalesDayDto[];
+}
+
+export interface AdSalesDayDto {
+  day: string;
+  /** Receita bruta (valor dos pedidos pagos). */
+  revenue: number;
+  /** Lucro antes dos Ads: receita − tarifas − frete − custo − imposto. */
+  profit: number;
 }
 
 export interface AdDailyDto {
@@ -238,8 +253,20 @@ export interface AdItemDto {
   thumbnail: string | null;
   status: string | null;
   price: number | null;
+  /** Números do período pedido (7 ou 30 dias, hoje incluso); o nome ficou do tempo em que era sempre 7. */
   last7: AdKpisDto;
+  prints: number;
+  clicks: number;
+  /** Unidades vendidas do anúncio no período (pedidos pagos, com e sem Ads). */
+  sold: number;
+  /** Cliques esperados pelas impressões: impressões ÷ AD_PRINTS_PER_CLICK. */
+  expected: number;
+  /** abaixo = teve menos cliques que o esperado pelas impressões (atenção extrema); null = sem impressões no período. */
+  health: 'ok' | 'abaixo' | null;
 }
+
+/** Régua do anúncio: pelo menos 1 clique a cada 300 impressões (CTR ≥ 0,33%). Abaixo disso o anúncio aparece e ninguém clica. */
+export const AD_PRINTS_PER_CLICK = 300;
 
 export interface AdCampaignDetailDto {
   campaign: AdCampaignDto;

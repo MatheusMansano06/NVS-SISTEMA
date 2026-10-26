@@ -9,7 +9,7 @@ const base = '/api/v1/ads-radar';
 export const adsRadarApi = {
   overview: () => http<AdsRadarOverviewDto>(`${base}/overview`),
   campaigns: () => http<AdCampaignDto[]>(`${base}/campaigns`),
-  campaign: (accountId: string, campaignId: number) => http<AdCampaignDetailDto>(`${base}/campaigns/${accountId}/${campaignId}`),
+  campaign: (accountId: string, campaignId: number, days: 7 | 30 = 7) => http<AdCampaignDetailDto>(`${base}/campaigns/${accountId}/${campaignId}?days=${days}`),
   rules: () => http<AdRuleDto[]>(`${base}/rules`),
   createRule: (body: AdRuleInput) => http<{ id: string }>(`${base}/rules`, { body }),
   updateRule: (id: string, body: AdRuleInput) => http<void>(`${base}/rules/${id}`, { method: 'PUT', body }),

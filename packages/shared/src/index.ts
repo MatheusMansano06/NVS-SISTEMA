@@ -20,4 +20,5 @@ export * from './pricing-study.js';
 export * from './pricing-supplier.js';
 export * from './ean.js';
 export * from './ads-radar.js';
+export * from './abc-curve.js';
 export * from './product-radar.js';

@@ -137,9 +137,10 @@ export function DrePage() {
   const lucro = data?.subtotals.lucro_liquido ?? 0;
   const lucroShown = useCountUp(lucro);
   const tour = useGuidedTour('dre', TOURS.dre, Boolean(data) && !loading && view === 'simples');
-  const margemLiq = data && data.receitaBruta > 0 ? (lucro / data.receitaBruta) * 100 : null;
   const diff = data?.previous ? lucro - data.previous.lucroLiquido : null;
-  const per100 = margemLiq ?? 0;
+  const outras = data?.sections.find((s) => s.id === 'outras')?.total ?? 0;
+  // "de cada R$ 100 vendidos" é só do Mercado Livre; a sobra de outras plataformas aparece à parte
+  const per100 = data && data.receitaBruta > 0 ? ((lucro - outras) / data.receitaBruta) * 100 : 0;
 
   return (
     <AppShell>
@@ -281,7 +282,16 @@ export function DrePage() {
                       maximumFractionDigits: 2,
                     })}
                   </b>{' '}
-                  {lucro >= 0 ? 'ficaram com você.' : 'faltaram para pagar as contas.'}
+                  {lucro - outras >= 0 ? 'ficaram com você' : 'faltaram para pagar as contas'}
+                  {outras > 0 ? (
+                    <>
+                      {' '}
+                      no Mercado Livre, mais <b className="money">{money(outras)}</b> que sobraram
+                      de outras plataformas.
+                    </>
+                  ) : (
+                    '.'
+                  )}
                 </p>
               )}
               {(diff !== null || data.projecao) && (
@@ -323,7 +333,11 @@ export function DrePage() {
 
             {view === 'simples' ? (
               <>
-                <SimpleView data={data} onSetup={() => setSetup(true)} />
+                <SimpleView
+                  data={data}
+                  onSetup={() => setSetup(true)}
+                  onAddOther={() => setWizard({ kind: 'outra_plataforma' })}
+                />
                 <details className="panel dre-learn-mini">
                   <summary>📚 Não entendeu algo? Aprenda o básico em 1 minuto</summary>
                   <DreLearn />

@@ -7,6 +7,7 @@ const total = (d: DreDto, id: DreSectionId) => d.sections.find((s) => s.id === i
 /** "Quanto preciso vender para não ter prejuízo?" — o ponto de equilíbrio em linguagem de gente. */
 export function BreakEven({ data, onAddFixed }: { data: DreDto; onAddFixed: () => void }) {
   const fixed = total(data, 'fixas') + total(data, 'financeiras');
+  const outras = total(data, 'outras');
   const pe = data.pontoEquilibrio;
   const ticket = data.pedidos ? data.receitaBruta / data.pedidos : 0;
   const progress = pe ? Math.min(1, data.receitaBruta / pe) : 0;
@@ -66,8 +67,9 @@ export function BreakEven({ data, onAddFixed }: { data: DreDto; onAddFixed: () =
             )}
           </p>
           <p className="dre-muted">
-            Conta: despesas fixas e financeiras ({money(fixed)}) ÷ quanto sobra de cada real vendido
-            (
+            Conta: despesas fixas e financeiras ({money(fixed)})
+            {outras > 0 && <> menos a sobra de outras plataformas ({money(outras)})</>} ÷ quanto
+            sobra de cada real vendido no Mercado Livre (
             {((data.subtotals.margem_contribuicao / data.receitaBruta) * 100)
               .toFixed(1)
               .replace('.', ',')}
@@ -126,7 +128,7 @@ export function WhatIf({ data }: { data: DreDto }) {
   // o que depende das vendas acompanha o volume; o custo da mercadoria também muda pela negociação
   const margem =
     (t('receita') - t('deducoes') - t('variaveis')) * v - t('cmv') * (1 + custo / 100) * v;
-  const lucro = margem - t('fixas') * (1 + fixas / 100) - t('financeiras');
+  const lucro = margem + t('outras') - t('fixas') * (1 + fixas / 100) - t('financeiras');
   const atual = data.subtotals.lucro_liquido;
   const diff = lucro - atual;
   const touched = vendas !== 0 || custo !== 0 || fixas !== 0;

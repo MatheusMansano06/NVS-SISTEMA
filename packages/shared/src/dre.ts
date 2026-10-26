@@ -4,13 +4,21 @@ import { staffCostSchema, type StaffMember } from './team-cost.js';
 /**
  * DRE simplificado (Demonstração do Resultado): do que você vendeu até o que sobrou no bolso.
  * O que vem do marketplace é automático; o resto a empresa lança como custo variável, despesa fixa ou financeira.
+ * `outra_plataforma` é o contrário de um gasto: o que sobrou das vendas fora do Mercado Livre (TikTok Shop, Shopee…),
+ * informado à mão, que soma para pagar a estrutura.
  */
-export const DRE_KINDS = ['custo_variavel', 'despesa_fixa', 'despesa_financeira'] as const;
+export const DRE_KINDS = [
+  'custo_variavel',
+  'despesa_fixa',
+  'despesa_financeira',
+  'outra_plataforma',
+] as const;
 export type DreKind = (typeof DRE_KINDS)[number];
 export const DRE_KIND_LABELS: Record<DreKind, string> = {
   custo_variavel: 'Custo variável',
   despesa_fixa: 'Despesa fixa',
   despesa_financeira: 'Despesa financeira',
+  outra_plataforma: 'Sobra de outra plataforma',
 };
 
 export const DRE_BASES = ['mensal', 'pedido', 'percentual', 'unico'] as const;
@@ -31,6 +39,7 @@ export const DRE_CATEGORIES = [
   'logistica',
   'financeiro',
   'outros',
+  'plataformas',
 ] as const;
 export type DreCategory = (typeof DRE_CATEGORIES)[number];
 export const DRE_CATEGORY_LABELS: Record<DreCategory, string> = {
@@ -42,6 +51,7 @@ export const DRE_CATEGORY_LABELS: Record<DreCategory, string> = {
   logistica: 'Logística e embalagem',
   financeiro: 'Bancos e juros',
   outros: 'Outros',
+  plataformas: 'Outras plataformas',
 };
 
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Mês inválido (AAAA-MM)');
@@ -66,6 +76,10 @@ export const dreEntrySchema = z
   .refine((e) => e.basis !== 'percentual' || e.amount <= 100, {
     message: 'Percentual até 100%',
     path: ['amount'],
+  })
+  .refine((e) => e.kind !== 'outra_plataforma' || e.basis === 'mensal' || e.basis === 'unico', {
+    message: 'A sobra de outra plataforma é um valor do mês',
+    path: ['basis'],
   });
 export type DreEntryInput = z.infer<typeof dreEntrySchema>;
 
@@ -99,12 +113,13 @@ export interface DreEntryDto {
   details: StaffMember | null;
 }
 
-/** Blocos que tiram dinheiro (ou o trazem, na receita), na ordem do DRE. */
+/** Blocos que tiram dinheiro (ou o trazem: a receita e a sobra de outras plataformas), na ordem do DRE. */
 export const DRE_SECTIONS = [
   'receita',
   'deducoes',
   'cmv',
   'variaveis',
+  'outras',
   'fixas',
   'financeiras',
 ] as const;
@@ -126,6 +141,7 @@ export const DRE_FLOW: (DreSectionId | DreSubtotalId)[] = [
   'lucro_bruto',
   'variaveis',
   'margem_contribuicao',
+  'outras',
   'fixas',
   'lucro_operacional',
   'financeiras',

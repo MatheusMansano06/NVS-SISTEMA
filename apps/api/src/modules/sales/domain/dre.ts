@@ -141,6 +141,7 @@ export function computeDre(i: DreInput): DreResult {
       ]),
       ...manual('custo_variavel'),
     ],
+    outras: manual('outra_plataforma'),
     fixas: manual('despesa_fixa'),
     financeiras: manual('despesa_financeira'),
   };
@@ -152,7 +153,8 @@ export function computeDre(i: DreInput): DreResult {
   const receitaLiquida = r2(t.receita - t.deducoes);
   const lucroBruto = r2(receitaLiquida - t.cmv);
   const margem = r2(lucroBruto - t.variaveis);
-  const operacional = r2(margem - t.fixas);
+  // o que sobrou fora do Mercado Livre ajuda a pagar a estrutura (não entra na receita: não mexe nos % das vendas)
+  const operacional = r2(margem + t.outras - t.fixas);
   const liquido = r2(operacional - t.financeiras);
   const subtotals: Record<DreSubtotalId, number> = {
     receita_liquida: receitaLiquida,
@@ -174,7 +176,8 @@ export function computeDre(i: DreInput): DreResult {
     receitaBruta: r2(t.receita),
     pedidos: s.pedidos,
     unidades: s.unidades,
-    pontoEquilibrio: mcRatio > 0 ? r2((t.fixas + t.financeiras) / mcRatio) : null,
+    pontoEquilibrio:
+      mcRatio > 0 ? r2(Math.max(0, t.fixas + t.financeiras - t.outras) / mcRatio) : null,
     cobertura: {
       semCustoQtd: s.semCustoQtd,
       semCustoValor: r2(s.semCustoValor),

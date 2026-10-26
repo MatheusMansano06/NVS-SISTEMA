@@ -132,6 +132,8 @@ export function DreStatement({
         const isOpen = open.has(id);
         const kind = ADDABLE[id];
         const income = id === 'receita';
+        // a sobra de outras plataformas entra (soma), como a receita, mas não é 100% das vendas
+        const plus = id === 'outras';
         return (
           <div
             key={id}
@@ -171,7 +173,7 @@ export function DreStatement({
                 {helpBtn(id, copy.label)}
               </span>
               <span role="cell" className="num money st-val">
-                {income ? '' : '− '}
+                {income ? '' : plus ? '+ ' : '− '}
                 {money(s.total)}
               </span>
               <span role="cell" className="num st-pct">
@@ -216,7 +218,7 @@ export function DreStatement({
                         )}
                       </span>
                       <span role="cell" className="num money">
-                        {income ? '' : '− '}
+                        {income ? '' : plus ? '+ ' : '− '}
                         {money(it.valor)}
                       </span>
                       <span role="cell" className="num st-pct">
@@ -225,10 +227,18 @@ export function DreStatement({
                     </div>
                   );
                 })}
-                {!s.items.length && <p className="st-empty">Nada aqui neste mês.</p>}
+                {!s.items.length && (
+                  <p className="st-empty">
+                    {plus
+                      ? 'Vende em outra plataforma? Some aqui o que sobrou de lá.'
+                      : 'Nada aqui neste mês.'}
+                  </p>
+                )}
                 {kind && (
                   <button type="button" className="st-add" onClick={() => onAdd(kind)}>
-                    + Lançar {copy.label.toLowerCase()}
+                    {plus
+                      ? '+ Somar sobra de outra plataforma'
+                      : `+ Lançar ${copy.label.toLowerCase()}`}
                   </button>
                 )}
               </div>

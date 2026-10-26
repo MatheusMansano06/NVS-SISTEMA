@@ -94,7 +94,7 @@ export class DreService {
     const { rows } = await this.db.withTenant(tenantId, (db) =>
       db.query<EntryRow>(
         `INSERT INTO dre_entries (tenant_id, name, kind, category, basis, amount, start_month, end_month, notes, details, created_by)
-         VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, $11) RETURNING ${COLS}`,
+         VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, $9, $11) RETURNING ${COLS}`,
         [...params(e), tenantId, userId],
       ),
     );
@@ -156,7 +156,8 @@ export class DreService {
           ? projectDre(current, days / elapsed)
           : null,
       previous,
-      lancamentos: entries.length,
+      // custos da empresa (a sobra de outras plataformas não é custo)
+      lancamentos: entries.filter((e) => e.kind !== 'outra_plataforma').length,
       generatedAt: new Date().toISOString(),
     };
   }

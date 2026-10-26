@@ -1596,3 +1596,33 @@ dialog.modal:has(.wiz, .setup, .entries) {
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+
+/* ============ Sobra de outras plataformas (soma no resultado) ============ */
+.dre,
+.dre-card-mini {
+  --c-outras: #c2255c;
+}
+:root[data-theme='dark'] :is(.dre, .dre-card-mini) {
+  --c-outras: #f06595;
+}
+[data-sec='outras'] {
+  --c: var(--c-outras);
+}
+[data-kind='outra_plataforma'] {
+  --k: var(--c-outras, #c2255c);
+}
+.rc-plus .money {
+  color: var(--ok-ink);
+}
+.rc-other {
+  margin: 4px 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--gray-50);
+  color: var(--gray-500);
+  font-size: 0.84rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}

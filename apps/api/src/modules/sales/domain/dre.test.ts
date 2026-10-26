@@ -50,6 +50,7 @@ describe('DRE simplificado', () => {
       deducoes: 1_090,
       cmv: 3_500,
       variaveis: 2_800,
+      outras: 0,
       fixas: 1_400,
       financeiras: 150,
     });
@@ -83,5 +84,51 @@ describe('DRE simplificado', () => {
     expect(p.receitaBruta).toBe(20_000);
     // margem dobra (2610×2 = 5220, com DIFAL fixo: +40) − fixas e financeiras do mês
     expect(p.lucroLiquido).toBe(5_220 + 40 - 1_400 - 150);
+  });
+
+  it('sobra de outras plataformas soma no resultado sem mexer na receita nem nos % das vendas', () => {
+    const outras = [
+      entry({
+        name: 'TikTok Shop',
+        kind: 'outra_plataforma',
+        category: 'plataformas',
+        basis: 'unico',
+        amount: 900,
+        startMonth: '2026-10',
+      }),
+      entry({ name: 'Shopee', kind: 'outra_plataforma', category: 'plataformas', amount: 300 }),
+      // outubro não: lançado só para setembro
+      entry({
+        name: 'TikTok set',
+        kind: 'outra_plataforma',
+        category: 'plataformas',
+        basis: 'unico',
+        amount: 5_000,
+        startMonth: '2026-09',
+      }),
+    ];
+    const d = computeDre({ ...base, entries: [...entries, ...outras] });
+    const sec = d.sections.find((s) => s.id === 'outras')!;
+    expect(sec.total).toBe(1_200);
+    expect(sec.items.map((i) => i.label)).toEqual(['TikTok Shop', 'Shopee']);
+    expect(d.receitaBruta).toBe(10_000);
+    expect(d.subtotals.margem_contribuicao).toBe(2_610);
+    // 2610 + 1200 − 1400 = 2410 ; − 150 = 2260
+    expect(d.subtotals.lucro_operacional).toBe(2_410);
+    expect(d.subtotals.lucro_liquido).toBe(2_260);
+    // a sobra paga parte da estrutura: (1400 + 150 − 1200) / 26,1%
+    expect(d.pontoEquilibrio).toBeCloseTo(1_341, 0);
+    // projeção: a sobra lançada não acompanha o ritmo das vendas do ML
+    expect(projectDre({ ...base, entries: [...entries, ...outras] }, 2).lucroLiquido).toBe(
+      5_220 + 40 - 1_400 - 150 + 1_200,
+    );
+  });
+
+  it('sobra maior que a estrutura: ponto de equilíbrio zero (já está pago)', () => {
+    const d = computeDre({
+      ...base,
+      entries: [...entries, entry({ name: 'Shopee', kind: 'outra_plataforma', amount: 5_000 })],
+    });
+    expect(d.pontoEquilibrio).toBe(0);
   });
 });

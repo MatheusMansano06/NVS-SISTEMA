@@ -155,6 +155,27 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     expect((await app.inject({ method: 'GET', url: `/api/v1/dre?month=${month}`, cookies })).statusCode).toBe(403);
   });
 
+  it('DRE: sobra de outras plataformas (TikTok, Shopee) soma no que sobrou, sem mexer no que vendeu no ML', async () => {
+    const cookies = await setup();
+    const month = today.slice(0, 7);
+    const post = (payload: object) => app.inject({ method: 'POST', url: '/api/v1/dre/entries', cookies, payload });
+    const outra = { kind: 'outra_plataforma', category: 'plataformas', startMonth: month };
+    expect((await post({ ...outra, name: 'TikTok Shop', basis: 'unico', amount: 900 })).statusCode).toBe(201);
+    expect((await post({ ...outra, name: 'Shopee', basis: 'mensal', amount: 300 })).statusCode).toBe(201);
+    // é um valor do mês: não aceita % das vendas nem por pedido
+    expect((await post({ ...outra, name: 'Errado', basis: 'percentual', amount: 10 })).statusCode).toBe(400);
+    await post({ name: 'Aluguel', kind: 'despesa_fixa', category: 'estrutura', basis: 'mensal', amount: 1000, startMonth: month });
+
+    const d = (await app.inject({ method: 'GET', url: `/api/v1/dre?month=${month}&fresh=1`, cookies })).json();
+    const total = (id: string) => d.sections.find((s: { id: string }) => s.id === id).total;
+    expect(total('outras')).toBe(1200);
+    expect(d.receitaBruta).toBe(480);
+    expect(d.subtotals.lucro_operacional).toBeCloseTo(d.subtotals.margem_contribuicao + 1200 - 1000, 2);
+    expect(d.subtotals.lucro_liquido).toBe(d.subtotals.lucro_operacional);
+    // só o aluguel conta como custo da empresa
+    expect(d.lancamentos).toBe(1);
+  });
+
   it('tabela linha a linha com filtros, paginação e exportação', async () => {
     const cookies = await setup();
     const all = (await get(cookies, 'lines')).json();

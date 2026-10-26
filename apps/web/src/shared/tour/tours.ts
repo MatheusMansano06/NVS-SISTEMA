@@ -168,7 +168,7 @@ export const TOURS = {
         'O Radar lê o Mercado Ads a cada hora e te avisa quando algo passa do limite que você escolher.\n' +
         'Vou te mostrar as partes em menos de 1 minuto.',
     },
-    { target: '.art', title: 'A conta do TACOS', text: 'Investimento em Ads ÷ receita bruta × 100 = TACOS. Logo abaixo: margem antes dos Ads − TACOS = margem pós Ads. Arraste a barrinha para simular outro investimento.' },
+    { target: '.art', title: 'A conta do TACOS', text: 'Investimento em Ads ÷ receita bruta × 100 = TACOS. Logo abaixo: margem antes dos Ads − TACOS = margem pós Ads. Em “Simular investimento” você testa outro valor; o botão − recolhe o quadro.' },
     { target: '.arh-dash', title: 'Desempenho dos Ads', text: 'Os números da conta no período: investimento, vendas com Ads, ROAS, ACOS e TACOS. A setinha compara com o período anterior.' },
     { target: '.arh-seg', title: 'Período', text: 'Troque entre 7, 15 e 30 dias. Sempre conta hoje, igual ao painel do Mercado Livre.' },
     { target: '.arh-chart', title: 'Dia a dia', text: 'Barras azuis são as vendas com Ads e a linha roxa é o investimento. Passe o mouse num dia para ver os valores.' },

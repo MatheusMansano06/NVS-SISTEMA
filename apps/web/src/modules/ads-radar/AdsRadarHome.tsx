@@ -34,8 +34,29 @@ const pct = (v: number | null) => (v === null ? '—' : `${v.toLocaleString('pt-
  * A conta do TACOS no topo: Investimento ÷ Receita bruta × 100 = TACOS, e Margem antes dos Ads − TACOS = Margem pós Ads.
  * O controle deslizante simula outro investimento (mantendo a receita) e refaz a conta na hora.
  */
+const OPEN_KEY = 'nvs:radar-ads:conta-tacos';
+const readOpen = () => {
+  try {
+    return localStorage.getItem(OPEN_KEY) !== '0';
+  } catch {
+    return true;
+  }
+};
+
 function TacosHero({ now, period, target }: { now: ReturnType<typeof totals>; period: number; target: number | null }) {
   const [sim, setSim] = useState<number | null>(null);
+  const [open, setOpen] = useState(readOpen);
+  const [simOpen, setSimOpen] = useState(false);
+  const toggle = () => {
+    setOpen((v) => {
+      try {
+        localStorage.setItem(OPEN_KEY, v ? '0' : '1');
+      } catch {
+        /* sem armazenamento: só não lembra a escolha */
+      }
+      return !v;
+    });
+  };
   const cost = sim ?? now.cost;
   const tacos = now.total ? (cost / now.total) * 100 : null;
   const after = now.margin === null || tacos === null ? null : now.margin - tacos;
@@ -43,14 +64,29 @@ function TacosHero({ now, period, target }: { now: ReturnType<typeof totals>; pe
   const max = Math.max(1000, Math.ceil((now.cost * 2) / 100) * 100);
   const tone = tacos === null ? undefined : target !== null ? (tacos > target ? 'bad' : tacos > target * 0.85 ? 'warn' : 'ok') : undefined;
   return (
-    <section className="art" aria-label="Conta do TACOS">
+    <section className="art" aria-label="Conta do TACOS" data-closed={!open || undefined}>
       <div className="art-head">
         <div>
           <h2>A conta do TACOS</h2>
-          <p>Quanto dos seus Ads pesa em tudo que você vendeu no Mercado Livre nos últimos {period} dias{sim !== null ? ' — simulando' : ''}.</p>
+          {open ? (
+            <p>Quanto dos seus Ads pesa em tudo que você vendeu no Mercado Livre nos últimos {period} dias{sim !== null ? ' — simulando' : ''}.</p>
+          ) : (
+            <p className="art-mini">
+              <span data-tone={tone}>TACOS <b>{pct(tacos)}</b></span>
+              <span>Margem pós Ads <b>{pct(after)}</b></span>
+              <span>{money(afterValue)} de lucro</span>
+            </p>
+          )}
         </div>
-        {sim !== null && <button type="button" className="ar-btn" onClick={() => setSim(null)}>Voltar ao real</button>}
+        <div className="art-actions">
+          {open && sim !== null && <button type="button" className="ar-btn" onClick={() => setSim(null)}>Voltar ao real</button>}
+          {open && sim === null && <button type="button" className="ar-btn" aria-expanded={simOpen} onClick={() => setSimOpen((v) => !v)}>{simOpen ? 'Fechar simulador' : 'Simular investimento'}</button>}
+          <button type="button" className="art-toggle" aria-expanded={open} aria-label={open ? 'Recolher a conta do TACOS' : 'Expandir a conta do TACOS'} onClick={toggle}>
+            <span aria-hidden="true">{open ? '−' : '+'}</span>
+          </button>
+        </div>
       </div>
+      {open && (<>
       <div className="art-eq">
         <div className="art-term" data-sim={sim !== null || undefined}><span>Investimento em Ads<Hint label="investimento em Ads">{G.investimento}</Hint></span><b>{money(cost)}</b></div>
         <i>÷</i>
@@ -67,11 +103,14 @@ function TacosHero({ now, period, target }: { now: ReturnType<typeof totals>; pe
           <span>Margem pós Ads<Hint label="margem pós Ads">{G.margemPos}</Hint></span><b>{pct(after)}</b><small>{money(afterValue)} de lucro</small>
         </div>
       </div>
+      {(simOpen || sim !== null) && (
       <label className="art-sim">
         <span>E se o investimento fosse <b>{money(cost)}</b>?</span>
         <input type="range" min={0} max={max} step={Math.max(10, Math.round(max / 200))} value={Math.min(cost, max)} onChange={(e) => setSim(Number(e.target.value))} />
         <small><span>R$ 0</span><span>{money(max)}</span></small>
       </label>
+      )}
+      </>)}
     </section>
   );
 }

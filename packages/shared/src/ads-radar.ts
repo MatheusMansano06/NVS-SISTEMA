@@ -259,14 +259,14 @@ export interface AdItemDto {
   clicks: number;
   /** Unidades vendidas do anúncio no período (pedidos pagos, com e sem Ads). */
   sold: number;
-  /** Vendas esperadas pelas impressões: impressões ÷ AD_PRINTS_PER_SALE. */
+  /** Cliques esperados pelas impressões: impressões ÷ AD_PRINTS_PER_CLICK. */
   expected: number;
-  /** abaixo = vendeu menos que o esperado pelas impressões (atenção extrema); null = sem impressões no período. */
+  /** abaixo = teve menos cliques que o esperado pelas impressões (atenção extrema); null = sem impressões no período. */
   health: 'ok' | 'abaixo' | null;
 }
 
-/** Régua de conversão por impressões: 1 venda a cada 300 impressões. Abaixo disso o anúncio não converte o tráfego. */
-export const AD_PRINTS_PER_SALE = 300;
+/** Régua do anúncio: pelo menos 1 clique a cada 300 impressões (CTR ≥ 0,33%). Abaixo disso o anúncio aparece e ninguém clica. */
+export const AD_PRINTS_PER_CLICK = 300;
 
 export interface AdCampaignDetailDto {
   campaign: AdCampaignDto;

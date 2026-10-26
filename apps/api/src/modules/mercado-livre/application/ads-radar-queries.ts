@@ -1,5 +1,5 @@
 import {
-  AD_PRINTS_PER_SALE, EMPTY_AD_TOTALS, sumAdTotals,
+  AD_PRINTS_PER_CLICK, EMPTY_AD_TOTALS, sumAdTotals,
   type AdCampaignDetailDto, type AdCampaignDto, type AdEventDto, type AdGoalDto, type AdGoalInput, type AdRuleDto, type AdRuleInput,
   type AdSimulateInput, type AdSimulationDto, type AdStatus, type AdsRadarOverviewDto,
 } from '@nvs/shared';
@@ -161,7 +161,8 @@ export class AdsRadarQueries {
           const ads = Number(i.direct_amount) + Number(i.indirect_amount);
           const prints = Number(i.prints);
           const sold = Number(i.sold);
-          const expected = Math.round((prints / AD_PRINTS_PER_SALE) * 10) / 10;
+          const clicks = Number(i.clicks);
+          const expected = Math.round((prints / AD_PRINTS_PER_CLICK) * 10) / 10;
           return {
             itemId: i.item_id, title: i.title, thumbnail: i.thumbnail, status: i.status, price: i.price === null ? null : Number(i.price),
             last7: kpis({
@@ -170,8 +171,8 @@ export class AdsRadarQueries {
               // o ML devolve o orgânico zerado: "sem Ads" = receita dos pedidos − vendas atribuídas
               organicAmount: Number(i.organic_amount) || Math.max(0, Math.round((Number(i.revenue) - ads) * 100) / 100),
             }),
-            prints, clicks: Number(i.clicks), sold, expected,
-            health: prints === 0 ? null : sold < expected ? ('abaixo' as const) : ('ok' as const),
+            prints, clicks, sold, expected,
+            health: prints === 0 ? null : clicks < expected ? ('abaixo' as const) : ('ok' as const),
           };
         }),
       };

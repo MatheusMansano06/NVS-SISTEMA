@@ -359,31 +359,47 @@
 }
 @media (max-width: 560px) { .art { padding: 16px; } .art-term b { font-size: 1.1rem; } .art-result b { font-size: 1.4rem; } }
 
-/* ---- anúncios da campanha + régua impressões ÷ 300 */
-.ari-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding-right: 44px; }
-.ari-head .ar-sub { margin: 4px 0 0; }
-.ari-rule { margin: 16px 0 12px; display: grid; gap: 4px; padding: 14px 16px; border-radius: 20px 20px 20px 8px; background: var(--gray-50); font-size: .84rem; color: var(--gray-500); }
-.ari-rule b { color: var(--navy); font-size: .92rem; }
-.ari-rule em { font-style: normal; font-weight: 700; }
-.ari-rule [data-tone='bad'] { color: var(--danger); } .ari-rule [data-tone='ok'] { color: var(--ok-ink); }
-.ari-rule strong { margin-top: 4px; font-size: .9rem; }
-.ari-tools { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-.ari-list { display: grid; }
-.ari-row { display: grid; grid-template-columns: minmax(220px, 2.6fr) repeat(4, minmax(70px, .8fr)) 130px minmax(90px, 1fr) 70px; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 16px; font-size: .86rem; color: var(--navy); font-variant-numeric: tabular-nums; }
-.ari-row + .ari-row { box-shadow: 0 -1px 0 var(--gray-100); }
-.ari-row[data-health='abaixo'] { background: color-mix(in srgb, var(--danger-soft) 55%, transparent); }
-.ari-row small { color: var(--gray-500); font-size: .72rem; }
-.ari-row-head { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--gray-500); padding-block: 6px; }
-.ari-item { display: flex; gap: 10px; align-items: center; min-width: 0; }
-.ari-item img, .ari-noimg { flex: none; width: 48px; height: 48px; border-radius: 12px; object-fit: contain; background: #fff; box-shadow: 0 0 0 1px var(--gray-100); }
-.ari-item > span { display: grid; min-width: 0; }
-.ari-item b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ari-badge { font-style: normal; display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: .72rem; font-weight: 700; background: var(--gray-100); color: var(--gray-500); white-space: nowrap; }
-.ari-badge[data-tone='bad'] { background: var(--danger); color: #fff; }
-.ari-badge[data-tone='ok'] { background: var(--ok-soft); color: var(--ok-ink); }
-@media (max-width: 900px) {
-  .ari-row-head { display: none; }
-  .ari-row { grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 12px; }
+/* ---- anúncios da campanha: impressões, cliques, CTR e impressões ÷ 300 (régua discreta) */
+.ari-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-right: 44px; }
+.ari-head p { margin: 2px 0 0; font-size: .84rem; color: var(--gray-500); }
+.ari-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0 10px; }
+.ari-flow { margin-left: auto; }
+.ari-chip { border: 0; font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 99px; background: var(--surface); color: var(--gray-500); box-shadow: inset 0 0 0 1px var(--gray-100); }
+.ari-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+.ari-chip[aria-pressed='true'] { background: var(--danger-soft); color: var(--danger-ink); box-shadow: none; }
+.ari-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ari-cols, .ari-row { display: grid; grid-template-columns: minmax(0, 2.4fr) repeat(4, minmax(84px, 1fr)); gap: 10px; align-items: center; }
+.ari-cols { padding: 0 14px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--gray-500); }
+.ari-cols span:not(:first-child) { text-align: right; }
+.ari-row { padding: 10px 14px; border-radius: 20px 20px 20px 8px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); transition: box-shadow .2s, transform .2s; }
+.ari-row:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px var(--gray-100), 0 14px 28px -20px rgba(11,28,77,.4); }
+.ari-item { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.ari-item img, .ari-noimg { flex: none; width: 52px; height: 52px; border-radius: 14px; object-fit: contain; padding: 4px; background: var(--gray-50); }
+.ari-item > span { display: grid; gap: 2px; min-width: 0; }
+.ari-item b { font-size: .88rem; font-weight: 600; color: var(--navy); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ari-item small { font-size: .72rem; color: var(--gray-500); }
+.ari-m { text-align: right; font-variant-numeric: tabular-nums; }
+.ari-m small { display: none; }
+.ari-m b { font-size: .95rem; font-weight: 650; color: var(--navy); }
+.ari-rule-v b { display: inline-flex; align-items: center; gap: 6px; }
+.ari-rule-v[data-tone] b::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ari-rule-v[data-tone='bad'] b { color: var(--danger); }
+.ari-rule-v[data-tone='ok'] b { color: var(--ok-ink); }
+@media (max-width: 760px) {
+  .ari-cols { display: none; }
+  .ari-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
   .ari-item { grid-column: 1 / -1; }
-  .ari-row > [data-label]::before { content: attr(data-label) ': '; color: var(--gray-500); font-size: .72rem; }
+  .ari-m { text-align: left; padding: 6px 8px; border-radius: 12px; background: var(--gray-50); }
+  .ari-m small { display: block; font-size: .62rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ari-m b { font-size: .86rem; }
+  .ari-flow { margin-left: 0; }
 }
+
+/* conta do TACOS recolhível */
+.art[data-closed] { padding-block: 14px; gap: 0; }
+.art-actions { display: flex; gap: 8px; align-items: center; }
+.art-toggle { width: 36px; height: 36px; border: 0; border-radius: 50%; cursor: pointer; font: 600 1.2rem/1 var(--font); color: var(--navy); background: var(--gray-100); display: grid; place-items: center; transition: background .2s; }
+.art-toggle:hover { background: var(--blue-soft); }
+.art-mini { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.art-mini b { color: var(--navy); font-variant-numeric: tabular-nums; }
+.art-mini [data-tone='ok'] b { color: var(--ok-ink); } .art-mini [data-tone='warn'] b { color: var(--warn-ink); } .art-mini [data-tone='bad'] b { color: var(--danger); }

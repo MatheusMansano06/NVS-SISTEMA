@@ -1,11 +1,11 @@
 import {
-  EMPTY_AD_TOTALS, sumAdTotals,
+  AD_PRINTS_PER_SALE, EMPTY_AD_TOTALS, sumAdTotals,
   type AdCampaignDetailDto, type AdCampaignDto, type AdEventDto, type AdGoalDto, type AdGoalInput, type AdRuleDto, type AdRuleInput,
   type AdSimulateInput, type AdSimulationDto, type AdStatus, type AdsRadarOverviewDto,
 } from '@nvs/shared';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { AppError, NotFoundError } from '../../../shared/kernel/errors.js';
-import { todayIn } from '../../sales/index.js';
+import { PgSalesRepository, TIMEZONE, todayIn } from '../../sales/index.js';
 import {
   addDays, evaluateRule, goalPace, goalPeriod, simulateRule, statusAgainst, totalsIn, windowRange,
 } from '../domain/ads-radar.js';
@@ -34,6 +34,8 @@ interface GoalRow {
 
 /** Telas do Radar ADS: visão da conta, campanhas, regras, metas, alertas e simulação. */
 export class AdsRadarQueries {
+  private readonly sales = new PgSalesRepository();
+
   constructor(private readonly db: Database) {}
 
   async ensureFeature(tenantId: string): Promise<void> {
@@ -72,6 +74,9 @@ export class AdsRadarQueries {
           const k = kpis(all.find((d) => d.day === day) ?? EMPTY_AD_TOTALS);
           return { day, cost: k.cost, adsSales: k.adsSales, totalSales: k.totalSales, tacos: k.tacos, acos: k.acos };
         }),
+        sales: (await this.sales.series(db, { range: { from: addDays(today, -29), to: today }, marketplace: 'mercado_livre' }, 'day')).map((p) => ({
+          day: p.bucket.slice(0, 10), revenue: p.revenue, profit: p.profit,
+        })),
       };
     });
   }
@@ -104,7 +109,7 @@ export class AdsRadarQueries {
     });
   }
 
-  async campaign(tenantId: string, accountId: string, campaignId: number, today = todayIn()): Promise<AdCampaignDetailDto> {
+  async campaign(tenantId: string, accountId: string, campaignId: number, days: 7 | 30 = 7, today = todayIn()): Promise<AdCampaignDetailDto> {
     return this.db.withTenant(tenantId, async (db) => {
       const snap = await loadSnapshot(db, addDays(today, -SCREEN_DAYS));
       const c = snap.campaigns.find((x) => x.account_id === accountId && x.campaign_id === String(campaignId));
@@ -117,17 +122,27 @@ export class AdsRadarQueries {
         await db.query<{
           item_id: string; title: string | null; thumbnail: string | null; status: string | null; price: string | null;
           cost: string; clicks: string; prints: string; direct_amount: string; indirect_amount: string; units: string; organic_units: string; organic_amount: string;
+          sold: string; revenue: string;
         }>(
           `SELECT i.item_id, i.title, i.thumbnail, i.status, i.price,
                   coalesce(sum(d.cost), 0) AS cost, coalesce(sum(d.clicks), 0) AS clicks, coalesce(sum(d.prints), 0) AS prints,
                   coalesce(sum(d.direct_amount), 0) AS direct_amount, coalesce(sum(d.indirect_amount), 0) AS indirect_amount,
-                  coalesce(sum(d.units), 0) AS units, coalesce(sum(d.organic_units), 0) AS organic_units, coalesce(sum(d.organic_amount), 0) AS organic_amount
+                  coalesce(sum(d.units), 0) AS units, coalesce(sum(d.organic_units), 0) AS organic_units, coalesce(sum(d.organic_amount), 0) AS organic_amount,
+                  coalesce(max(s.sold), 0) AS sold, coalesce(max(s.revenue), 0) AS revenue
              FROM ad_items i
              LEFT JOIN ad_item_daily d ON d.account_id = i.account_id AND d.item_id = i.item_id AND d.day BETWEEN $3 AND $4
+             LEFT JOIN (
+               SELECT o.account_id, oi.listing_id, sum(oi.quantity) AS sold, sum(oi.quantity * oi.unit_price) AS revenue
+                 FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                WHERE o.status = 'paid' AND o.account_id = $1
+                  AND o.ordered_at >= ($3::date)::timestamp AT TIME ZONE '${TIMEZONE}'
+                  AND o.ordered_at < ($4::date + 1)::timestamp AT TIME ZONE '${TIMEZONE}'
+                GROUP BY 1, 2
+             ) s ON s.account_id = i.account_id AND s.listing_id = i.item_id
             WHERE i.account_id = $1 AND i.campaign_id = $2
             GROUP BY i.item_id, i.title, i.thumbnail, i.status, i.price
             ORDER BY coalesce(sum(d.cost), 0) DESC`,
-          [accountId, campaignId, addDays(today, -6), today],
+          [accountId, campaignId, addDays(today, -(days - 1)), today],
         )
       ).rows;
       return {
@@ -142,13 +157,23 @@ export class AdsRadarQueries {
         }),
         rules: await this.rulesWith(db, mine, snap, today),
         events: await this.eventsOf(db, 30, { accountId, campaignId }),
-        items: items.map((i) => ({
-          itemId: i.item_id, title: i.title, thumbnail: i.thumbnail, status: i.status, price: i.price === null ? null : Number(i.price),
-          last7: kpis({
-            cost: Number(i.cost), clicks: Number(i.clicks), prints: Number(i.prints), directAmount: Number(i.direct_amount),
-            indirectAmount: Number(i.indirect_amount), units: Number(i.units), organicUnits: Number(i.organic_units), organicAmount: Number(i.organic_amount),
-          }),
-        })),
+        items: items.map((i) => {
+          const ads = Number(i.direct_amount) + Number(i.indirect_amount);
+          const prints = Number(i.prints);
+          const sold = Number(i.sold);
+          const expected = Math.round((prints / AD_PRINTS_PER_SALE) * 10) / 10;
+          return {
+            itemId: i.item_id, title: i.title, thumbnail: i.thumbnail, status: i.status, price: i.price === null ? null : Number(i.price),
+            last7: kpis({
+              cost: Number(i.cost), clicks: Number(i.clicks), prints, directAmount: Number(i.direct_amount), indirectAmount: Number(i.indirect_amount),
+              units: Number(i.units), organicUnits: Number(i.organic_units),
+              // o ML devolve o orgânico zerado: "sem Ads" = receita dos pedidos − vendas atribuídas
+              organicAmount: Number(i.organic_amount) || Math.max(0, Math.round((Number(i.revenue) - ads) * 100) / 100),
+            }),
+            prints, clicks: Number(i.clicks), sold, expected,
+            health: prints === 0 ? null : sold < expected ? ('abaixo' as const) : ('ok' as const),
+          };
+        }),
       };
     });
   }

@@ -229,6 +229,7 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(list[0].trend).toEqual([5, 5, 5, 5, 5, 5, null]); // hoje entra na tendência (sem venda no teste)
     expect(list[0]).toMatchObject({ items: 1, thumbnails: [] });
     expect(o.daily).toHaveLength(30);
+    expect(o.sales).toHaveLength(30);
   });
 
   let ruleId = '';
@@ -280,6 +281,9 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(detail.rules).toHaveLength(1);
     expect(detail.events).toHaveLength(1);
     expect(detail.items[0]).toMatchObject({ itemId: 'MLB1', title: 'Viseira', last7: { cost: 60 } });
+    expect(detail.items[0]).toMatchObject({ sold: 0, prints: 0, health: null }); // sem impressões no seed: sem régua
+    expect((await api('GET', `/campaigns/${accountId}/1?days=30`)).json().items[0].last7.cost).toBe(200);
+    expect((await api('GET', `/campaigns/${accountId}/1?days=15`)).statusCode).toBe(400);
     expect((await api('GET', `/campaigns/${accountId}/999`)).statusCode).toBe(404);
 
     expect((await api('POST', '/events/read', {})).statusCode).toBe(204);

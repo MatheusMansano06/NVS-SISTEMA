@@ -226,6 +226,16 @@ export interface AdsRadarOverviewDto {
   unread: number;
   /** Últimos 30 dias (hoje incluso), dias sem leitura zerados. */
   daily: AdDailyDto[];
+  /** Vendas do Mercado Livre nos mesmos 30 dias (pedidos pagos, como no Dashboard): base do TACOS e da margem pós Ads. */
+  sales: AdSalesDayDto[];
+}
+
+export interface AdSalesDayDto {
+  day: string;
+  /** Receita bruta (valor dos pedidos pagos). */
+  revenue: number;
+  /** Lucro antes dos Ads: receita − tarifas − frete − custo − imposto. */
+  profit: number;
 }
 
 export interface AdDailyDto {
@@ -243,8 +253,20 @@ export interface AdItemDto {
   thumbnail: string | null;
   status: string | null;
   price: number | null;
+  /** Números do período pedido (7 ou 30 dias, hoje incluso); o nome ficou do tempo em que era sempre 7. */
   last7: AdKpisDto;
+  prints: number;
+  clicks: number;
+  /** Unidades vendidas do anúncio no período (pedidos pagos, com e sem Ads). */
+  sold: number;
+  /** Vendas esperadas pelas impressões: impressões ÷ AD_PRINTS_PER_SALE. */
+  expected: number;
+  /** abaixo = vendeu menos que o esperado pelas impressões (atenção extrema); null = sem impressões no período. */
+  health: 'ok' | 'abaixo' | null;
 }
+
+/** Régua de conversão por impressões: 1 venda a cada 300 impressões. Abaixo disso o anúncio não converte o tráfego. */
+export const AD_PRINTS_PER_SALE = 300;
 
 export interface AdCampaignDetailDto {
   campaign: AdCampaignDto;

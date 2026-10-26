@@ -268,11 +268,9 @@ export class MlApiError extends Error {
 
 const API = 'https://api.mercadolibre.com';
 const AUTH = 'https://auth.mercadolivre.com.br/authorization';
-/** Métricas do Mercado Ads pedidas nas buscas do Radar ADS. */
+/** Métricas do Mercado Ads pedidas nas buscas do Radar ADS (as mesmas em campanhas e anúncios). */
 const AD_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount,units_quantity,organic_units_quantity,organic_units_amount';
 const AD_BASE_METRICS = 'cost,clicks,prints,direct_amount,indirect_amount';
-/** Só as campanhas têm parcela de impressões; nos anúncios o ML recusa (400). */
-const AD_CAMPAIGN_METRICS = `${AD_METRICS},lost_impression_share_by_budget`;
 export const ORDERS_PAGE_SIZE = 50;
 export const LISTINGS_PAGE_SIZE = 100;
 
@@ -662,7 +660,7 @@ export class HttpMlApi implements MlApi, MlRawApi {
   }
 
   adCampaigns(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdCampaign[]> {
-    return this.adSearch<MlAdCampaign>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search`, day, AD_CAMPAIGN_METRICS);
+    return this.adSearch<MlAdCampaign>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/campaigns/search`, day, AD_METRICS);
   }
 
   adItems(token: string, advertiserId: string, siteId: string, day: string): Promise<MlAdItem[]> {

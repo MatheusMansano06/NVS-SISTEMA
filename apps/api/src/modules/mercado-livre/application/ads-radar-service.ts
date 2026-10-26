@@ -132,6 +132,12 @@ export class AdsRadarService {
            thumbnail = EXCLUDED.thumbnail, logistic_type = EXCLUDED.logistic_type, fetched_at = now()`,
         [tenantId, accountId, JSON.stringify(items.map(({ metrics: _m, ...i }) => i))],
       );
+      // o ML só lista os anúncios que estão no Ads hoje: quem saiu deixa de contar na campanha antiga
+      await db.query(
+        `UPDATE ad_items SET campaign_id = NULL, status = 'fora_do_ads', fetched_at = now()
+          WHERE account_id = $1 AND campaign_id IS NOT NULL AND NOT (item_id = ANY($2::text[]))`,
+        [accountId, items.map((i) => i.item_id)],
+      );
     }
   }
 

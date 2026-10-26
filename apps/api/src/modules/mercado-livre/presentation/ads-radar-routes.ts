@@ -13,6 +13,7 @@ function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
 
 const idParam = z.object({ id: z.string().uuid() });
 const campaignParams = z.object({ accountId: z.string().uuid(), campaignId: z.coerce.number().int().positive() });
+const campaignQuery = z.object({ days: z.coerce.number().pipe(z.union([z.literal(7), z.literal(30)])).default(7) });
 const eventsQuery = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
 const readBody = z.object({ ids: z.array(z.string().uuid()).max(500).nullable().default(null) });
 
@@ -28,7 +29,7 @@ export function adsRadarRoutes(queries: AdsRadarQueries, service: AdsRadarServic
     app.get('/ads-radar/campaigns', read, async (req) => queries.campaigns(tenant(req)));
     app.get('/ads-radar/campaigns/:accountId/:campaignId', read, async (req) => {
       const p = parse(campaignParams, req.params);
-      return queries.campaign(tenant(req), p.accountId, p.campaignId);
+      return queries.campaign(tenant(req), p.accountId, p.campaignId, parse(campaignQuery, req.query).days);
     });
 
     app.get('/ads-radar/rules', read, async (req) => queries.rules(tenant(req)));

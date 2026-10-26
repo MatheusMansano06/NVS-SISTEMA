@@ -253,8 +253,20 @@ export interface AdItemDto {
   thumbnail: string | null;
   status: string | null;
   price: number | null;
+  /** Números do período pedido (7 ou 30 dias, hoje incluso); o nome ficou do tempo em que era sempre 7. */
   last7: AdKpisDto;
+  prints: number;
+  clicks: number;
+  /** Unidades vendidas do anúncio no período (pedidos pagos, com e sem Ads). */
+  sold: number;
+  /** Vendas esperadas pelas impressões: impressões ÷ AD_PRINTS_PER_SALE. */
+  expected: number;
+  /** abaixo = vendeu menos que o esperado pelas impressões (atenção extrema); null = sem impressões no período. */
+  health: 'ok' | 'abaixo' | null;
 }
+
+/** Régua de conversão por impressões: 1 venda a cada 300 impressões. Abaixo disso o anúncio não converte o tráfego. */
+export const AD_PRINTS_PER_SALE = 300;
 
 export interface AdCampaignDetailDto {
   campaign: AdCampaignDto;

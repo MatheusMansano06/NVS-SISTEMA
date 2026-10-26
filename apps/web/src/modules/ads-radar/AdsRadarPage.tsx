@@ -8,6 +8,7 @@ import { Modal } from '../../shared/ui/Modal';
 import { useAuth } from '../auth/AuthContext';
 import { adsRadarApi } from './ads-radar-api';
 import { AlertsPanel } from './AdsRadarAlerts';
+import { ItemsPanel } from './AdsRadarItems';
 import { AdsRadarHome } from './AdsRadarHome';
 import { useGuidedTour } from '../../shared/tour/Tour';
 import { TOURS } from '../../shared/tour/tours';
@@ -20,6 +21,7 @@ import './ads-radar.css';
 
 type Panel =
   | { kind: 'rule'; rule: AdRuleDto | null; preset: RuleDraftPreset }
+  | { kind: 'items'; campaign: AdCampaignDto }
   | { kind: 'goals' | 'events' | 'overview' | 'robot' | 'campaign' | 'alerts' };
 
 const ACCOUNT_MSG: Record<string, string> = {
@@ -345,7 +347,7 @@ export function AdsRadarPage() {
         {home ? (
           o ? (
             <AdsRadarHome
-              overview={o} campaigns={campaigns} onOpenCampaign={pick}
+              overview={o} campaigns={campaigns} onOpenCampaign={pick} onOpenItems={(c) => setPanel({ kind: 'items', campaign: c })}
               onOpenGoals={() => setPanel({ kind: 'goals' })} onOpenAlerts={() => setPanel({ kind: 'alerts' })}
             />
           ) : !error && <div className="arh-empty">Carregando o Radar…</div>
@@ -386,6 +388,9 @@ export function AdsRadarPage() {
             onDone={(changed) => { closePanel(); if (changed) void afterChange(); }}
           />
         )}
+      </Modal>
+      <Modal open={panel?.kind === 'items'} onClose={closePanel} label="Anúncios da campanha" wide="xl">
+        {panel?.kind === 'items' && <ItemsPanel key={`${panel.campaign.accountId}:${panel.campaign.campaignId}`} campaign={panel.campaign} onOpenFlow={() => pick(panel.campaign)} />}
       </Modal>
       <Modal open={panel?.kind === 'alerts'} onClose={closePanel} label="Alertas" wide>
         {o && (

@@ -3,7 +3,7 @@ import { Icon } from './Icon';
 import './modal.css';
 
 /** Modal sobre <dialog> nativo: foco preso, Esc fecha, fundo inerte. */
-export function Modal({ open, onClose, children, label, wide }: { open: boolean; onClose: () => void; children: ReactNode; label: string; wide?: boolean }) {
+export function Modal({ open, onClose, children, label, wide }: { open: boolean; onClose: () => void; children: ReactNode; label: string; wide?: boolean | 'xl' }) {
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export function Modal({ open, onClose, children, label, wide }: { open: boolean;
   return (
     <dialog
       ref={ref}
-      className={wide ? 'modal modal-wide' : 'modal'}
+      className={wide === 'xl' ? 'modal modal-xl' : wide ? 'modal modal-wide' : 'modal'}
       aria-label={label}
       onClose={onClose}
       onClick={(e) => e.target === e.currentTarget && onClose()}

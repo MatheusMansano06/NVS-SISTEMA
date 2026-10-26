@@ -1,0 +1,13 @@
+span.hint[role] {
+  display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 5px; padding: 0; vertical-align: 1px;
+  border: 0; border-radius: 50%; cursor: help; font: 700 .62rem/1 var(--font); color: var(--gray-500); background: var(--gray-100);
+  transition: background .2s, color .2s;
+}
+span.hint[role]:hover, span.hint[role]:focus-visible { outline: none; background: var(--blue); color: #fff; }
+.hint-tip {
+  position: fixed; z-index: 1000; transform: translate(-50%, -100%); width: max-content; max-width: 280px; padding: 10px 12px;
+  border-radius: 14px; font-size: .78rem; line-height: 1.45; font-weight: 500; text-transform: none; letter-spacing: 0; text-align: left;
+  color: #fff; background: var(--navy); box-shadow: 0 14px 30px -12px rgba(11,28,77,.6); pointer-events: none; animation: hint-in .15s ease-out;
+}
+.hint-tip[data-below] { transform: translate(-50%, 0); }
+@keyframes hint-in { from { opacity: 0; } }

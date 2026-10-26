@@ -1,7 +1,9 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { AdCampaignDto, AdDailyDto, AdSalesDayDto, AdsRadarOverviewDto } from '@nvs/shared';
 import { change, money } from '../../shared/format';
+import { Hint } from '../../shared/ui/Hint';
 import { STATUS_LABEL, TONE_COLOR, fmtPct, fmtX } from './AdsRadarPanels';
+import { GLOSSARY as G } from './glossary';
 
 type Filter = 'ativas' | 'atencao' | 'pausadas' | 'todas';
 type Sort = 'gasto' | 'acos' | 'roas' | 'nome';
@@ -50,19 +52,19 @@ function TacosHero({ now, period, target }: { now: ReturnType<typeof totals>; pe
         {sim !== null && <button type="button" className="ar-btn" onClick={() => setSim(null)}>Voltar ao real</button>}
       </div>
       <div className="art-eq">
-        <div className="art-term" data-sim={sim !== null || undefined}><span>Investimento em Ads</span><b>{money(cost)}</b></div>
+        <div className="art-term" data-sim={sim !== null || undefined}><span>Investimento em Ads<Hint label="investimento em Ads">{G.investimento}</Hint></span><b>{money(cost)}</b></div>
         <i>÷</i>
-        <div className="art-term"><span>Receita bruta</span><b>{money(now.total)}</b></div>
+        <div className="art-term"><span>Receita bruta<Hint label="receita bruta">{G.receita}</Hint></span><b>{money(now.total)}</b></div>
         <i>× 100 =</i>
-        <div className="art-term art-result" data-tone={tone}><span>TACOS{target !== null ? ` · meta ${pct(target)}` : ''}</span><b>{pct(tacos)}</b></div>
+        <div className="art-term art-result" data-tone={tone}><span>TACOS{target !== null ? ` · meta ${pct(target)}` : ''}<Hint label="TACOS">{G.TACOS}</Hint></span><b>{pct(tacos)}</b></div>
       </div>
       <div className="art-eq art-eq2">
-        <div className="art-term"><span>Margem antes dos Ads</span><b>{pct(now.margin)}</b></div>
+        <div className="art-term"><span>Margem antes dos Ads<Hint label="margem antes dos Ads">{G.margemAntes}</Hint></span><b>{pct(now.margin)}</b></div>
         <i>−</i>
-        <div className="art-term"><span>TACOS</span><b>{pct(tacos)}</b></div>
+        <div className="art-term"><span>TACOS<Hint label="TACOS">{G.TACOS}</Hint></span><b>{pct(tacos)}</b></div>
         <i>=</i>
         <div className="art-term art-result" data-tone={after === null ? undefined : after < 0 ? 'bad' : after < 10 ? 'warn' : 'ok'}>
-          <span>Margem pós Ads</span><b>{pct(after)}</b><small>{money(afterValue)} de lucro</small>
+          <span>Margem pós Ads<Hint label="margem pós Ads">{G.margemPos}</Hint></span><b>{pct(after)}</b><small>{money(afterValue)} de lucro</small>
         </div>
       </div>
       <label className="art-sim">
@@ -156,11 +158,11 @@ function Mosaic({ c }: { c: AdCampaignDto }) {
   );
 }
 
-function CampaignCard({ c, onOpen }: { c: AdCampaignDto; onOpen: () => void }) {
+function CampaignCard({ c, onOpen, onItems }: { c: AdCampaignDto; onOpen: () => void; onItems: () => void }) {
   const tone = c.rules ? c.status : null;
   const acosTone = c.last7.acos === null || c.acosTarget === null ? undefined : c.last7.acos > c.acosTarget ? 'bad' : 'ok';
   return (
-    <button type="button" className="arc" data-paused={c.mlStatus !== 'active' || undefined} onClick={onOpen}>
+    <article className="arc" data-paused={c.mlStatus !== 'active' || undefined}>
       <Mosaic c={c} />
       <div className="arc-badges">
         {tone ? <span className="arh-pill" data-tone={tone}>{STATUS_LABEL[tone]}</span> : <span className="arh-pill">Sem regra</span>}
@@ -173,29 +175,33 @@ function CampaignCard({ c, onOpen }: { c: AdCampaignDto; onOpen: () => void }) {
         </div>
         <div className="arc-main">
           <div><small>Gasto 7 dias</small><b>{money(c.last7.cost)}</b></div>
-          <div><small>Vendas com Ads</small><b>{money(c.last7.adsSales)}</b></div>
+          <div><small>Vendas com Ads<Hint label="vendas com Ads">{G.vendasAds}</Hint></small><b>{money(c.last7.adsSales)}</b></div>
         </div>
         <dl className="arc-stats">
           <div data-tone={acosTone} title={c.acosTarget !== null ? `Alvo de ACOS no ML: ${fmtPct(c.acosTarget)}` : undefined}>
-            <dt>ACOS</dt><dd>{fmtPct(c.last7.acos)}</dd>{c.acosTarget !== null && <small>alvo {fmtPct(c.acosTarget)}</small>}
+            <dt>ACOS<Hint label="ACOS">{G.ACOS}</Hint></dt><dd>{fmtPct(c.last7.acos)}</dd>{c.acosTarget !== null && <small>alvo {fmtPct(c.acosTarget)}</small>}
           </div>
-          <div><dt>ROAS</dt><dd>{fmtX(c.last7.roas)}</dd></div>
-          <div><dt>TACOS</dt><dd>{fmtPct(c.last7.tacos)}</dd></div>
+          <div><dt>ROAS<Hint label="ROAS">{G.ROAS}</Hint></dt><dd>{fmtX(c.last7.roas)}</dd></div>
+          <div><dt>TACOS<Hint label="TACOS">{G.TACOS}</Hint></dt><dd>{fmtPct(c.last7.tacos)}</dd></div>
         </dl>
         <Spark values={c.trend} color={tone ? TONE_COLOR[tone] : 'var(--blue)'} />
-        <span className="arc-go" data-has={c.rules > 0 || undefined}>{c.rules ? `${c.rules} regra${c.rules > 1 ? 's' : ''} · abrir fluxo` : 'Criar fluxo'} →</span>
+        <div className="arc-actions">
+          <button type="button" className="arc-go" onClick={onItems}>Ver {c.items || ''} anúncio{c.items === 1 ? '' : 's'}</button>
+          <button type="button" className="arc-flow" data-has={c.rules > 0 || undefined} onClick={onOpen}>{c.rules ? `${c.rules} regra${c.rules > 1 ? 's' : ''} · fluxo` : 'Criar fluxo'} →</button>
+        </div>
       </div>
-    </button>
+    </article>
   );
 }
 
 /** Tela inicial do Radar ADS: painel do período, atalhos (fluxo geral, alertas, metas) e as campanhas em cartões. */
 export function AdsRadarHome({
-  overview: o, campaigns, onOpenCampaign, onOpenGoals, onOpenAlerts,
+  overview: o, campaigns, onOpenCampaign, onOpenItems, onOpenGoals, onOpenAlerts,
 }: {
   overview: AdsRadarOverviewDto;
   campaigns: AdCampaignDto[];
   onOpenCampaign: (c: AdCampaignDto) => void;
+  onOpenItems: (c: AdCampaignDto) => void;
   onOpenGoals: () => void;
   onOpenAlerts: () => void;
 }) {
@@ -235,10 +241,10 @@ export function AdsRadarHome({
           </div>
         </div>
         <div className="arh-tiles">
-          <div className="arh-tile" data-c="blue"><span>Investimento</span><b>{money(now.cost)}</b><Delta now={now.cost} before={prev?.cost ?? null} inverse /></div>
-          <div className="arh-tile" data-c="sky"><span>Vendas com Ads</span><b>{money(now.ads)}</b><Delta now={now.ads} before={prev?.ads ?? null} /></div>
-          <div className="arh-tile" data-c="violet"><span>ROAS</span><b>{fmtX(now.roas)}</b><small>a cada R$ 1 investido</small></div>
-          <div className="arh-tile" data-c="mint"><span>ACOS</span><b>{fmtPct(now.acos)}</b><small>gasto ÷ vendas com Ads</small></div>
+          <div className="arh-tile" data-c="blue"><span>Investimento<Hint label="investimento">{G.investimento}</Hint></span><b>{money(now.cost)}</b><Delta now={now.cost} before={prev?.cost ?? null} inverse /></div>
+          <div className="arh-tile" data-c="sky"><span>Vendas com Ads<Hint label="vendas com Ads">{G.vendasAds}</Hint></span><b>{money(now.ads)}</b><Delta now={now.ads} before={prev?.ads ?? null} /></div>
+          <div className="arh-tile" data-c="violet"><span>ROAS<Hint label="ROAS">{G.ROAS}</Hint></span><b>{fmtX(now.roas)}</b><small>a cada R$ 1 investido</small></div>
+          <div className="arh-tile" data-c="mint"><span>ACOS<Hint label="ACOS">{G.ACOS}</Hint></span><b>{fmtPct(now.acos)}</b><small>gasto ÷ vendas com Ads</small></div>
         </div>
         <div className="arh-dash-body">
           <Chart days={days} />
@@ -247,7 +253,7 @@ export function AdsRadarHome({
             <div className="arh-ring" style={{ '--p': adsShare } as CSSProperties}><b>{adsShare}%</b><small>com Ads</small></div>
             <ul>
               <li><i style={{ background: 'var(--blue)' }} />Com Ads <b>{money(now.ads)}</b></li>
-              <li><i style={{ background: 'var(--gray-300)' }} />Sem Ads <b>{money(Math.max(0, now.total - now.ads))}</b></li>
+              <li><i style={{ background: 'var(--gray-300)' }} />Sem Ads<Hint label="vendas sem Ads">{G.semAds}</Hint> <b>{money(Math.max(0, now.total - now.ads))}</b></li>
             </ul>
           </div>
         </div>
@@ -289,7 +295,7 @@ export function AdsRadarHome({
           </div>
         </div>
         {list.length ? (
-          <div className="arc-grid">{list.map((c) => <CampaignCard key={`${c.accountId}:${c.campaignId}`} c={c} onOpen={() => onOpenCampaign(c)} />)}</div>
+          <div className="arc-grid">{list.map((c) => <CampaignCard key={`${c.accountId}:${c.campaignId}`} c={c} onOpen={() => onOpenCampaign(c)} onItems={() => onOpenItems(c)} />)}</div>
         ) : (
           <p className="arh-empty">{campaigns.length ? 'Nenhuma campanha neste filtro.' : 'Nenhuma campanha lida ainda. Clique em Atualizar para buscar no Mercado Ads.'}</p>
         )}

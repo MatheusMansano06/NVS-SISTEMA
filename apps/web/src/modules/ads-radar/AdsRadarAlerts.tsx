@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { AdCondition, AdRuleDto, AdRuleScope, AdWindow } from '@nvs/shared';
 import { ApiError } from '../../shared/http';
+import { Hint } from '../../shared/ui/Hint';
 import { adsRadarApi } from './ads-radar-api';
 import { conditionText } from './AdsRadarPanels';
+import { GLOSSARY } from './glossary';
 
 interface Template {
   id: string;
@@ -10,6 +12,8 @@ interface Template {
   before: string;
   after: string;
   hint: string;
+  /** Explicação técnica do termo, no "?" da frase. */
+  term?: string;
   scope: AdRuleScope;
   metric: AdCondition['metric'];
   op: AdCondition['op'];
@@ -23,22 +27,22 @@ const WINDOW_SHORT: Partial<Record<AdWindow, string>> = { hoje: 'hoje', '3d': '3
 /** Alertas prontos: o cliente só escolhe o número e a janela. Viram regras comuns (editáveis no fluxo). */
 const TEMPLATES: Template[] = [
   {
-    id: 'tacos', before: 'Campanhas com TACOS acima de', after: '%', hint: 'Gasto ÷ todas as vendas do anúncio. Bom para segurar a margem.',
+    id: 'tacos', before: 'Campanhas com TACOS acima de', after: '%', hint: 'Gasto ÷ todas as vendas dos anúncios da campanha. Bom para segurar a margem.', term: GLOSSARY.TACOS,
     scope: 'campanhas', metric: 'tacos', op: 'maior', value: 4, windows: ['7d', '3d', 'hoje', '14d', '30d', 'mes'],
     name: (v, w) => `TACOS acima de ${v.toLocaleString('pt-BR')}% (${WINDOW_SHORT[w]})`,
   },
   {
-    id: 'acos', before: 'Campanhas com ACOS acima de', after: '%', hint: 'Gasto ÷ vendas que vieram do anúncio patrocinado.',
+    id: 'acos', before: 'Campanhas com ACOS acima de', after: '%', hint: 'Gasto ÷ vendas que vieram do anúncio patrocinado.', term: GLOSSARY.ACOS,
     scope: 'campanhas', metric: 'acos', op: 'maior', value: 8, windows: ['7d', '3d', 'hoje', '14d', '30d', 'mes'],
     name: (v, w) => `ACOS acima de ${v.toLocaleString('pt-BR')}% (${WINDOW_SHORT[w]})`,
   },
   {
-    id: 'alvo', before: 'Campanhas com ACOS acima do alvo do Mercado Livre', after: '', hint: 'Usa o ACOS objetivo que cada campanha já tem no ML.',
+    id: 'alvo', before: 'Campanhas com ACOS acima do alvo do Mercado Livre', after: '', hint: 'Usa o ACOS objetivo que cada campanha já tem no ML.', term: GLOSSARY.alvo,
     scope: 'campanhas', metric: 'acos_vs_alvo', op: 'maior', value: null, windows: ['7d', '3d', '14d', '30d', 'mes'],
     name: (_v, w) => `ACOS acima do alvo do ML (${WINDOW_SHORT[w]})`,
   },
   {
-    id: 'roas', before: 'Campanhas com ROAS abaixo de', after: 'x', hint: 'Quanto volta em vendas para cada R$ 1 investido.',
+    id: 'roas', before: 'Campanhas com ROAS abaixo de', after: 'x', hint: 'Quanto volta em vendas para cada R$ 1 investido.', term: GLOSSARY.ROAS,
     scope: 'campanhas', metric: 'roas', op: 'menor', value: 10, windows: ['7d', '3d', '14d', '30d', 'mes'],
     name: (v, w) => `ROAS abaixo de ${v.toLocaleString('pt-BR')}x (${WINDOW_SHORT[w]})`,
   },
@@ -83,7 +87,7 @@ function TemplateRow({ t, canWrite, onCreated }: { t: Template; canWrite: boolea
   return (
     <li className="ara-tpl" data-done={done || undefined}>
       <div className="ara-sentence">
-        <span>{t.before}</span>
+        <span>{t.before}{t.term && <Hint>{t.term}</Hint>}</span>
         {t.value !== null && (
           <input
             inputMode="decimal" value={value} aria-label="Valor do alerta" onChange={(e) => { setValue(e.target.value); setDone(false); }}

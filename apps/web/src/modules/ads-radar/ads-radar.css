@@ -303,3 +303,32 @@
 .ar-start b { font-size: 1rem; }
 .ar-start p { margin: 6px 0 12px; font-size: .86rem; color: var(--gray-500); }
 .ar-start div { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- alertas configuráveis */
+.ar-tour { font-size: .82rem; }
+.arh-mini b small { font-size: .8rem; font-weight: 600; color: var(--gray-500); letter-spacing: 0; }
+.ara h2 { margin: 0; font-size: 1.25rem; color: var(--navy); letter-spacing: -.02em; }
+.ara h3 { margin: 22px 0 10px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--gray-500); }
+.ara-events { width: 100%; border: 0; font: inherit; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 18px; background: var(--gray-50); color: var(--navy); font-size: .88rem; }
+.ara-events b { font-size: 1.1rem; }
+.ara-events span { margin-left: auto; color: var(--blue-deep); font-weight: 650; }
+.ara-events[data-tone='estourado'] { background: var(--danger-soft); } .ara-events[data-tone='estourado'] b { color: var(--danger); }
+.ara-tpls, .ara-mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ara-tpl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; padding: 14px 16px; border-radius: 20px 20px 20px 8px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); transition: box-shadow .2s; }
+.ara-tpl:focus-within { box-shadow: 0 0 0 2px rgba(31,95,255,.35); }
+.ara-tpl[data-done] { background: var(--ok-soft); box-shadow: none; }
+.ara-tpl > small { grid-column: 1; font-size: .76rem; color: var(--gray-500); }
+.ara-tpl > .ar-btn { grid-column: 2; grid-row: 1 / span 3; height: 38px; }
+.ara-error { color: var(--danger) !important; }
+.ara-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .95rem; font-weight: 600; color: var(--navy); }
+.ara-sentence input, .ara-sentence select { font: inherit; font-weight: 700; color: var(--blue-deep); border: 0; border-radius: 10px; padding: 4px 8px; background: var(--blue-soft); text-align: center; }
+.ara-sentence input:focus, .ara-sentence select:focus { outline: 2px solid var(--blue); }
+@media (max-width: 560px) { .ara-tpl { grid-template-columns: 1fr; } .ara-tpl > .ar-btn { grid-column: 1; grid-row: auto; justify-self: start; } }
+.ara-mine button { width: 100%; border: 0; font: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--gray-50); color: var(--navy); }
+.ara-mine button:hover { background: var(--blue-soft); }
+.ara-mine i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--gray-300); }
+.ara-mine i[data-on] { background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+.ara-mine span { display: grid; gap: 2px; min-width: 0; }
+.ara-mine small { font-size: .76rem; color: var(--gray-500); }
+.ara-mine em { font-style: normal; font-size: .72rem; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--danger-soft); color: var(--danger-ink); }
+.ara-mine .ara-edit { margin-left: auto; font-size: .8rem; font-weight: 650; color: var(--blue-deep); }

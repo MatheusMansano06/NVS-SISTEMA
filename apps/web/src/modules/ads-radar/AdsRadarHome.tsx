@@ -139,14 +139,14 @@ function CampaignCard({ c, onOpen }: { c: AdCampaignDto; onOpen: () => void }) {
 
 /** Tela inicial do Radar ADS: painel do período, atalhos (fluxo geral, alertas, metas) e as campanhas em cartões. */
 export function AdsRadarHome({
-  overview: o, campaigns, onOpenCampaign, onOpenGeneral, onOpenGoals, onOpenEvents,
+  overview: o, campaigns, onOpenCampaign, onOpenGeneral, onOpenGoals, onOpenAlerts,
 }: {
   overview: AdsRadarOverviewDto;
   campaigns: AdCampaignDto[];
   onOpenCampaign: (c: AdCampaignDto) => void;
   onOpenGeneral: () => void;
   onOpenGoals: () => void;
-  onOpenEvents: () => void;
+  onOpenAlerts: () => void;
 }) {
   const [period, setPeriod] = useState<Period>(7);
   const [filter, setFilter] = useState<Filter>('ativas');
@@ -212,10 +212,12 @@ export function AdsRadarHome({
           </div>
           <span className="arh-go">Abrir fluxo →</span>
         </button>
-        <button type="button" className="arh-card arh-mini" data-tone={o.unread ? 'estourado' : undefined} onClick={onOpenEvents}>
-          <span>Alertas</span><b>{o.unread}</b><small>{o.unread ? 'não lidos · ver →' : 'nenhum alerta novo'}</small>
+        <button type="button" className="arh-card arh-mini arh-alerts" data-tone={o.unread ? 'estourado' : undefined} onClick={onOpenAlerts}>
+          <span>Alertas</span>
+          <b>{o.rules.filter((r) => r.enabled).length}<small> ligado{o.rules.filter((r) => r.enabled).length === 1 ? '' : 's'}</small></b>
+          <small>{o.unread ? `${o.unread} aviso${o.unread > 1 ? 's' : ''} não lido${o.unread > 1 ? 's' : ''} · ` : ''}configurar →</small>
         </button>
-        <button type="button" className="arh-card arh-mini" onClick={onOpenGoals}>
+        <button type="button" className="arh-card arh-mini arh-goal" onClick={onOpenGoals}>
           <span>Meta do mês</span>
           {month ? (
             <>

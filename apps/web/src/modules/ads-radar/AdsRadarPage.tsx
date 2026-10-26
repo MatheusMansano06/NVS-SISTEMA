@@ -7,7 +7,10 @@ import { Icon } from '../../shared/ui/Icon';
 import { Modal } from '../../shared/ui/Modal';
 import { useAuth } from '../auth/AuthContext';
 import { adsRadarApi } from './ads-radar-api';
+import { AlertsPanel } from './AdsRadarAlerts';
 import { AdsRadarHome } from './AdsRadarHome';
+import { useGuidedTour } from '../../shared/tour/Tour';
+import { TOURS } from '../../shared/tour/tours';
 import {
   CampaignDrawer, CampaignPanel, EventsPanel, GoalsPanel, OverviewPanel, RobotPanel, RuleEditor, SCOPE_LABEL, STATUS_LABEL, TONE_COLOR,
   conditionText, fmtPct, fmtX, ruleTone, type RuleDraftPreset,
@@ -17,7 +20,7 @@ import './ads-radar.css';
 
 type Panel =
   | { kind: 'rule'; rule: AdRuleDto | null; preset: RuleDraftPreset }
-  | { kind: 'goals' | 'events' | 'overview' | 'robot' | 'campaign' };
+  | { kind: 'goals' | 'events' | 'overview' | 'robot' | 'campaign' | 'alerts' };
 
 const ACCOUNT_MSG: Record<string, string> = {
   sem_conta: 'Conecte a conta do Mercado Livre em Integrações para o Radar ADS começar a ler as campanhas.',
@@ -120,6 +123,7 @@ export function AdsRadarPage() {
     setView('inicio');
   };
   const home = !selected && view === 'inicio';
+  const tour = useGuidedTour('radar-ads', TOURS['radar-ads'], home && !!overview && campaigns.length > 0);
   const openEvents = async () => {
     setEvents(await adsRadarApi.events(50).catch(() => []));
     setPanel({ kind: 'events' });
@@ -327,6 +331,7 @@ export function AdsRadarPage() {
               <button type="button" className="ar-kpi" data-tone={o.unread ? 'estourado' : undefined} onClick={openEvents}>Alertas<b>{o.unread}</b></button>
             </div>
           )}
+          <button type="button" className="link ar-tour" onClick={tour.start}>Rever com a Gertrudez</button>
           <div className="ar-spacer" />
           {!home && <button type="button" className="ar-btn" onClick={() => openDrawer('all')}>Campanhas <kbd>⌘K</kbd></button>}
           {home && <button type="button" className="ar-btn" onClick={() => setView('geral')}>Fluxo geral</button>}
@@ -341,7 +346,7 @@ export function AdsRadarPage() {
           o ? (
             <AdsRadarHome
               overview={o} campaigns={campaigns} onOpenCampaign={pick} onOpenGeneral={() => setView('geral')}
-              onOpenGoals={() => setPanel({ kind: 'goals' })} onOpenEvents={openEvents}
+              onOpenGoals={() => setPanel({ kind: 'goals' })} onOpenAlerts={() => setPanel({ kind: 'alerts' })}
             />
           ) : !error && <div className="arh-empty">Carregando o Radar…</div>
         ) : (
@@ -382,6 +387,14 @@ export function AdsRadarPage() {
           />
         )}
       </Modal>
+      <Modal open={panel?.kind === 'alerts'} onClose={closePanel} label="Alertas" wide>
+        {o && (
+          <AlertsPanel
+            rules={o.rules} unread={o.unread} canWrite={canWrite} onChanged={() => void load()}
+            onEdit={editRule} onOpenEvents={openEvents}
+          />
+        )}
+      </Modal>
       <Modal open={panel?.kind === 'goals'} onClose={closePanel} label="Metas" wide>
         {o && <GoalsPanel goals={o.goals} today={o.today} canWrite={canWrite} onChanged={() => void load()} />}
       </Modal>
@@ -403,6 +416,7 @@ export function AdsRadarPage() {
       <Modal open={panel?.kind === 'campaign'} onClose={closePanel} label="Campanha" wide>
         {detail ? <CampaignPanel detail={detail} /> : <p className="ar-sub">Carregando…</p>}
       </Modal>
+      {tour.element}
     </AppShell>
   );
 }

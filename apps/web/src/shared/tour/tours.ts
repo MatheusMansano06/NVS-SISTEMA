@@ -160,6 +160,28 @@ export const TOURS = {
     { target: '.op-list', title: 'A equipe', text: 'Mude a função, torne MASTER, resete o PIN de quem esqueceu (ou errou 5 vezes) e desative quem saiu. Sempre fica pelo menos um MASTER.' },
     { title: 'Na Operação também 🎉', text: 'MASTER que entra na Operação tem o botão “Equipe” lá em cima para cadastrar sem precisar vir na Análise.' },
   ],
+  'radar-ads': [
+    {
+      title: 'Oi! Este é o Radar ADS 🎯',
+      text:
+        'Aqui você acompanha o Mercado Ads sem abrir o ML: quanto investiu, quanto vendeu e quais campanhas estão saindo do controle.\n' +
+        'O Radar lê o Mercado Ads a cada hora e te avisa quando algo passa do limite que você escolher.\n' +
+        'Vou te mostrar as partes em menos de 1 minuto.',
+    },
+    { target: '.arh-dash', title: 'Desempenho dos Ads', text: 'Os números da conta no período: investimento, vendas com Ads, ROAS, ACOS e TACOS. A setinha compara com o período anterior.' },
+    { target: '.arh-seg', title: 'Período', text: 'Troque entre 7, 15 e 30 dias. Sempre conta hoje, igual ao painel do Mercado Livre.' },
+    { target: '.arh-chart', title: 'Dia a dia', text: 'Barras azuis são as vendas com Ads e a linha roxa é o investimento. Passe o mouse num dia para ver os valores.' },
+    { target: '.arh-share', title: 'De onde vêm as vendas', text: 'Quanto do faturamento veio dos anúncios patrocinados e quanto veio sem Ads.' },
+    { target: '.arh-alerts', title: 'Alertas', text: 'Escolha quando quer ser avisado, por exemplo “campanhas com TACOS acima de 4%”. É só digitar o número e ligar.' },
+    { target: '.arh-general', title: 'Fluxo geral', text: 'Um quadro estilo fluxograma com as regras e metas que valem para a conta toda.' },
+    { target: '.arc-grid .arc:first-child', title: 'Cada campanha', text: 'Fotos dos anúncios, gasto, vendas e o ACOS comparado com o alvo do ML (verde dentro, vermelho acima). Clique para abrir o fluxo só dela e criar regras.' },
+    {
+      title: 'Pronto! 🎉',
+      text:
+        'Comece ligando o alerta de TACOS e olhando as campanhas com ACOS vermelho — é ali que o dinheiro escapa.\n' +
+        'Se esquecer de algo, clique em “Rever com a Gertrudez” no topo da tela.',
+    },
+  ],
   full: [
     {
       title: 'Supervisão Full',

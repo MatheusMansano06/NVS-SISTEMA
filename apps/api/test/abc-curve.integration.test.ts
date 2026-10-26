@@ -135,7 +135,7 @@ describe.skipIf(!TEST_DB)('Curva ABC', () => {
     expect(classOf(r, 'byRevenue')).toEqual({ MLB5: 'A', MLB1: 'A', MLB4: 'A', MLB2: 'B', MLB3: 'C' });
   });
 
-  it('cada empresa vê só os seus anúncios; sem o recurso Vendas, bloqueia', async () => {
+  it('cada empresa vê só os seus anúncios; sem o recurso Curva ABC, bloqueia', async () => {
     const a = await company();
     const cnpj = randomCnpj();
     const email = `abc-${cnpj}@teste.dev`;
@@ -144,7 +144,7 @@ describe.skipIf(!TEST_DB)('Curva ABC', () => {
     const other = { nvs_session: res.cookies.find((c) => c.name === 'nvs_session')!.value };
     expect((await get(other, '30d')).totals).toEqual({ listings: 0, revenue: 0, units: 0 });
 
-    await db.query(`UPDATE tenants SET features = array_remove(features, 'vendas') WHERE id = $1`, [a.tenantId]);
+    await db.query(`UPDATE tenants SET features = array_remove(features, 'curva_abc') WHERE id = $1`, [a.tenantId]);
     const locked = await app.inject({ method: 'GET', url: '/api/v1/sales/abc?period=30d', cookies: a.cookies });
     expect(locked.statusCode).toBe(403);
     const bad = await app.inject({ method: 'GET', url: '/api/v1/sales/abc?period=7d', cookies: other });

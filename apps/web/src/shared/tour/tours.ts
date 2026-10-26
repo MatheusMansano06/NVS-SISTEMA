@@ -88,6 +88,21 @@ export const TOURS = {
     { target: '.dash-duo', title: 'Mais vendidos e pausados', text: 'À esquerda os 5 produtos que mais venderam. À direita os anúncios pausados — principalmente os sem estoque, que estão deixando de vender.' },
     { title: 'Tudo certo! 🎉', text: 'Dica: compare sempre com o período anterior. Para entender de onde vem cada número, use a Análise Financeira e a aba Vendas.' },
   ],
+  abc: [
+    {
+      title: 'Curva ABC 🔤',
+      text:
+        'Aqui seus anúncios entram numa fila, do que mais vende para o que menos vende, e são separados em 3 grupos.\n' +
+        'A são os campeões (somados, chegam a 80% das vendas), B os intermediários (até 95%) e C o resto.\n' +
+        'Serve para saber onde pôr energia: estoque, preço e Ads primeiro nos A.',
+    },
+    { target: '.abc .abc-period', title: 'Período', text: 'A curva usa só as vendas pagas dos últimos 30, 60 ou 90 dias. Canceladas e devolvidas ficam de fora.' },
+    { target: '.abc .abc-metric', title: 'Faturamento ou unidades', text: 'Por faturamento mostra quem traz o dinheiro; por unidades, quem mais gira no estoque. Um anúncio barato pode ser C em reais e A em unidades.' },
+    { target: '.abc-classes', title: 'Resumo das classes', text: 'Quantos anúncios estão em cada classe e quanto eles somam. Clique num cartão para ver só os anúncios daquela classe.' },
+    { target: '.abc-pareto', title: 'Poucos fazem muito', text: 'A primeira barra é a quantidade de anúncios; a segunda, o quanto eles vendem. Normalmente uma fatia pequena de anúncios faz quase tudo.' },
+    { target: '.abc-list > li:first-child', title: 'Anúncio a anúncio', text: 'Posição na fila, faturamento, unidades, quanto ele representa sozinho (% do total) e somado aos de cima (% acumulado). O acumulado é o que define a classe.' },
+    { title: 'Pronto! 🎉', text: 'Dica: confira se os anúncios A têm estoque e margem boa — qualquer problema neles pesa no mês inteiro. Se esquecer, clique em “Rever com a Gertrudez”.' },
+  ],
   dre: [
     {
       title: 'Resultado do mês (DRE) 📊',

@@ -16,3 +16,6 @@ export { salesAnalyticsRoutes } from './presentation/sales-analytics-routes.js';
 export { SalesRetention, retentionCutoff, DETAIL_MONTHS } from './application/sales-retention.js';
 export { InternalEanService } from './application/internal-ean-service.js';
 export { eanRoutes } from './presentation/ean-routes.js';
+export { AbcCurveService } from './application/abc-curve-service.js';
+export { PgAbcCurveRepository } from './infrastructure/pg-abc-curve-repository.js';
+export { abcCurveRoutes } from './presentation/abc-curve-routes.js';

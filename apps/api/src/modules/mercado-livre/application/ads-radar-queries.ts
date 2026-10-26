@@ -13,6 +13,8 @@ import { campaignKey, kpis, loadRules, loadSnapshot, ruleTargets, sumByDay, type
 
 /** Histórico carregado nas telas: 60 dias de simulação + a janela de 30 dias que cada dia simulado olha. */
 const SCREEN_DAYS = 92;
+/** Telas: "últimos 7 dias" como no painel do ML — hoje (parcial) e os 6 dias anteriores. As regras seguem fechando ontem. */
+const last7Range = (today: string) => ({ from: addDays(today, -6), to: today });
 const RANK: Record<AdStatus, number> = { ok: 0, atencao: 1, estourado: 2 };
 const worst = (a: AdStatus, b: AdStatus): AdStatus => (RANK[b] > RANK[a] ? b : a);
 
@@ -49,7 +51,7 @@ export class AdsRadarQueries {
         )
       ).rows[0];
       const all = sumByDay([...snap.series.values()].flat());
-      const prev7 = { from: addDays(today, -14), to: addDays(today, -8) };
+      const prev7 = { from: addDays(today, -13), to: addDays(today, -7) };
       const statuses = this.campaignStatuses(snap, rules.filter((r) => r.enabled), today);
       const count: Record<AdStatus, number> = { ok: 0, atencao: 0, estourado: 0 };
       for (const c of snap.campaigns.filter((x) => x.status === 'active')) count[statuses.get(campaignKey(c.account_id, c.campaign_id))!]++;
@@ -59,7 +61,7 @@ export class AdsRadarQueries {
           ? { status: acc.status, syncedAt: acc.synced?.toISOString() ?? null, backfilled: acc.backfilled !== null, error: acc.error }
           : { status: 'sem_conta', syncedAt: null, backfilled: false, error: null },
         today,
-        last7: kpis(totalsIn(all, windowRange('7d', today))),
+        last7: kpis(totalsIn(all, last7Range(today))),
         prev7: kpis(totalsIn(all, prev7)),
         campaigns: { ...count, total: count.ok + count.atencao + count.estourado },
         goals: await this.goalsWith(db, snap, today),
@@ -101,7 +103,7 @@ export class AdsRadarQueries {
             WHERE i.account_id = $1 AND i.campaign_id = $2
             GROUP BY i.item_id, i.title, i.thumbnail, i.status, i.price
             ORDER BY coalesce(sum(d.cost), 0) DESC`,
-          [accountId, campaignId, addDays(today, -7), addDays(today, -1)],
+          [accountId, campaignId, addDays(today, -6), today],
         )
       ).rows;
       return {
@@ -249,7 +251,7 @@ export class AdsRadarQueries {
       acosTarget: c.acos_target === null ? null : Number(c.acos_target),
       budget: c.budget === null ? null : Number(c.budget),
       strategy: c.strategy,
-      last7: kpis(totalsIn(series, windowRange('7d', today))),
+      last7: kpis(totalsIn(series, last7Range(today))),
       trend: days.map((d) => kpis(sumAdTotals(series.filter((x) => x.day === d))).tacos),
       rules: rules.filter((r) => appliesTo(r, c)).length,
     };

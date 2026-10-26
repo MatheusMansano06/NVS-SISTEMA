@@ -669,20 +669,30 @@ export class HttpMlApi implements MlApi, MlRawApi {
     return this.adSearch<MlAdItem>(token, `/advertising/${siteId}/advertisers/${advertiserId}/product_ads/ads/search`, day, AD_METRICS);
   }
 
+  /** Métricas que o ML aceitou em cada busca (descobertas na primeira recusa; valem enquanto o processo vive). */
+  private readonly adMetricsOk = new Map<string, string>();
+
   /** Busca paginada (50 por página) do Mercado Ads com as métricas de um dia. */
-  private async adSearch<T>(token: string, path: string, day: string, metrics: string): Promise<T[]> {
+  private async adSearch<T>(token: string, path: string, day: string, wanted: string): Promise<T[]> {
     const headers = { authorization: `Bearer ${token}`, accept: 'application/json', 'api-version': '2' };
+    const kind = path.endsWith('/campaigns/search') ? 'campaigns' : 'ads';
     const out: T[] = [];
     for (let offset = 0; ; offset += 50) {
-      const url = (m: string) => `${path}?limit=50&offset=${offset}&date_from=${day}&date_to=${day}&metrics=${m}`;
+      const url = (m: string, limit = 50) => `${path}?limit=${limit}&offset=${offset}&date_from=${day}&date_to=${day}&metrics=${m}`;
       type Page = { results?: T[]; paging?: { total?: number } };
-      // 400 = alguma métrica recusada pelo ML: tenta de novo só com as básicas antes de desistir
-      const page = await this.request<Page>(url(metrics), { headers }).catch((err) => {
-        if (err instanceof MlApiError && err.status === 400 && metrics !== AD_BASE_METRICS) {
-          metrics = AD_BASE_METRICS;
-          return this.request<Page>(url(metrics), { headers });
+      const metrics = this.adMetricsOk.get(kind) ?? wanted;
+      const page = await this.request<Page>(url(metrics), { headers }).catch(async (err) => {
+        if (!(err instanceof MlApiError && err.status === 400) || this.adMetricsOk.has(kind)) throw err;
+        // 400 = alguma métrica recusada: testa uma a uma sobre as básicas e fica só com as aceitas (sem perder orgânico e unidades)
+        const extra = wanted.split(',').filter((m) => !AD_BASE_METRICS.split(',').includes(m));
+        const ok = [AD_BASE_METRICS];
+        for (const m of extra) {
+          const accepted = await this.request<Page>(url(`${AD_BASE_METRICS},${m}`, 1), { headers }).then(() => true, () => false);
+          if (accepted) ok.push(m);
         }
-        throw err;
+        this.adMetricsOk.set(kind, ok.join(','));
+        console.warn(`Mercado Ads (${kind}): métricas recusadas pelo ML: ${extra.filter((m) => !ok.includes(m)).join(', ') || 'nenhuma'} — ${err.message}`);
+        return this.request<Page>(url(this.adMetricsOk.get(kind)!), { headers });
       });
       out.push(...(page.results ?? []));
       if (!page.results?.length || offset + 50 >= (page.paging?.total ?? 0)) return out;

@@ -221,7 +221,8 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     const o = (await api('GET', '/overview')).json();
     expect(o.account).toMatchObject({ status: 'ok', backfilled: true });
     expect(o.campaigns).toEqual({ ok: 2, atencao: 0, estourado: 0, total: 2 });
-    expect(o.last7).toMatchObject({ cost: 77, tacos: 2.75, acos: 5.5 });
+    // 7 dias como no ML: hoje (sem dado aqui) e os 6 anteriores
+    expect(o.last7).toMatchObject({ cost: 66, tacos: 2.75, acos: 5.5 });
     expect(o.unread).toBe(0);
     const list = (await api('GET', '/campaigns')).json();
     expect(list.map((c: { name: string; status: string }) => [c.name, c.status])).toEqual([['Campanha A', 'ok'], ['Campanha B', 'ok']]);
@@ -276,7 +277,7 @@ describe.skipIf(!TEST_DB)('Radar ADS: rotas', () => {
     expect(detail.series).toHaveLength(20);
     expect(detail.rules).toHaveLength(1);
     expect(detail.events).toHaveLength(1);
-    expect(detail.items[0]).toMatchObject({ itemId: 'MLB1', title: 'Viseira', last7: { cost: 70 } });
+    expect(detail.items[0]).toMatchObject({ itemId: 'MLB1', title: 'Viseira', last7: { cost: 60 } });
     expect((await api('GET', `/campaigns/${accountId}/999`)).statusCode).toBe(404);
 
     expect((await api('POST', '/events/read', {})).statusCode).toBe(204);

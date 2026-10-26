@@ -20,7 +20,7 @@ const NAV: { label: string; icon: IconName; path?: string; master?: boolean; fea
   { label: 'Dashboard', icon: 'dashboard', path: '/' },
   { label: 'Análise Financeira', icon: 'wallet', path: '/financeiro', feature: 'financeiro' },
   { label: 'DRE', icon: 'chart', path: '/dre', feature: 'dre' },
-  { label: 'Curva ABC', icon: 'pareto', path: '/curva-abc', feature: 'vendas' },
+  { label: 'Curva ABC', icon: 'pareto', path: '/curva-abc', feature: 'curva_abc' },
   { label: 'Cadastro de SKUs', icon: 'box', path: '/skus' },
   { label: 'Vendas', icon: 'cart', path: '/vendas', feature: 'vendas' },
   { label: 'Anúncios', icon: 'megaphone', path: '/anuncios' },

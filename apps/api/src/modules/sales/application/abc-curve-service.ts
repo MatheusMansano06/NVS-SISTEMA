@@ -15,7 +15,7 @@ import type { AbcListingRow, PgAbcCurveRepository } from '../infrastructure/pg-a
 
 class FeatureLockedError extends AppError {
   constructor() {
-    super('A Curva ABC faz parte da aba Vendas, que ainda não está liberada para a sua empresa.', 'FEATURE_LOCKED', 403);
+    super('A Curva ABC ainda não está liberada para a sua empresa.', 'FEATURE_LOCKED', 403);
   }
 }
 
@@ -39,10 +39,10 @@ export class AbcCurveService {
     private readonly today: () => string = () => todayIn(),
   ) {}
 
-  /** Faz parte do recurso Vendas (Painel Master / plano). */
+  /** Recurso liberado no Painel Master (por empresa ou plano). */
   async ensureFeature(tenantId: string): Promise<void> {
     const r = await this.db.query<{ features: string[] }>('SELECT features FROM tenants WHERE id = $1', [tenantId]);
-    if (!r.rows[0]?.features.includes('vendas')) throw new FeatureLockedError();
+    if (!r.rows[0]?.features.includes('curva_abc')) throw new FeatureLockedError();
   }
 
   async curve(tenantId: string, period: AbcPeriod): Promise<AbcCurveDto> {

@@ -167,6 +167,11 @@ export interface DreDto {
   /** mês em andamento: fechamento se o ritmo de vendas continuar (fixas já contam o mês inteiro) */
   projecao: { receitaBruta: number; lucroLiquido: number } | null;
   cobertura: { semCustoQtd: number; semCustoValor: number; estimado: boolean };
+  /**
+   * Para bater com o painel do ML: lá "Vendas brutas" soma também as canceladas. vendasBrutas = valor dos produtos de
+   * todas as vendas do mês, canceladas inclusive (sem frete do comprador).
+   */
+  conciliacaoMl: { vendasBrutas: number; canceladas: number; valorCanceladas: number };
   previous: {
     month: string;
     receitaBruta: number;

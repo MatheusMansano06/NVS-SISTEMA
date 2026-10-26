@@ -25,6 +25,11 @@ export interface DreSales {
   unidades: number;
   semCustoQtd: number;
   semCustoValor: number;
+  /** vendas canceladas do mês (só para a conciliação com o painel do ML) */
+  canceladasQtd: number;
+  canceladasValor: number;
+  /** valor dos produtos de todas as vendas, canceladas inclusive */
+  produtoTotal: number;
 }
 
 export interface DreInput {
@@ -45,6 +50,7 @@ type DreResult = Pick<
   | 'unidades'
   | 'pontoEquilibrio'
   | 'cobertura'
+  | 'conciliacaoMl'
 >;
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -179,6 +185,11 @@ export function computeDre(i: DreInput): DreResult {
       semCustoQtd: s.semCustoQtd,
       semCustoValor: r2(s.semCustoValor),
       estimado: i.estimar && s.semCustoQtd > 0,
+    },
+    conciliacaoMl: {
+      vendasBrutas: r2(s.produtoTotal),
+      canceladas: s.canceladasQtd,
+      valorCanceladas: r2(s.canceladasValor),
     },
   };
 }

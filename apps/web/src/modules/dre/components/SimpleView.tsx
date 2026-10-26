@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DreDto, DreSectionId } from '@nvs/shared';
 import { int, money } from '../../../shared/format';
 import { SECTION_COPY } from '../dre-copy';
+import { MlReconcile } from './MlReconcile';
 
 /** Nome curto e exemplos do que entra em cada bloco, para quem nunca viu um DRE. */
 const SIMPLE: Record<DreSectionId, { label: string; ex: string }> = {
@@ -36,6 +37,7 @@ export function SimpleView({ data, onSetup }: { data: DreDto; onSetup: () => voi
           </span>
           <b className="money">{money(base)}</b>
         </div>
+        <MlReconcile data={data} />
         {rows.map((id) => {
           const s = sec(id);
           const empty = s.total === 0;

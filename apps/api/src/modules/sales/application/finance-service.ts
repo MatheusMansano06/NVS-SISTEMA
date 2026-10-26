@@ -188,12 +188,18 @@ export class FinanceService {
     const s: DreSales = {
       receitaBruta: 0, cupom: 0, devolucao: 0, imposto: 0, custo: 0, custoEstimado: 0, impostoEstimado: 0,
       tarifa: 0, freteVendedor: 0, pedidos: 0, unidades: 0, semCustoQtd: 0, semCustoValor: 0,
+      canceladasQtd: 0, canceladasValor: 0, produtoTotal: 0,
     };
     const cert = { produto: 0, custo: 0, imposto: 0 };
     const semCusto = { produto: 0, semImposto: 0 };
     for (const o of await this.computed(tenantId, q)) {
       s.freteVendedor += o.fv;
-      if (o.status === 'cancelada') continue;
+      s.produtoTotal += o.produto;
+      if (o.status === 'cancelada') {
+        s.canceladasQtd++;
+        s.canceladasValor += o.produto;
+        continue;
+      }
       s.receitaBruta += o.produto + (keepsBuyerFreight(o.row.bucket, q.considerarFreteComprador) ? o.fc : 0);
       s.cupom += o.cupom;
       s.devolucao += o.devolucao;

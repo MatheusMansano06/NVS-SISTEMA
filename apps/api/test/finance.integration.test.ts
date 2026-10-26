@@ -134,6 +134,8 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     // receita: A 200 + B 100 (+30 frete comprador, ME1) + C 50 + E 100 (cancelado fora)
     expect(d.receitaBruta).toBe(480);
     expect(d.pedidos).toBe(4);
+    // painel do ML: produtos de todas as vendas, o cancelado D inclusive (sem frete comprador)
+    expect(d.conciliacaoMl).toEqual({ vendasBrutas: 550, canceladas: 1, valorCanceladas: 100 });
     // custo: A 80 + B 40 + E 40 = 160; C sem custo estimado pela média (160/400 × 50)
     expect(total('cmv')).toBe(180);
     expect(d.cobertura).toMatchObject({ semCustoQtd: 1, estimado: true });

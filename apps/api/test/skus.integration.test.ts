@@ -131,6 +131,17 @@ describe.skipIf(!TEST_DB)('Cadastro de SKUs (custos)', () => {
     expect((await put(cookies, { sku: 'SKU-A', custoUnit: 50 })).json().affectedOrders).toBe(0);
   });
 
+  it('alíquota alterada em outro dia vale só daqui para frente (venda de ontem mantém a antiga)', async () => {
+    const { cookies, tenantId } = await setup();
+    await tax(cookies, 9);
+    await db.withTenant(tenantId, (c) => c.query("UPDATE tax_rate_history SET registrado_em = now() - interval '2 days'"));
+    expect((await tax(cookies, 12)).json().vigenteDesde).not.toBe('1900-01-01');
+    const yesterday = await dash(cookies, 'yesterday');
+    const today = await dash(cookies, 'today');
+    expect(yesterday.kpis.grossProfit).toBe(300 - 30 - 27); // 9% de 300
+    expect(today.kpis.grossProfit).toBe(400 - 40 - 48); // 12% de 400
+  });
+
   it('valida custo e alíquota como no sistema antigo', async () => {
     const { cookies } = await setup();
     expect((await put(cookies, { sku: 'SKU-A', custoUnit: 0 })).statusCode).toBe(400);

@@ -147,14 +147,14 @@ export class SkuCostService {
     return { ratePct: cur?.ratePct ?? null, vigenteDesde: cur?.since ?? null };
   }
 
-  /** Define a alíquota da empresa e recalcula o imposto de todas as vendas pela vigência. */
+  /** Define a alíquota da empresa e recalcula o imposto das vendas a partir da vigência dela. */
   async setTaxRate(tenantId: string, userId: string, ratePct: number, today = todayIn()): Promise<TaxRateDto> {
     const dto = await this.db.withTenant(tenantId, async (db) => {
       const cur = await this.repo.currentTaxRate(db);
       if (cur && same(cur.ratePct, ratePct)) return { ratePct, vigenteDesde: cur.since };
       const since = sinceFor(cur, today);
       await this.repo.addTaxRate(db, tenantId, userId, ratePct, since);
-      await this.repo.applyCosts(db, { all: true });
+      await this.repo.applyTaxRate(db, ratePct, since);
       return { ratePct, vigenteDesde: since };
     });
     await this.invalidate(tenantId);

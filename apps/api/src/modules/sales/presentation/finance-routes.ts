@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { financeLinesQuerySchema, financeQuerySchema, lowMarginSettingsSchema } from '@nvs/shared';
+import { financeLinesQuerySchema, financeQuerySchema, lowMarginSettingsSchema, taxImpactQuerySchema } from '@nvs/shared';
 import type { z } from 'zod';
 import { ValidationError } from '../../../shared/kernel/errors.js';
 import type { FinanceService } from '../application/finance-service.js';
@@ -22,6 +22,10 @@ export function financeRoutes(service: FinanceService) {
     app.get('/finance/low-margin', read, async (req) => service.lowMargin(req.user.tenantId, parse(financeQuerySchema, req.query)));
     app.put('/finance/low-margin/settings', { preHandler: app.requirePermission('costs:manage') }, async (req) =>
       service.setLowMarginPct(req.user.tenantId, parse(lowMarginSettingsSchema, req.body).pct),
+    );
+    // simulador: quanto cada produto perde (ou ganha) de MC trocando a alíquota de imposto
+    app.get('/finance/tax-impact', read, async (req) =>
+      service.taxImpact(req.user.tenantId, parse(financeQuerySchema, req.query), parse(taxImpactQuerySchema, req.query)),
     );
     app.get('/finance/export', read, async (req, reply) =>
       reply

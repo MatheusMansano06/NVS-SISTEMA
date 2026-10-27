@@ -167,3 +167,36 @@ export interface LowMarginDto {
   /** Vendas aprovadas sem custo cadastrado (ficam fora do alerta). */
   semCusto: number;
 }
+
+/** Simulador de imposto: alíquota "de" → "para" (padrão: a anterior e a atual da empresa). */
+export const taxImpactQuerySchema = z.object({
+  de: z.coerce.number().min(0).max(100).optional(),
+  para: z.coerce.number().min(0).max(100).optional(),
+});
+
+export interface TaxImpactItemDto {
+  sku: string;
+  title: string;
+  pictureUrl: string | null;
+  unidades: number;
+  vendas: number;
+  /** Produto − cupom: base do imposto. */
+  faturamento: number;
+  mcAntes: number;
+  mcDepois: number;
+  mcPctAntes: number;
+  mcPctDepois: number;
+  /** mcDepois − mcAntes (negativo quando o imposto sobe). */
+  impacto: number;
+}
+
+export interface TaxImpactDto {
+  de: number;
+  para: number;
+  /** Alíquota vigente da empresa (null se nunca cadastrada). */
+  atual: number | null;
+  resumo: { faturamento: number; mcAntes: number; mcDepois: number; produtos: number; viraramPrejuizo: number };
+  items: TaxImpactItemDto[];
+  /** Vendas aprovadas sem custo (ficam fora da simulação). */
+  semCusto: number;
+}

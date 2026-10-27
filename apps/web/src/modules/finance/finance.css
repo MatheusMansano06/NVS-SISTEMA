@@ -203,3 +203,32 @@
   .ftable-filters .search { max-width: none; }
   .nocost-banner .btn { flex: 1; }
 }
+
+/* abas Visão geral / Simulador de imposto */
+.fin-views { display: flex; gap: 4px; padding: 5px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px var(--gray-100); justify-self: start; }
+.fin-views button { border: 0; background: none; padding: 8px 16px; border-radius: 999px; font: inherit; font-weight: 650; font-size: .85rem; color: var(--gray-500); cursor: pointer; }
+.fin-views button:hover { color: var(--navy); }
+.fin-views button[aria-selected='true'] { background: var(--navy-solid); color: #fff; }
+
+/* simulador de imposto */
+.taxsim-rates { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 999px; background: var(--gray-50); box-shadow: inset 0 0 0 1px var(--gray-100); }
+.taxsim-rates label { display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 650; color: var(--navy); }
+.taxsim-rates input { width: 56px; height: 34px; border: 0; border-radius: 10px; background: var(--surface); text-align: right; padding: 0 8px; font: inherit; font-weight: 700; color: var(--navy); outline: none; box-shadow: inset 0 0 0 1.5px var(--gray-100); }
+.taxsim-rates input:focus { box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 4px rgba(31,95,255,.12); }
+.taxsim-rates input[aria-invalid='true'] { box-shadow: inset 0 0 0 1.5px var(--danger); }
+.taxsim-rates i { font-style: normal; color: var(--gray-500); }
+.taxsim-minis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.taxsim-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.taxsim-tools .search { flex: 1; min-width: 200px; max-width: 360px; }
+.taxsim-tools input, .taxsim-tools select { height: 40px; padding: 0 12px; border-radius: 12px; border: 0; background: var(--gray-50); box-shadow: inset 0 0 0 1.5px var(--gray-100); font: inherit; font-size: .88rem; color: var(--navy); outline: none; }
+.taxsim-tools input:focus, .taxsim-tools select:focus { box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 4px rgba(31,95,255,.12); }
+.taxsim .fin .c-prod { width: 34%; }
+.taxsim .fin b.neg { color: var(--danger); }
+.taxsim .fin b.pos { color: var(--ok); }
+.taxsim .fin tr[data-loss] td { background: var(--danger-soft); }
+@container (max-width: 620px) { .taxsim .fin tr[data-loss] { background: var(--danger-soft); } }
+@media (max-width: 640px) {
+  .taxsim-minis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .taxsim-rates { width: 100%; justify-content: space-between; }
+  .taxsim-tools .search { max-width: none; }
+}

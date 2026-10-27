@@ -30,6 +30,7 @@ const SalesPage = page(() => import('./modules/sales/SalesPage'), 'SalesPage');
 const PricingPage = page(() => import('./modules/pricing/PricingPage'), 'PricingPage');
 const FreightPage = page(() => import('./modules/freight/FreightPage'), 'FreightPage');
 const AdsRadarPage = page(() => import('./modules/ads-radar/AdsRadarPage'), 'AdsRadarPage');
+const ProductRadarPage = page(() => import('./modules/product-radar/ProductRadarPage'), 'ProductRadarPage');
 const FinancePage = page(() => import('./modules/finance/FinancePage'), 'FinancePage');
 const DrePage = page(() => import('./modules/dre/DrePage'), 'DrePage');
 const AbcPage = page(() => import('./modules/abc/AbcPage'), 'AbcPage');
@@ -63,6 +64,7 @@ const GATED: { prefix: string; feature: TenantFeature; page: () => ReactNode }[]
   { prefix: '/precificador', feature: 'precificador', page: () => <PricingPage /> },
   { prefix: '/radar-frete', feature: 'radar_frete', page: () => <FreightPage /> },
   { prefix: '/radar-ads', feature: 'radar_ads', page: () => <AdsRadarPage /> },
+  { prefix: '/produto-campeao', feature: 'radar_produtos', page: () => <ProductRadarPage /> },
   { prefix: '/devolucoes', feature: 'devolucoes', page: () => <CentralDevolucoes /> },
   { prefix: '/full', feature: 'full', page: () => <FullRouter mode="analise" /> },
   { prefix: '/anuncios/promocoes', feature: 'promocoes', page: () => <PromotionsPage /> },
@@ -73,7 +75,7 @@ const GATED: { prefix: string; feature: TenantFeature; page: () => ReactNode }[]
   { prefix: '/curva-abc', feature: 'curva_abc', page: () => <AbcPage /> },
 ];
 /** Telas que já trazem o AppShell próprio (as demais são embrulhadas aqui). */
-const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/radar-ads', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro', '/dre', '/curva-abc']);
+const OWN_SHELL = new Set(['/vendas', '/precificador', '/radar-frete', '/radar-ads', '/produto-campeao', '/anuncios/promocoes', '/anuncios/marketing', '/anuncios', '/financeiro', '/dre', '/curva-abc']);
 
 function Routes() {
   const path = usePath();

@@ -10,6 +10,8 @@ import {
   type FinanceSummaryDto,
   type LogisticBucketId,
   type SaleStatus,
+  type TaxImpactDto,
+  type TaxImpactItemDto,
 } from '@nvs/shared';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
@@ -254,6 +256,70 @@ export class FinanceService {
           mcPct: o.mcPct,
         };
       }),
+    };
+  }
+
+  /**
+   * Simulador de imposto por produto: refaz a MC das vendas aprovadas com custo trocando a alíquota "de" pela "para".
+   * O imposto incide sobre produto − cupom (mesma base do recálculo da alíquota). Valores do pedido rateados pela quantidade.
+   */
+  async taxImpact(tenantId: string, q: FinanceQuery, sim: { de?: number; para?: number }): Promise<TaxImpactDto> {
+    const { rows: rates } = await this.db.withTenant(tenantId, (db) =>
+      db.query<{ rate_pct: string }>('SELECT rate_pct FROM tax_rate_history ORDER BY vigente_desde DESC, registrado_em DESC LIMIT 20'),
+    );
+    const atual = rates[0] ? n(rates[0].rate_pct) : null;
+    const anterior = rates.map((r) => n(r.rate_pct)).find((r) => r !== atual) ?? atual ?? 0;
+    const para = sim.para ?? atual ?? 0;
+    const de = sim.de ?? anterior;
+
+    const orders = (await this.computed(tenantId, q)).filter((o) => o.status === 'aprovada');
+    const bySku = new Map<string, TaxImpactItemDto & { produto: number }>();
+    for (const o of orders.filter((x) => x.certified)) {
+      const base = Math.max(o.produto - o.cupom, 0);
+      const semImposto = o.mc + o.imposto;
+      const antes = semImposto - (base * de) / 100;
+      const depois = semImposto - (base * para) / 100;
+      const units = Math.max(1, o.row.items.reduce((s, i) => s + i.qty, 0));
+      for (const it of o.row.items) {
+        const share = it.qty / units;
+        const cur = bySku.get(it.sku) ?? {
+          sku: it.sku, title: it.title, pictureUrl: null, unidades: 0, vendas: 0, faturamento: 0, produto: 0,
+          mcAntes: 0, mcDepois: 0, mcPctAntes: 0, mcPctDepois: 0, impacto: 0,
+        };
+        cur.pictureUrl ??= (it.listing_id && o.row.pictures?.[it.listing_id]) || null;
+        cur.unidades += it.qty;
+        cur.vendas++;
+        cur.faturamento += base * share;
+        cur.produto += o.produto * share;
+        cur.mcAntes += antes * share;
+        cur.mcDepois += depois * share;
+        bySku.set(it.sku, cur);
+      }
+    }
+    const items = [...bySku.values()].map(({ produto, ...i }) => ({
+      ...i,
+      faturamento: q2(i.faturamento),
+      mcAntes: q2(i.mcAntes),
+      mcDepois: q2(i.mcDepois),
+      mcPctAntes: produto > 0 ? q2((i.mcAntes / produto) * 100) : 0,
+      mcPctDepois: produto > 0 ? q2((i.mcDepois / produto) * 100) : 0,
+      impacto: q2(i.mcDepois - i.mcAntes),
+    }));
+    items.sort((a, b) => a.impacto - b.impacto);
+    const sum = (k: 'faturamento' | 'mcAntes' | 'mcDepois') => q2(items.reduce((s, i) => s + i[k], 0));
+    return {
+      de,
+      para,
+      atual,
+      resumo: {
+        faturamento: sum('faturamento'),
+        mcAntes: sum('mcAntes'),
+        mcDepois: sum('mcDepois'),
+        produtos: items.length,
+        viraramPrejuizo: items.filter((i) => i.mcAntes >= 0 && i.mcDepois < 0).length,
+      },
+      items,
+      semCusto: orders.filter((o) => !o.certified).length,
     };
   }
 

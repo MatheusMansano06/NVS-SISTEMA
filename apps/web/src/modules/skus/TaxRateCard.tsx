@@ -10,6 +10,7 @@ const fmtDate = (iso: string) => (iso === '1900-01-01' ? 'todo o histórico' : n
 export function TaxRateCard() {
   const [current, setCurrent] = useState<TaxRateDto | null>(null);
   const [value, setValue] = useState('');
+  const [since, setSince] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -30,8 +31,9 @@ export function TaxRateCard() {
     setBusy(true);
     setMsg(null);
     try {
-      const t = await skusApi.setTaxRate(n);
+      const t = await skusApi.setTaxRate(n, since);
       setCurrent(t);
+      setSince('');
       setMsg({ ok: true, text: `Alíquota de ${String(n).replace('.', ',')}% aplicada (vale desde ${fmtDate(t.vigenteDesde!)}).` });
     } catch (err) {
       setMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Não foi possível salvar.' });
@@ -48,7 +50,7 @@ export function TaxRateCard() {
         <small>
           {current?.ratePct === null
             ? 'Ainda não definida. É o imposto que a empresa paga ao governo e vale para todos os produtos.'
-            : `Vale para todos os produtos${current?.vigenteDesde ? ` · em vigor desde ${fmtDate(current.vigenteDesde)}` : ''}. Mudanças valem a partir do dia em que forem feitas.`}
+            : `Vale para todos os produtos${current?.vigenteDesde ? ` · em vigor desde ${fmtDate(current.vigenteDesde)}` : ''}. Mudanças valem a partir de hoje, ou da data em "Vale desde".`}
         </small>
         {msg && <small style={{ color: msg.ok ? 'var(--ok)' : 'var(--danger)', fontWeight: 600 }} role="status">{msg.text}</small>}
       </div>
@@ -57,6 +59,10 @@ export function TaxRateCard() {
           <input inputMode="decimal" placeholder="Ex.: 9" value={value} onChange={(e) => setValue(e.target.value)} aria-label="Alíquota %" />
           <i>%</i>
         </span>
+        <label className="sku-field taxrate-since" title="Deixe vazio para valer a partir de hoje. Com uma data, as vendas desde esse dia são recalculadas com a nova alíquota.">
+          <i>Vale desde</i>
+          <input type="date" value={since} max={new Date().toLocaleDateString('sv-SE')} onChange={(e) => setSince(e.target.value)} aria-label="Vale desde" />
+        </label>
         <Button type="submit" loading={busy}>Salvar</Button>
       </form>
     </section>

@@ -13,7 +13,8 @@ export const skusApi = {
   importCsv: (csv: string, dryRun: boolean, ignoreUnknown = false) =>
     http<SkuImportReport>('/api/v1/skus/import', { body: { csv, dryRun, ignoreUnknown } }),
   taxRate: () => http<TaxRateDto>('/api/v1/settings/tax-rate'),
-  setTaxRate: (ratePct: number) => http<TaxRateDto>('/api/v1/settings/tax-rate', { method: 'PUT', body: { ratePct } }),
+  setTaxRate: (ratePct: number, vigenteDesde?: string) =>
+    http<TaxRateDto>('/api/v1/settings/tax-rate', { method: 'PUT', body: { ratePct, vigenteDesde: vigenteDesde || undefined } }),
   exportUrl: '/api/v1/skus/export',
   eans: (p: { q?: string; offset: number; limit: number }) => {
     const qs = new URLSearchParams({ offset: String(p.offset), limit: String(p.limit) });

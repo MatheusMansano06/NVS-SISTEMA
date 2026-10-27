@@ -36,9 +36,10 @@ export function skuRoutes(service: SkuCostService) {
 
     // alíquota única de imposto da empresa (vale para todas as vendas)
     app.get('/settings/tax-rate', read, async (req) => service.taxRate(req.user.tenantId));
-    app.put('/settings/tax-rate', write, async (req) =>
-      service.setTaxRate(req.user.tenantId, req.user.sub, parse(taxRateSchema, req.body).ratePct),
-    );
+    app.put('/settings/tax-rate', write, async (req) => {
+      const body = parse(taxRateSchema, req.body);
+      return service.setTaxRate(req.user.tenantId, req.user.sub, body.ratePct, undefined, body.vigenteDesde);
+    });
 
     app.get('/skus/export', read, async (req, reply) =>
       reply

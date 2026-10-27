@@ -32,6 +32,9 @@ a.btn-ghost svg { transform: rotate(90deg); }
 .taxrate-text small { color: var(--gray-500); font-size: .82rem; }
 .taxrate form { display: flex; align-items: center; gap: 8px; }
 .taxrate .sku-field { width: 110px; }
+.taxrate .taxrate-since { width: auto; cursor: pointer; }
+.taxrate .taxrate-since i { white-space: nowrap; }
+.taxrate .taxrate-since input { width: 128px; font-size: .88rem; }
 .taxrate .btn { height: 42px; width: auto; padding: 0 18px; }
 .taxrate[data-missing] { box-shadow: 0 0 0 1.5px #f2d27a, 0 16px 34px -28px rgba(11,28,77,.4); }
 

@@ -142,6 +142,21 @@ describe.skipIf(!TEST_DB)('Cadastro de SKUs (custos)', () => {
     expect(today.kpis.grossProfit).toBe(400 - 40 - 48); // 12% de 400
   });
 
+  it('alíquota com "vale desde" recalcula as vendas a partir da data escolhida', async () => {
+    const { cookies, tenantId } = await setup();
+    await tax(cookies, 9);
+    await db.withTenant(tenantId, (c) => c.query("UPDATE tax_rate_history SET registrado_em = now() - interval '2 days'"));
+    await tax(cookies, 12); // vale só a partir de hoje
+    const ontem = new Date(Date.now() - 864e5).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+    const res = await app.inject({ method: 'PUT', url: '/api/v1/settings/tax-rate', cookies, payload: { ratePct: 12, vigenteDesde: ontem } });
+    expect(res.json()).toEqual({ ratePct: 12, vigenteDesde: ontem });
+    expect((await dash(cookies, 'yesterday')).kpis.grossProfit).toBe(300 - 30 - 36); // ontem agora com 12%
+    expect((await dash(cookies, 'today')).kpis.grossProfit).toBe(400 - 40 - 48);
+    // data no futuro é recusada
+    const amanha = new Date(Date.now() + 2 * 864e5).toLocaleDateString('sv-SE');
+    expect((await app.inject({ method: 'PUT', url: '/api/v1/settings/tax-rate', cookies, payload: { ratePct: 12, vigenteDesde: amanha } })).statusCode).toBe(400);
+  });
+
   it('valida custo e alíquota como no sistema antigo', async () => {
     const { cookies } = await setup();
     expect((await put(cookies, { sku: 'SKU-A', custoUnit: 0 })).statusCode).toBe(400);

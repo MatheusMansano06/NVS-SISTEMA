@@ -71,6 +71,11 @@ export class PgSkuRepository {
     );
   }
 
+  /** Vigências que começam em `since` ou depois (substituídas por uma alíquota com data escolhida). */
+  async dropTaxRatesFrom(db: Queryable, since: string): Promise<void> {
+    await db.query('DELETE FROM tax_rate_history WHERE vigente_desde >= $1', [since]);
+  }
+
   /**
    * Nova alíquota (a mais recente) nas vendas a partir de `since`. Só mexe no imposto, em UPDATEs diretos:
    * recalcular custo + imposto de todo o histórico numa transação estourou a memória do banco.

@@ -131,7 +131,11 @@ export interface FinanceLinesDto {
   total: number;
 }
 
-export const taxRateSchema = z.object({ ratePct: z.coerce.number().finite().min(0).max(100) });
+export const taxRateSchema = z.object({
+  ratePct: z.coerce.number().finite().min(0).max(100),
+  /** Vale desde (AAAA-MM-DD, até hoje): recalcula as vendas a partir desse dia. Ausente = regra padrão (a partir de hoje). */
+  vigenteDesde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.').optional(),
+});
 export interface TaxRateDto {
   ratePct: number | null;
   vigenteDesde: string | null;

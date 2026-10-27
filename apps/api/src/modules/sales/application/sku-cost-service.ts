@@ -147,12 +147,19 @@ export class SkuCostService {
     return { ratePct: cur?.ratePct ?? null, vigenteDesde: cur?.since ?? null };
   }
 
-  /** Define a alíquota da empresa e recalcula o imposto das vendas a partir da vigência dela. */
-  async setTaxRate(tenantId: string, userId: string, ratePct: number, today = todayIn()): Promise<TaxRateDto> {
+  /**
+   * Define a alíquota da empresa e recalcula o imposto das vendas a partir da vigência dela.
+   * `vigenteDesde` (opcional) escolhe o dia: as vendas desde então passam a usar a nova alíquota
+   * e as vigências que começavam nesse dia ou depois deixam de valer.
+   */
+  async setTaxRate(tenantId: string, userId: string, ratePct: number, today = todayIn(), vigenteDesde?: string): Promise<TaxRateDto> {
+    if (vigenteDesde && (vigenteDesde > today || vigenteDesde < '2000-01-01' || Number.isNaN(Date.parse(vigenteDesde))))
+      throw new ValidationError('A data de vigência deve ser um dia válido até hoje.');
     const dto = await this.db.withTenant(tenantId, async (db) => {
       const cur = await this.repo.currentTaxRate(db);
-      if (cur && same(cur.ratePct, ratePct)) return { ratePct, vigenteDesde: cur.since };
-      const since = sinceFor(cur, today);
+      if (cur && same(cur.ratePct, ratePct) && (!vigenteDesde || cur.since <= vigenteDesde)) return { ratePct, vigenteDesde: cur.since };
+      const since = vigenteDesde ?? sinceFor(cur, today);
+      if (vigenteDesde) await this.repo.dropTaxRatesFrom(db, vigenteDesde);
       await this.repo.addTaxRate(db, tenantId, userId, ratePct, since);
       await this.repo.applyTaxRate(db, ratePct, since);
       return { ratePct, vigenteDesde: since };

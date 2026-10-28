@@ -188,6 +188,10 @@ export interface TaxImpactItemDto {
   mcPctDepois: number;
   /** mcDepois − mcAntes (negativo quando o imposto sobe). */
   impacto: number;
+  /** Preço médio de venda por unidade no período. */
+  precoMedio: number;
+  /** Preço por unidade para voltar à margem % de antes com a alíquota nova (null se nenhum preço chega). */
+  precoSugerido: number | null;
 }
 
 export interface TaxImpactDto {

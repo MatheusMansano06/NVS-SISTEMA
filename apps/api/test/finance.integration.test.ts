@@ -208,6 +208,8 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
       expect.objectContaining({ sku: 'SKU-A', unidades: 3, vendas: 2, faturamento: 290, mcAntes: 115, mcDepois: 106.3, impacto: -8.7, mcPctAntes: 38.33 }),
     ]);
     expect(r.resumo).toMatchObject({ produtos: 1, mcAntes: 115, mcDepois: 106.3, viraramPrejuizo: 0 });
+    // imposto subiu: sugere preço maior que o médio de hoje para voltar aos 38,33%
+    expect(r.items[0].precoSugerido).toBeGreaterThan(r.items[0].precoMedio);
     expect(r.semCusto).toBe(1);
     expect((await get(cookies, 'tax-impact', '&para=200')).statusCode).toBe(400);
   });

@@ -84,7 +84,8 @@ export function TaxImpact({ filters }: { filters: FinanceFilters }) {
         <div>
           <h2 id="ts-title">Simulador de imposto por produto</h2>
           <small className="panel-hint">
-            Vendas aprovadas com custo no período · troca só a alíquota e mantém custo, tarifa e frete de cada venda
+            Vendas aprovadas com custo no período · troca só a alíquota e mantém custo, tarifa e frete de cada venda ·
+            "Vender por" é o preço que volta à margem % de antes (imposto e tarifa sobem junto com o preço)
           </small>
         </div>
         <div className="taxsim-rates">
@@ -152,6 +153,7 @@ export function TaxImpact({ filters }: { filters: FinanceFilters }) {
               <th scope="col" className="num">MC com {data?.de ?? '—'}%</th>
               <th scope="col" className="num">MC com {data?.para ?? '—'}%</th>
               <th scope="col" className="num">Impacto</th>
+              <th scope="col" className="num" title="Preço por unidade para voltar à margem % de antes com a alíquota nova">Vender por</th>
             </tr>
           </thead>
           <tbody>
@@ -187,6 +189,18 @@ export function TaxImpact({ filters }: { filters: FinanceFilters }) {
                     <b className={i.impacto < 0 ? 'neg' : 'pos'}>{i.impacto > 0 ? '+' : ''}{v(i.impacto)}</b>
                     <small>{p1(i.mcPctDepois - i.mcPctAntes)} p.p.</small>
                   </span>
+                </td>
+                <td className="num" data-label="Vender por">
+                  {i.impacto >= 0 ? (
+                    <span className="two">—<small>margem mantida</small></span>
+                  ) : i.precoSugerido === null ? (
+                    <span className="two">—<small>sem preço que volte a {p1(i.mcPctAntes)}%</small></span>
+                  ) : (
+                    <span className="two" title={`Hoje: ${money(i.precoMedio)} por unidade`}>
+                      <b className="sugerido">{money(i.precoSugerido)}</b>
+                      <small>+{p1(((i.precoSugerido - i.precoMedio) / i.precoMedio) * 100)}% · hoje {v(i.precoMedio)}</small>
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

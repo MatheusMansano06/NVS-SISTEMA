@@ -222,9 +222,10 @@
 .taxsim-tools .search { flex: 1; min-width: 200px; max-width: 360px; }
 .taxsim-tools input, .taxsim-tools select { height: 40px; padding: 0 12px; border-radius: 12px; border: 0; background: var(--gray-50); box-shadow: inset 0 0 0 1.5px var(--gray-100); font: inherit; font-size: .88rem; color: var(--navy); outline: none; }
 .taxsim-tools input:focus, .taxsim-tools select:focus { box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 4px rgba(31,95,255,.12); }
-.taxsim .fin .c-prod { width: 34%; }
+.taxsim .fin .c-prod { width: 30%; }
 .taxsim .fin b.neg { color: var(--danger); }
 .taxsim .fin b.pos { color: var(--ok); }
+.taxsim .fin b.sugerido { color: var(--blue); }
 .taxsim .fin tr[data-loss] td { background: var(--danger-soft); }
 @container (max-width: 620px) { .taxsim .fin tr[data-loss] { background: var(--danger-soft); } }
 @media (max-width: 640px) {

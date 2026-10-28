@@ -60,6 +60,19 @@ interface Computed {
 
 const n = Number;
 const q2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * Preço unitário que devolve a margem % de antes já com a alíquota nova.
+ * Imposto e tarifa crescem junto com o preço (mesma proporção de hoje); custo e frete ficam fixos.
+ * null quando nenhum preço chega lá (imposto + tarifa + margem ≥ 100%).
+ */
+function precoParaMargem(produto: number, base: number, tarifa: number, mcAntes: number, mcDepois: number, para: number, unidades: number) {
+  if (produto <= 0 || unidades <= 0) return null;
+  const variavel = ((base * para) / 100 + tarifa) / produto;
+  const fixo = produto * (1 - variavel) - mcDepois;
+  const sobra = 1 - variavel - mcAntes / produto;
+  return sobra > 0.01 && fixo > 0 ? q2(fixo / sobra / unidades) : null;
+}
 const CACHE_TTL = 30;
 
 /**
@@ -273,7 +286,7 @@ export class FinanceService {
     const de = sim.de ?? anterior;
 
     const orders = (await this.computed(tenantId, q)).filter((o) => o.status === 'aprovada');
-    const bySku = new Map<string, TaxImpactItemDto & { produto: number }>();
+    const bySku = new Map<string, TaxImpactItemDto & { produto: number; tarifa: number }>();
     for (const o of orders.filter((x) => x.certified)) {
       const base = Math.max(o.produto - o.cupom, 0);
       const semImposto = o.mc + o.imposto;
@@ -283,21 +296,24 @@ export class FinanceService {
       for (const it of o.row.items) {
         const share = it.qty / units;
         const cur = bySku.get(it.sku) ?? {
-          sku: it.sku, title: it.title, pictureUrl: null, unidades: 0, vendas: 0, faturamento: 0, produto: 0,
-          mcAntes: 0, mcDepois: 0, mcPctAntes: 0, mcPctDepois: 0, impacto: 0,
+          sku: it.sku, title: it.title, pictureUrl: null, unidades: 0, vendas: 0, faturamento: 0, produto: 0, tarifa: 0,
+          mcAntes: 0, mcDepois: 0, mcPctAntes: 0, mcPctDepois: 0, impacto: 0, precoMedio: 0, precoSugerido: null,
         };
         cur.pictureUrl ??= (it.listing_id && o.row.pictures?.[it.listing_id]) || null;
         cur.unidades += it.qty;
         cur.vendas++;
         cur.faturamento += base * share;
         cur.produto += o.produto * share;
+        cur.tarifa += o.tarifa * share;
         cur.mcAntes += antes * share;
         cur.mcDepois += depois * share;
         bySku.set(it.sku, cur);
       }
     }
-    const items = [...bySku.values()].map(({ produto, ...i }) => ({
+    const items = [...bySku.values()].map(({ produto, tarifa, ...i }) => ({
       ...i,
+      precoMedio: q2(produto / i.unidades),
+      precoSugerido: precoParaMargem(produto, i.faturamento, tarifa, i.mcAntes, i.mcDepois, para, i.unidades),
       faturamento: q2(i.faturamento),
       mcAntes: q2(i.mcAntes),
       mcDepois: q2(i.mcDepois),

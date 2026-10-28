@@ -72,8 +72,29 @@ export class PgSkuRepository {
   }
 
   /**
+   * Nova alíquota (a mais recente) nas vendas a partir de `since`. Só mexe no imposto, em UPDATEs diretos:
+   * recalcular custo + imposto de todo o histórico numa transação estourou a memória do banco.
+   */
+  async applyTaxRate(db: Queryable, ratePct: number, since: string): Promise<void> {
+    await db.query("SELECT pg_advisory_xact_lock(hashtext('apply-costs:' || current_setting('app.tenant_id', true)))");
+    const fromSince = `o.ordered_at >= ($1::date::timestamp AT TIME ZONE '${TIMEZONE}')`;
+    await db.query(
+      `UPDATE order_items i SET tax_pct = $2 FROM orders o
+        WHERE o.id = i.order_id AND ${fromSince} AND i.tax_pct IS DISTINCT FROM $2`,
+      [since, ratePct],
+    );
+    // imposto (NVS-WMS) = (produto − cupom do vendedor) × alíquota
+    await db.query(
+      `UPDATE orders o SET tax_amount = round(greatest(o.gross_amount - o.coupon_seller, 0) * $2 / 100, 2)
+        WHERE ${fromSince} AND o.source = 'marketplace'
+          AND EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id)`,
+      [since, ratePct],
+    );
+  }
+
+  /**
    * Reaplica custo (vigente por SKU) e alíquota (vigente da empresa) na data de cada venda,
-   * e recalcula os pedidos afetados. `all` = todas as vendas (mudança de alíquota).
+   * e recalcula os pedidos afetados. `all` = todas as vendas.
    */
   async applyCosts(db: Queryable, by: { skus?: string[]; orderIds?: string[]; all?: boolean }): Promise<number> {
     const where = by.all ? 'true' : by.skus ? 'i.sku = ANY($1)' : 'i.order_id = ANY($1)';

@@ -10,6 +10,7 @@ import { mlApi } from '../mercado-livre/ml-api';
 import { AreaChart } from './components/AreaChart';
 import { Donut } from './components/Donut';
 import { FinanceTable } from './components/FinanceTable';
+import { TaxImpact } from './components/TaxImpact';
 import { PRESETS, presetRange, shortDay, type PresetId } from './dates';
 import { financeApi, type FinanceFilters, type LineFilters } from './finance-api';
 import '../dashboard/dashboard.css';
@@ -27,6 +28,7 @@ export function FinancePage() {
   const [error, setError] = useState('');
   const [tableFilter, setTableFilter] = useState<LineFilters>({});
   const [version, setVersion] = useState(0);
+  const [view, setView] = useState<'geral' | 'imposto'>('geral');
   const ctrl = useRef<AbortController | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -138,6 +140,15 @@ export function FinancePage() {
           </button>
         </div>
 
+        <div className="fin-views" role="tablist" aria-label="Visão">
+          <button type="button" role="tab" aria-selected={view === 'geral'} onClick={() => setView('geral')}>Visão geral</button>
+          <button type="button" role="tab" aria-selected={view === 'imposto'} onClick={() => setView('imposto')}>Simulador de imposto</button>
+        </div>
+
+        {view === 'imposto' ? (
+          <TaxImpact filters={filters} />
+        ) : (
+        <>
         {error && <p className="banner banner-error" role="alert">{error}</p>}
 
         {data && data.semCusto.qtd > 0 && (
@@ -266,6 +277,8 @@ export function FinancePage() {
             </div>
           </>
         ) : null}
+        </>
+        )}
       </div>
       {tour.element}
     </AppShell>

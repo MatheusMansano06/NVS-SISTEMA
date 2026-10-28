@@ -1,4 +1,4 @@
-import type { FinanceLinesDto, FinanceSummaryDto, LowMarginDto, LogisticBucketId, MarginBand, Marketplace, SaleStatus } from '@nvs/shared';
+import type { FinanceLinesDto, FinanceSummaryDto, LowMarginDto, TaxImpactDto, LogisticBucketId, MarginBand, Marketplace, SaleStatus } from '@nvs/shared';
 import { http } from '../../shared/http';
 
 export interface FinanceFilters {
@@ -36,5 +36,7 @@ export const financeApi = {
     http<FinanceLinesDto>(`/api/v1/finance/lines?${qs(f, { ...l, offset, limit })}`, { signal }),
   lowMargin: (f: FinanceFilters, signal?: AbortSignal) => http<LowMarginDto>(`/api/v1/finance/low-margin?${qs(f)}`, { signal }),
   setLowMargin: (pct: number) => http<{ pct: number }>('/api/v1/finance/low-margin/settings', { method: 'PUT', body: { pct } }),
+  taxImpact: (f: FinanceFilters, r: { de?: number; para?: number }, signal?: AbortSignal) =>
+    http<TaxImpactDto>(`/api/v1/finance/tax-impact?${qs(f, r)}`, { signal }),
   exportUrl: (f: FinanceFilters, l: LineFilters) => `/api/v1/finance/export?${qs(f, { ...l })}`,
 };

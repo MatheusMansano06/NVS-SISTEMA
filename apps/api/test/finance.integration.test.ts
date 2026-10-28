@@ -196,6 +196,22 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     expect(low.items[0]).toMatchObject({ orderId: 'A', sku: 'SKU-A', mc: 47, mcPct: 23.5, bucket: 'full' });
   });
 
+  it('simulador de imposto por produto: MC das aprovadas com custo trocando a alíquota', async () => {
+    const cookies = await setup();
+    // sem informar: de = para = alíquota atual (só existe uma)
+    expect((await get(cookies, 'tax-impact')).json()).toMatchObject({ de: 10, para: 10, atual: 10 });
+    const r = (await get(cookies, 'tax-impact', '&de=10&para=13')).json();
+    // A: base 190 → MC 47 − 5,70 = 41,30; B: base 100 → 68 − 3 = 65 (E é devolução e C não tem custo: ficam fora)
+    expect(r.items).toEqual([
+      expect.objectContaining({ sku: 'SKU-A', unidades: 3, vendas: 2, faturamento: 290, mcAntes: 115, mcDepois: 106.3, impacto: -8.7, mcPctAntes: 38.33 }),
+    ]);
+    expect(r.resumo).toMatchObject({ produtos: 1, mcAntes: 115, mcDepois: 106.3, viraramPrejuizo: 0 });
+    // imposto subiu: sugere preço maior que o médio de hoje para voltar aos 38,33%
+    expect(r.items[0].precoSugerido).toBeGreaterThan(r.items[0].precoMedio);
+    expect(r.semCusto).toBe(1);
+    expect((await get(cookies, 'tax-impact', '&para=200')).statusCode).toBe(400);
+  });
+
   it('valida o período', async () => {
     const cookies = await setup();
     const bad = await app.inject({ method: 'GET', url: '/api/v1/finance/summary?from=2026-10-10&to=2026-01-01', cookies });

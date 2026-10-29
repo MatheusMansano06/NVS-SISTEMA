@@ -90,6 +90,7 @@ export class FinanceService {
 
   async summary(tenantId: string, q: FinanceQuery): Promise<FinanceSummaryDto> {
     const orders = await this.computed(tenantId, q);
+    const adSpend = await this.adSpend(tenantId, q);
     const c = { aprov: 0, canc: 0, dev: 0, qA: 0, qC: 0, qD: 0, units: 0, fc: 0, fv: 0, tarifa: 0, cupom: 0 };
     const cert = { custo: 0, imposto: 0, mc: 0, base: 0, qtd: 0, tarifa: 0, fv: 0 };
     const sem = { qtd: 0, valor: 0, skus: new Set<string>() };
@@ -188,6 +189,7 @@ export class FinanceService {
       }),
       semCusto: { qtd: sem.qtd, valor: q2(sem.valor), skus: [...sem.skus].slice(0, 30) },
       breakdown: [...buckets.entries()].map(([bucket, valor]) => ({ bucket, valor: q2(valor) })).sort((a, b) => b.valor - a.valor),
+      adSpend: q2(adSpend),
       freteIncerto,
       enriquecimentoPendente: pendente,
       generatedAt: new Date().toISOString(),
@@ -427,6 +429,19 @@ export class FinanceService {
       }
     }
     return lines;
+  }
+
+  /** Investido em Mercado Ads no período (só Mercado Livre; respeita o filtro de conta), igual ao Dashboard. */
+  private async adSpend(tenantId: string, q: FinanceQuery): Promise<number> {
+    if (q.marketplace && q.marketplace !== 'mercado_livre') return 0;
+    const { rows } = await this.db.withTenant(tenantId, (db) =>
+      db.query<{ cost: string }>(
+        `SELECT coalesce(sum(cost), 0) AS cost FROM ad_spend_daily
+          WHERE day BETWEEN $1::date AND $2::date AND ($3::uuid IS NULL OR account_id = $3)`,
+        [q.from, q.to, q.accountId ?? null],
+      ),
+    );
+    return n(rows[0]?.cost ?? 0);
   }
 
   /** Pedidos do período com MC calculada (cache curto, invalidado quando custos mudam). */

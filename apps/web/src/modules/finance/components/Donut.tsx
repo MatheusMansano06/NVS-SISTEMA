@@ -2,12 +2,13 @@ import { useState } from 'react';
 import type { FinanceSummaryDto } from '@nvs/shared';
 import { money, pct } from '../../../shared/format';
 
-/** Paleta validada (CVD + contraste) para as 5 fatias da composição. */
+/** Paleta validada (CVD + contraste) para as fatias da composição (Ads só quando descontado da margem). */
 export const COMPOSITION_COLORS: Record<string, string> = {
   custo: '#1f5fff',
   imposto: '#d99a00',
   tarifa: '#7048e8',
   frete: '#e8590c',
+  ads: '#c2255c',
   mc: '#0e8a74',
 };
 

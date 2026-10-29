@@ -94,10 +94,12 @@ export interface FinanceSummaryDto {
   range: { from: string; to: string };
   cards: FinanceCards;
   /** Composição sobre a base da MC (vendas aprovadas com custo). */
-  composicao: { key: 'custo' | 'imposto' | 'tarifa' | 'frete' | 'mc'; label: string; valor: number; pct: number }[];
+  composicao: { key: 'custo' | 'imposto' | 'tarifa' | 'frete' | 'ads' | 'mc'; label: string; valor: number; pct: number }[];
   series: { day: string; aprovadas: number; mc: number | null }[];
   semCusto: { qtd: number; valor: number; skus: string[] };
   breakdown: { bucket: LogisticBucketId; valor: number }[];
+  /** Investido em Mercado Ads no período (mesma fonte do Dashboard); a tela decide se desconta da MC. */
+  adSpend: number;
   freteIncerto: number;
   enriquecimentoPendente: number;
   generatedAt: string;

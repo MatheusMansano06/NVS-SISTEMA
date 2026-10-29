@@ -76,6 +76,7 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
       await add('C', 'paid', 'SKU-X', 1, 50, { tarifa: 7, fv: 18, bucket: 'places_coleta' });
       await add('D', 'cancelled', 'SKU-A', 1, 100, { fv: 25, bucket: 'full' });
       await add('E', 'paid', 'SKU-A', 1, 100, { tarifa: 12, fv: 10, refund: 30, bucket: 'flex' });
+      await c.query(`INSERT INTO ad_spend_daily (tenant_id, account_id, day, cost) VALUES ($1, $2, $3, 7.5)`, [tenantId, acc.rows[0].id, today]);
     });
     await app.inject({ method: 'PUT', url: '/api/v1/settings/tax-rate', cookies, payload: { ratePct: 10 } });
     await app.inject({ method: 'PUT', url: '/api/v1/skus', cookies, payload: { sku: 'SKU-A', custoUnit: 40 } });
@@ -112,6 +113,8 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     expect(s.composicao.map((c: { key: string }) => c.key)).toEqual(['custo', 'imposto', 'tarifa', 'frete', 'mc']);
     expect(s.breakdown.find((b: { bucket: string }) => b.bucket === 'full').valor).toBe(190);
     expect(s.series).toHaveLength(1);
+    // Ads do período vêm à parte: a tela decide se desconta da MC
+    expect(s.adSpend).toBe(7.5);
   });
 
   it('DRE do mês: vendas automáticas + gastos lançados, com edição e exclusão', async () => {

@@ -16,6 +16,16 @@ import { financeApi, type FinanceFilters, type LineFilters } from './finance-api
 import '../dashboard/dashboard.css';
 import './finance.css';
 
+/** Mesma preferência do Dashboard: ligar/desligar numa tela vale para a outra. */
+const ADS_KEY = 'nvs.discountAds';
+const readAds = () => {
+  try {
+    return localStorage.getItem(ADS_KEY) !== '0'; // padrão: margem já descontando os Ads
+  } catch {
+    return true;
+  }
+};
+
 /** Análise Financeira: margem de contribuição, composição e vendas detalhadas (regras NVS-WMS). */
 export function FinancePage() {
   const [preset, setPreset] = useState<PresetId | null>('30d');
@@ -29,6 +39,16 @@ export function FinancePage() {
   const [tableFilter, setTableFilter] = useState<LineFilters>({});
   const [version, setVersion] = useState(0);
   const [view, setView] = useState<'geral' | 'imposto'>('geral');
+  const [discountAds, setDiscountAds] = useState(readAds);
+  const toggleAds = () =>
+    setDiscountAds((v) => {
+      try {
+        localStorage.setItem(ADS_KEY, v ? '0' : '1');
+      } catch {
+        /* vale só para esta sessão */
+      }
+      return !v;
+    });
   const ctrl = useRef<AbortController | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -71,7 +91,21 @@ export function FinancePage() {
   };
 
   const c = data?.cards;
-  const band = c?.mcPct != null ? marginBand(c.mcPct) : null;
+  const adSpend = data?.adSpend ?? 0;
+  // mesma conta do Dashboard: MC − Ads sobre a mesma base da MC (vendas aprovadas com custo)
+  const mcBase = c && c.mcTotal !== null && c.mcPct ? c.mcTotal / (c.mcPct / 100) : 0;
+  const withAds = discountAds && adSpend > 0 && c?.mcTotal != null && mcBase > 0;
+  const mcShown = c?.mcTotal == null ? null : withAds ? c.mcTotal - adSpend : c.mcTotal;
+  const mcPctShown = c?.mcPct == null ? null : withAds && mcShown !== null ? (mcShown / mcBase) * 100 : c.mcPct;
+  const band = mcPctShown != null ? marginBand(mcPctShown) : null;
+  const composicao =
+    data && withAds && mcShown !== null && mcShown >= 0
+      ? [
+          ...data.composicao.filter((p) => p.key !== 'mc'),
+          { key: 'ads' as const, label: 'Ads', valor: adSpend, pct: (adSpend / mcBase) * 100 },
+          { key: 'mc' as const, label: 'MC', valor: mcShown, pct: mcPctShown ?? 0 },
+        ]
+      : (data?.composicao ?? []);
 
   const tour = useGuidedTour('financeiro', TOURS.financeiro, Boolean(data) && !loading);
   return (
@@ -193,11 +227,15 @@ export function FinancePage() {
               </article>
 
               <article className="fin-card fin-mc" data-band={band ?? undefined}>
-                <span className="fin-label">Margem de contribuição</span>
-                <p className="fin-pct">{c.mcPct === null ? '—' : pct(c.mcPct / 100, 2)}</p>
+                <span className="fin-label">{withAds ? 'Margem de contribuição depois dos Ads' : 'Margem de contribuição'}</span>
+                <p className="fin-pct">{mcPctShown === null ? '—' : pct(mcPctShown / 100, 2)}</p>
                 <p className="fin-sub">
-                  <b className="money">{c.mcTotal === null ? '—' : money(c.mcTotal)}</b> no período
-                  {c.ticketMc !== null && <> · <b className="money">{money(c.ticketMc)}</b> por venda</>}
+                  <b className="money">{mcShown === null ? '—' : money(mcShown)}</b> no período
+                  {withAds ? (
+                    <> · antes dos Ads <b>{pct((c.mcPct ?? 0) / 100, 2)}</b></>
+                  ) : (
+                    c.ticketMc !== null && <> · <b className="money">{money(c.ticketMc)}</b> por venda</>
+                  )}
                 </p>
                 <AreaChart
                   tone="light"
@@ -211,12 +249,41 @@ export function FinancePage() {
 
               <article className="fin-card">
                 <span className="fin-label">Composição</span>
-                {data.composicao.length ? (
-                  <Donut parts={data.composicao} mcPct={c.mcPct} />
+                {composicao.length ? (
+                  <Donut parts={composicao} mcPct={mcPctShown} />
                 ) : (
                   <p className="empty">Cadastre os custos para ver a composição da margem.</p>
                 )}
               </article>
+            </section>
+
+            <section className="ads-bar" aria-label="Mercado Ads">
+              <div className="ads-bar-title">
+                <strong>Mercado Ads</strong>
+                <small>mesmo período do filtro</small>
+              </div>
+              <div className="ads-num">
+                <span>Investido em Ads</span>
+                <strong className="money">{money(adSpend)}</strong>
+              </div>
+              <div className="ads-num ads-tacos" title="TACOS = investimento em Ads ÷ faturamento bruto × 100">
+                <span>TACOS</span>
+                <strong>{c.faturamento > 0 ? pct(adSpend / c.faturamento) : '—'}</strong>
+                <small>Ads ÷ faturamento</small>
+              </div>
+              <div className="ads-num">
+                <span>Margem antes → depois</span>
+                <strong>
+                  {c.mcPct === null || mcBase <= 0
+                    ? '—'
+                    : `${pct(c.mcPct / 100, 2)} → ${pct((c.mcTotal! - adSpend) / mcBase, 2)}`}
+                </strong>
+              </div>
+              <label className="ads-toggle">
+                <input type="checkbox" checked={discountAds} onChange={toggleAds} />
+                <span className="ads-switch" aria-hidden="true" />
+                Descontar Ads da margem
+              </label>
             </section>
 
             <section className="fin-minis" aria-label="Indicadores">

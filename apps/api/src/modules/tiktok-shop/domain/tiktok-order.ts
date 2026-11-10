@@ -23,6 +23,8 @@ export interface TiktokOrder {
     /** Desconto bancado pelo vendedor (promoção, oferta relâmpago, cupom). */
     seller_discount?: string | null;
     platform_discount?: string | null;
+    /** Live em que o item foi vendido; vazio quando não veio de live. */
+    room_id?: string | null;
   }[] | null;
 }
 
@@ -102,6 +104,7 @@ export function mapTiktokOrder(o: TiktokOrder): IncomingOrder | null {
     // a tela mostra como tipo de envio (não há "tipo de anúncio" no TikTok)
     listingType: o.shipping_type === 'SELLER' || o.shipping_type === 'TIKTOK' ? `tiktok_${o.shipping_type.toLowerCase()}` : null,
     paymentType: o.payment_method_name ?? null,
+    liveRoomId: (o.line_items ?? []).find((li) => li.room_id)?.room_id ?? null,
     items,
   };
 }

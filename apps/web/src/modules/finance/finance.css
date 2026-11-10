@@ -239,3 +239,25 @@
 .order-id { display: inline-flex; align-items: center; gap: 2px; border: 0; background: none; padding: 0; cursor: pointer; color: inherit; justify-self: start; }
 .order-id:hover { color: var(--blue); }
 .order-id .copy { padding: 0 3px; }
+
+/* ============ TikTok Shop: painel de lives ============ */
+.live-panel { display: grid; gap: 14px; min-width: 0; }
+.live-panel h2 { margin: 0; color: var(--navy); font-size: 1.2rem; }
+.live-panel header p { margin: 4px 0 0; color: var(--gray-500); font-size: .86rem; }
+.live-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.live-kpis > div { display: grid; gap: 2px; padding: 12px 14px; border-radius: 18px; background: var(--gray-50); }
+.live-kpis span { font-size: .72rem; font-weight: 650; text-transform: uppercase; letter-spacing: .03em; color: var(--gray-500); }
+.live-kpis b { font-size: 1.25rem; color: var(--navy); font-variant-numeric: tabular-nums; }
+.live-kpis small { color: var(--gray-500); font-size: .78rem; }
+.live-kpis [data-band='bom'] b, .live-band[data-band='bom'] { color: var(--ok-ink); }
+.live-kpis [data-band='atencao'] b, .live-band[data-band='atencao'] { color: var(--warn-ink); }
+.live-kpis [data-band='critico'] b, .live-band[data-band='critico'] { color: var(--danger); }
+.live-table { max-height: 50vh; overflow: auto; }
+.live-table table { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-size: .86rem; }
+.live-table th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; color: var(--gray-500); padding: 4px 10px; position: sticky; top: 0; background: var(--surface); }
+.live-table td { padding: 8px 10px; background: var(--gray-50); color: var(--navy); font-variant-numeric: tabular-nums; }
+.live-table td:first-child { border-radius: 12px 0 0 12px; }
+.live-table td:last-child { border-radius: 0 12px 12px 0; }
+.live-table .num { text-align: right; }
+.live-table small { color: var(--gray-500); }
+.live-band { font-weight: 700; }

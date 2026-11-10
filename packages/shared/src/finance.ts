@@ -27,6 +27,8 @@ export const financeQuerySchema = z
     to: isoDate,
     marketplace: z.enum(MARKETPLACES).optional(),
     accountId: z.string().uuid().optional(),
+    /** TikTok Shop: só vendas feitas em live, ou só as de fora da live (vídeo, vitrine, card). */
+    canal: z.enum(['live', 'fora_live']).optional(),
     /** NVS-WMS: soma o frete comprador na base da MC em todas as modalidades. */
     considerarFreteComprador: z.coerce.boolean().optional(),
     fresh: z.coerce.boolean().optional(),
@@ -96,8 +98,23 @@ export interface FinanceCards {
   unidades: number;
 }
 
+/** Uma live do TikTok Shop no período: vendas feitas nela e a margem. */
+export interface TiktokLiveDto {
+  roomId: string;
+  /** Primeiro pedido da live (AAAA-MM-DD). */
+  day: string;
+  pedidos: number;
+  unidades: number;
+  faturamento: number;
+  /** null enquanto há venda da live sem custo cadastrado. */
+  mc: number | null;
+  mcPct: number | null;
+}
+
 export interface FinanceSummaryDto {
   range: { from: string; to: string };
+  /** TikTok Shop: lives do período, da mais recente para a mais antiga (vazio nos outros marketplaces). */
+  lives: TiktokLiveDto[];
   cards: FinanceCards;
   /** Composição sobre a base da MC (vendas aprovadas com custo). */
   composicao: { key: 'custo' | 'imposto' | 'tarifa' | 'frete' | 'ads' | 'mc'; label: string; valor: number; pct: number }[];

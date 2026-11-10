@@ -13,6 +13,8 @@ import { AreaChart } from './components/AreaChart';
 import { Donut } from './components/Donut';
 import { FinanceTable } from './components/FinanceTable';
 import { TaxImpact } from './components/TaxImpact';
+import { LivePanel } from './components/LivePanel';
+import { Modal } from '../../shared/ui/Modal';
 import { PRESETS, presetRange, shortDay, type PresetId } from './dates';
 import { financeApi, type FinanceFilters, type LineFilters } from './finance-api';
 import '../dashboard/dashboard.css';
@@ -38,6 +40,8 @@ export function FinancePage() {
   const hasTiktok = useFeature('tiktok_shop');
   const [marketplace, setMarketplace] = useState<Marketplace>('mercado_livre');
   const isTiktok = marketplace === 'tiktok_shop';
+  const [canal, setCanal] = useState<'' | 'live' | 'fora_live'>('');
+  const [livesOpen, setLivesOpen] = useState(false);
   const [accounts, setAccounts] = useState<{ accountId: string; nickname: string }[] | null>(null);
   const [data, setData] = useState<FinanceSummaryDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,8 +63,8 @@ export function FinancePage() {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const filters: FinanceFilters = useMemo(
-    () => ({ from: range.from, to: range.to, accountId: accountId || undefined, marketplace: isTiktok ? marketplace : undefined, considerarFreteComprador: considerarFc || undefined }),
-    [range, accountId, considerarFc, isTiktok, marketplace],
+    () => ({ from: range.from, to: range.to, accountId: accountId || undefined, marketplace: isTiktok ? marketplace : undefined, canal: isTiktok && canal ? canal : undefined, considerarFreteComprador: considerarFc || undefined }),
+    [range, accountId, considerarFc, isTiktok, marketplace, canal],
   );
 
   useEffect(() => {
@@ -75,6 +79,7 @@ export function FinancePage() {
   }, [isTiktok]);
   const pickMarketplace = (m: Marketplace) => {
     setMarketplace(m);
+    setCanal('');
     setAccountId('');
     setTableFilter({});
     setData(null);
@@ -126,6 +131,7 @@ export function FinancePage() {
         ]
       : (data?.composicao ?? []);
 
+  const livePanelFilters = useMemo(() => ({ ...filters, canal: undefined }), [filters]);
   const tour = useGuidedTour('financeiro', TOURS.financeiro, Boolean(data) && !loading);
   return (
     <AppShell>
@@ -190,6 +196,16 @@ export function FinancePage() {
               </select>
               <Icon name="chevron" size={16} />
             </label>
+          )}
+          {isTiktok && (
+            <>
+              <div className="presets" role="radiogroup" aria-label="Canal de venda">
+                {([['', 'Todas'], ['live', 'Live'], ['fora_live', 'Fora da live']] as const).map(([id, label]) => (
+                  <button key={id} type="button" role="radio" aria-pressed={canal === id} aria-checked={canal === id} onClick={() => setCanal(id)}>{label}</button>
+                ))}
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLivesOpen(true)}>Painel de lives</button>
+            </>
           )}
           <button type="button" className="icon-btn" onClick={() => void load(true)} aria-label="Atualizar" data-spinning={loading || undefined}>
             <Icon name="refresh" />
@@ -379,6 +395,9 @@ export function FinancePage() {
         </>
         )}
       </div>
+      <Modal open={livesOpen} onClose={() => setLivesOpen(false)} label="Painel de lives" wide>
+        {livesOpen && <LivePanel filters={livePanelFilters} />}
+      </Modal>
       {tour.element}
     </AppShell>
   );

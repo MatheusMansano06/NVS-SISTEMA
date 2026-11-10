@@ -6,6 +6,8 @@ export interface FinanceFilters {
   to: string;
   accountId?: string;
   marketplace?: Marketplace;
+  /** TikTok Shop: só vendas em live ou só fora da live. */
+  canal?: 'live' | 'fora_live';
   considerarFreteComprador?: boolean;
 }
 
@@ -24,6 +26,7 @@ const qs = (f: FinanceFilters, extra: Record<string, string | number | boolean |
   const p = new URLSearchParams({ from: f.from, to: f.to });
   if (f.accountId) p.set('accountId', f.accountId);
   if (f.marketplace) p.set('marketplace', f.marketplace);
+  if (f.canal) p.set('canal', f.canal);
   if (f.considerarFreteComprador) p.set('considerarFreteComprador', 'true');
   for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== '' && v !== false) p.set(k, String(v));
   return p.toString();

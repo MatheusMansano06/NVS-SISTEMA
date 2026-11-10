@@ -154,7 +154,7 @@ export class PgSkuRepository {
   async rows(db: Queryable): Promise<SkuRowDto[]> {
     const { rows } = await db.query(`
       WITH recent AS MATERIALIZED (
-        SELECT i.sku, i.title, i.listing_id, i.quantity, i.unit_price, o.marketplace,
+        SELECT i.sku, i.title, i.listing_id, i.picture_url, i.quantity, i.unit_price, o.marketplace,
                (o.status = 'paid' AND o.ordered_at >= now() - interval '30 days') AS paid30
           FROM orders o JOIN order_items i ON i.order_id = o.id
          WHERE o.ordered_at >= now() - interval '90 days'
@@ -171,7 +171,7 @@ export class PgSkuRepository {
           FROM recent WHERE paid30 GROUP BY sku
       ),
       -- título/anúncio de quem só aparece pelas vendas (SKU de anúncio já tem os dados do próprio anúncio)
-      seen AS (SELECT sku, max(title) AS title, max(listing_id) AS listing_id FROM recent GROUP BY sku),
+      seen AS (SELECT sku, max(title) AS title, max(listing_id) AS listing_id, max(picture_url) AS picture_url FROM recent GROUP BY sku),
       -- mapa chave → melhor anúncio (ativo e mais recente), montado UMA vez: chave = SKU, SKU de variação ou MLB
       lmap AS (
         SELECT DISTINCT ON (k.key) k.key, l.title, l.picture_url, l.permalink, l.status, l.available_quantity
@@ -179,7 +179,9 @@ export class PgSkuRepository {
           CROSS JOIN LATERAL unnest(array_remove(ARRAY[l.sku, l.external_id] || l.variation_skus, NULL)) AS k(key)
          ORDER BY k.key, (l.status = 'active') DESC, l.updated_at DESC
       )
-      SELECT s.sku, coalesce(l.title, seen.title) AS title, l.picture_url, l.permalink, l.status AS listing_status,
+      SELECT s.sku, coalesce(l.title, seen.title) AS title,
+             -- TikTok Shop não tem anúncio sincronizado: a foto vem das vendas
+             coalesce(l.picture_url, seen.picture_url) AS picture_url, l.permalink, l.status AS listing_status,
              l.available_quantity AS stock, coalesce(sold.units, 0) AS units30, sold.avg_price,
              c.custo_unit, c.updated_at, s.platforms, k.linked_sku
         FROM all_skus s

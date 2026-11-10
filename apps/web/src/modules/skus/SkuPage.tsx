@@ -201,7 +201,7 @@ export function SkuPage() {
         </>}
       </div>
 
-      <Modal open={linking !== null} onClose={() => setLinking(null)} label="Vincular a outro SKU">
+      <Modal open={linking !== null} onClose={() => setLinking(null)} label="Vincular a outro SKU" wide>
         {linking && (
           <LinkSkuModal
             row={linking}

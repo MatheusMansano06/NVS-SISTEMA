@@ -220,6 +220,33 @@ describe.skipIf(!TEST_DB)('Cadastro de SKUs (custos)', () => {
     expect(otherList.items).toHaveLength(0); // custos de outra empresa não aparecem
   });
 
+  it('custo com vigência escolhida: desde sempre, a partir de uma data, e data futura recusada', async () => {
+    const { cookies, tenantId } = await setup();
+    const costs = async () =>
+      Object.fromEntries(
+        (await db.withTenant(tenantId, (c) => c.query(`SELECT external_id, product_cost::float AS cost FROM orders WHERE external_id LIKE 'a-%'`))).rows.map(
+          (r) => [r.external_id, r.cost],
+        ),
+      );
+    const yesterday = new Date(Date.now() - 86_400_000 + -3 * 3_600_000).toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
+    await put(cookies, { sku: 'SKU-A', custoUnit: 40 });
+    expect(await costs()).toEqual({ 'a-hoje': 80, 'a-ontem': 80 });
+    // desde sempre: as duas vendas
+    expect((await put(cookies, { sku: 'SKU-A', custoUnit: 30, vigenteDesde: 'sempre' })).statusCode).toBe(200);
+    expect(await costs()).toEqual({ 'a-hoje': 60, 'a-ontem': 60 });
+    // a partir de hoje (data explícita): a de ontem mantém o custo anterior
+    const today = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+    expect((await put(cookies, { sku: 'SKU-A', custoUnit: 50, vigenteDesde: today })).statusCode).toBe(200);
+    expect(await costs()).toEqual({ 'a-hoje': 100, 'a-ontem': 60 });
+    // desde ontem: substitui a mudança de hoje
+    expect((await put(cookies, { sku: 'SKU-A', custoUnit: 45, vigenteDesde: yesterday })).statusCode).toBe(200);
+    expect(await costs()).toEqual({ 'a-hoje': 90, 'a-ontem': 90 });
+    const row = (await app.inject({ method: 'GET', url: '/api/v1/skus?filter=all&q=SKU-A&fresh=1', cookies })).json().items[0];
+    expect(row.custoUnit).toBe(45);
+    expect((await put(cookies, { sku: 'SKU-A', custoUnit: 10, vigenteDesde: tomorrow })).statusCode).toBe(400);
+  });
+
   it('vínculo entre plataformas: o SKU do TikTok usa o custo do SKU do Mercado Livre e acompanha as mudanças', async () => {
     const { cookies, tenantId } = await setup();
     // mesma peça vendida no TikTok Shop com outro SKU (2 unidades)

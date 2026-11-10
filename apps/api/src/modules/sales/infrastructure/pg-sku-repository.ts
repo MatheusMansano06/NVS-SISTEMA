@@ -1,4 +1,4 @@
-import type { Marketplace, SkuFilter, SkuRowDto } from '@nvs/shared';
+import type { SkuRowDto } from '@nvs/shared';
 import type { Queryable } from '../../../shared/infrastructure/database.js';
 import { TIMEZONE } from '../domain/period.js';
 
@@ -145,70 +145,56 @@ export class PgSkuRepository {
   }
 
   /**
-   * Lista consolidada: SKUs dos anúncios que existem hoje no marketplace (ativos, pausados, em revisão; com variações)
+   * Base do cadastro: SKUs dos anúncios que existem hoje no marketplace (ativos, pausados, em revisão; com variações)
    * e os vendidos nos últimos 90 dias (ainda pesam na margem). Anúncio encerrado/excluído e venda antiga do histórico
    * não entram — o custo cadastrado deles continua guardado.
+   * Devolve TODAS as linhas da empresa (centenas): busca, filtro e página são feitos em memória pelo serviço, que guarda
+   * o resultado por alguns minutos. As vendas dos 90 dias são lidas UMA vez (`recent`); antes eram três varreduras.
    */
-  async list(db: Queryable, q: { q?: string; filter: SkuFilter; platform?: Marketplace; offset: number; limit: number }) {
-    const base = `
-      WITH all_skus AS (
+  async rows(db: Queryable): Promise<SkuRowDto[]> {
+    const { rows } = await db.query(`
+      WITH recent AS MATERIALIZED (
+        SELECT i.sku, i.title, i.listing_id, i.quantity, i.unit_price, o.marketplace,
+               (o.status = 'paid' AND o.ordered_at >= now() - interval '30 days') AS paid30
+          FROM orders o JOIN order_items i ON i.order_id = o.id
+         WHERE o.ordered_at >= now() - interval '90 days'
+      ),
+      all_skus AS (
         SELECT sku, array_agg(DISTINCT marketplace ORDER BY marketplace) AS platforms FROM (
           SELECT sku, marketplace FROM listings WHERE sku IS NOT NULL AND status NOT IN ('closed', 'inactive')
           UNION SELECT unnest(variation_skus), marketplace FROM listings WHERE status NOT IN ('closed', 'inactive')
-          UNION SELECT i.sku, o.marketplace FROM order_items i JOIN orders o ON o.id = i.order_id
-                 WHERE o.ordered_at >= now() - interval '90 days'
+          UNION SELECT sku, marketplace FROM recent
         ) x GROUP BY sku
       ),
       sold AS (
-        SELECT i.sku, sum(i.quantity) AS units, sum(i.quantity * i.unit_price) / nullif(sum(i.quantity), 0) AS avg_price
-          FROM order_items i JOIN orders o ON o.id = i.order_id
-         WHERE o.status = 'paid' AND o.ordered_at >= now() - interval '30 days'
-         GROUP BY i.sku
+        SELECT sku, sum(quantity) AS units, sum(quantity * unit_price) / nullif(sum(quantity), 0) AS avg_price
+          FROM recent WHERE paid30 GROUP BY sku
       ),
-      seen AS (SELECT sku, max(title) AS title, max(listing_id) AS listing_id FROM order_items GROUP BY sku),
+      -- título/anúncio de quem só aparece pelas vendas (SKU de anúncio já tem os dados do próprio anúncio)
+      seen AS (SELECT sku, max(title) AS title, max(listing_id) AS listing_id FROM recent GROUP BY sku),
       -- mapa chave → melhor anúncio (ativo e mais recente), montado UMA vez: chave = SKU, SKU de variação ou MLB
       lmap AS (
         SELECT DISTINCT ON (k.key) k.key, l.title, l.picture_url, l.permalink, l.status, l.available_quantity
           FROM listings l
           CROSS JOIN LATERAL unnest(array_remove(ARRAY[l.sku, l.external_id] || l.variation_skus, NULL)) AS k(key)
          ORDER BY k.key, (l.status = 'active') DESC, l.updated_at DESC
-      ),
-      rows AS MATERIALIZED (
-        SELECT s.sku, coalesce(l.title, seen.title) AS title, l.picture_url, l.permalink, l.status AS listing_status,
-               l.available_quantity AS stock, coalesce(sold.units, 0) AS units30, sold.avg_price,
-               c.custo_unit, c.updated_at, s.platforms, k.linked_sku
-          FROM all_skus s
-          LEFT JOIN sold ON sold.sku = s.sku
-          LEFT JOIN seen ON seen.sku = s.sku
-          LEFT JOIN sku_links k ON k.sku = s.sku
-          -- SKU vinculado mostra o custo do SKU de destino
-          LEFT JOIN sku_costs c ON c.sku = coalesce(k.linked_sku, s.sku)
-          LEFT JOIN lmap direct ON direct.key = s.sku
-          LEFT JOIN lmap via_sale ON via_sale.key = seen.listing_id
-          CROSS JOIN LATERAL (SELECT coalesce(direct.title, via_sale.title) AS title, coalesce(direct.picture_url, via_sale.picture_url) AS picture_url,
-                                     coalesce(direct.permalink, via_sale.permalink) AS permalink, coalesce(direct.status, via_sale.status) AS status,
-                                     coalesce(direct.available_quantity, via_sale.available_quantity) AS available_quantity) l
-         WHERE s.sku IS NOT NULL AND s.sku <> ''
-      )`;
-    const search = `($1::text IS NULL OR sku ILIKE '%' || $1 || '%' OR title ILIKE '%' || $1 || '%') AND ($4::text IS NULL OR $4 = ANY(platforms))`;
-    const filter =
-      q.filter === 'missing' ? 'custo_unit IS NULL' : q.filter === 'done' ? 'custo_unit IS NOT NULL' : 'true';
-    // contadores e página na mesma consulta (a base é montada uma vez)
-    const { rows } = await db.query(
-      `${base}, found AS (SELECT * FROM rows WHERE ${search})
-       SELECT p.*, c.all_n, c.done_n
-         FROM (SELECT count(*) AS all_n, count(custo_unit) AS done_n FROM found) c
-         LEFT JOIN LATERAL (
-           SELECT * FROM found WHERE ${filter}
-            ORDER BY (custo_unit IS NULL) DESC, units30 DESC, title NULLS LAST, sku
-            LIMIT $2 OFFSET $3
-         ) p ON true`,
-      [q.q || null, q.limit, q.offset, q.platform ?? null],
-    );
-    const all = Number(rows[0]?.all_n ?? 0);
-    const done = Number(rows[0]?.done_n ?? 0);
-    const page = rows.filter((r) => r.sku !== null);
-    const items: SkuRowDto[] = page.map((r) => ({
+      )
+      SELECT s.sku, coalesce(l.title, seen.title) AS title, l.picture_url, l.permalink, l.status AS listing_status,
+             l.available_quantity AS stock, coalesce(sold.units, 0) AS units30, sold.avg_price,
+             c.custo_unit, c.updated_at, s.platforms, k.linked_sku
+        FROM all_skus s
+        LEFT JOIN sold ON sold.sku = s.sku
+        LEFT JOIN seen ON seen.sku = s.sku
+        LEFT JOIN sku_links k ON k.sku = s.sku
+        -- SKU vinculado mostra o custo do SKU de destino
+        LEFT JOIN sku_costs c ON c.sku = coalesce(k.linked_sku, s.sku)
+        LEFT JOIN lmap direct ON direct.key = s.sku
+        LEFT JOIN lmap via_sale ON via_sale.key = seen.listing_id
+        CROSS JOIN LATERAL (SELECT coalesce(direct.title, via_sale.title) AS title, coalesce(direct.picture_url, via_sale.picture_url) AS picture_url,
+                                   coalesce(direct.permalink, via_sale.permalink) AS permalink, coalesce(direct.status, via_sale.status) AS status,
+                                   coalesce(direct.available_quantity, via_sale.available_quantity) AS available_quantity) l
+       WHERE s.sku IS NOT NULL AND s.sku <> ''`);
+    return rows.map((r) => ({
       sku: r.sku,
       platforms: r.platforms ?? [],
       linkedSku: r.linked_sku ?? null,
@@ -222,8 +208,6 @@ export class PgSkuRepository {
       custoUnit: num(r.custo_unit),
       updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
     }));
-    const total = q.filter === 'missing' ? all - done : q.filter === 'done' ? done : all;
-    return { items, total, counts: { all, done, missing: all - done } };
   }
 
   // ---------- vínculo de SKU entre plataformas

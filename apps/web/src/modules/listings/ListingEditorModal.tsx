@@ -1,3 +1,4 @@
+import { normalizeBrNumber } from '../../shared/br-number';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PACKAGE_TYPES, type FlexStatusDto, type ListingDto, type ListingEditorDto, type WholesaleDto } from '@nvs/shared';
 import { money } from '../../shared/format';
@@ -18,7 +19,7 @@ const TABS: { id: EditorTab; label: string; hint: string }[] = [
 
 const errMsg = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback);
 const parseMoney = (s: string): number | null => {
-  const t = s.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const t = normalizeBrNumber(s);
   const n = Number(t);
   return t && Number.isFinite(n) ? n : null;
 };

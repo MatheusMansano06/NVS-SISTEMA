@@ -1,5 +1,6 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { SkuRowDto } from '@nvs/shared';
+import { normalizeBrNumber } from '../../shared/br-number';
 import { int, money } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
@@ -8,7 +9,7 @@ import { skusApi } from './skus-api';
 
 const toInput = (n: number | null) => (n === null ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const parse = (s: string): number | null => {
-  const t = s.replace(/[R$\s%]/g, '').replace(/\./g, '').replace(',', '.');
+  const t = normalizeBrNumber(s);
   if (!t) return null;
   const n = Number(t);
   return Number.isFinite(n) ? n : NaN;
@@ -38,6 +39,8 @@ export function SkuRow({
   useEffect(() => setCusto(toInput(row.custoUnit)), [row.custoUnit]);
 
   const linked = Boolean(row.linkedSku);
+  // custo acima do preço de venda costuma ser erro de digitação: só grava se a pessoa confirmar o mesmo valor
+  const warned = useRef<{ value: number; at: number } | null>(null);
 
   async function unlink() {
     setError('');
@@ -55,6 +58,15 @@ export function SkuRow({
     if (c === null && row.custoUnit === null) return; // nada digitado
     if (c === row.custoUnit) return;
     if (c === null || Number.isNaN(c) || c <= 0) return fail('Custo precisa ser maior que zero');
+    if (row.avgPrice !== null && c > row.avgPrice) {
+      const w = warned.current;
+      // Enter dispara duas tentativas seguidas (tecla + saída do campo): a confirmação precisa ser um gesto novo
+      if (!w || w.value !== c || Date.now() - w.at < 600) {
+        if (!w || w.value !== c) warned.current = { value: c, at: Date.now() };
+        return fail(`${money(c)} é mais que o preço médio de venda (${money(row.avgPrice)}). Se estiver certo, confirme com Enter de novo.`);
+      }
+    }
+    warned.current = null;
     setState('saving');
     setError('');
     try {

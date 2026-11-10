@@ -37,7 +37,7 @@ interface Row {
   listing_type: string | null;
   freight_uncertain: boolean;
   enriched: boolean;
-  items: { sku: string; title: string; qty: number; price: number; listing_id: string | null; known: boolean }[];
+  items: { sku: string; title: string; qty: number; price: number; listing_id: string | null; picture?: string | null; known: boolean }[];
   pictures: Record<string, string> | null;
 }
 
@@ -264,7 +264,7 @@ export class FinanceService {
           date: o.row.day,
           title: first ? (o.row.items.length > 1 ? `${first.title} (+${o.row.items.length - 1})` : first.title) : '—',
           sku: first?.sku ?? '—',
-          pictureUrl: (first?.listing_id && o.row.pictures?.[first.listing_id]) || null,
+          pictureUrl: (first?.listing_id && o.row.pictures?.[first.listing_id]) || first?.picture || null,
           bucket: o.row.bucket,
           faturamento: q2(o.faturamentoLinha),
           mc: q2(o.mc),
@@ -301,7 +301,7 @@ export class FinanceService {
           sku: it.sku, title: it.title, pictureUrl: null, unidades: 0, vendas: 0, faturamento: 0, produto: 0, tarifa: 0,
           mcAntes: 0, mcDepois: 0, mcPctAntes: 0, mcPctDepois: 0, impacto: 0, precoMedio: 0, precoSugerido: null,
         };
-        cur.pictureUrl ??= (it.listing_id && o.row.pictures?.[it.listing_id]) || null;
+        cur.pictureUrl ??= (it.listing_id && o.row.pictures?.[it.listing_id]) || it.picture || null;
         cur.unidades += it.qty;
         cur.vendas++;
         cur.faturamento += base * share;
@@ -413,7 +413,7 @@ export class FinanceService {
           bucket: o.row.bucket,
           sku: it.sku,
           title: it.title,
-          pictureUrl: (it.listing_id && o.row.pictures?.[it.listing_id]) || null,
+          pictureUrl: (it.listing_id && o.row.pictures?.[it.listing_id]) || it.picture || null,
           valorUnit: q2(it.price),
           qtd: it.qty,
           faturamento: q2(o.faturamentoLinha * share),
@@ -431,8 +431,24 @@ export class FinanceService {
     return lines;
   }
 
-  /** Investido em Mercado Ads no período (só Mercado Livre; respeita o filtro de conta), igual ao Dashboard. */
+  /**
+   * Investido em anúncios no período (respeita o filtro de conta). Mercado Livre: Mercado Ads, igual ao Dashboard.
+   * TikTok Shop: anúncios que o TikTok descontou das vendas (ajustes "GMV payment for TikTok Ads" do extrato);
+   * anúncio pago por cartão ou saldo de anúncios não passa pelo extrato da loja.
+   */
   private async adSpend(tenantId: string, q: FinanceQuery): Promise<number> {
+    if (q.marketplace === 'tiktok_shop') {
+      const { rows } = await this.db.withTenant(tenantId, (db) =>
+        db.query<{ cost: string }>(
+          `SELECT coalesce(sum(-adjustment), 0) AS cost FROM tiktok_statement_transactions
+            WHERE type = 'GMV_PAYMENT_FOR_TIKTOK_ADS'
+              AND (statement_time AT TIME ZONE 'UTC')::date BETWEEN $1::date AND $2::date
+              AND ($3::uuid IS NULL OR account_id = $3)`,
+          [q.from, q.to, q.accountId ?? null],
+        ),
+      );
+      return Math.max(0, n(rows[0]?.cost ?? 0));
+    }
     if (q.marketplace && q.marketplace !== 'mercado_livre') return 0;
     const { rows } = await this.db.withTenant(tenantId, (db) =>
       db.query<{ cost: string }>(
@@ -496,7 +512,7 @@ export class FinanceService {
               o.cost_known OR o.source = 'demo' AS cost_known, o.logistic_bucket AS bucket, o.listing_type, o.freight_uncertain,
               (o.finance_enriched_at IS NOT NULL OR o.source = 'demo') AS enriched,
               coalesce(json_agg(json_build_object('sku', i.sku, 'title', i.title, 'qty', i.quantity, 'price', i.unit_price,
-                         'listing_id', i.listing_id, 'known', i.unit_cost IS NOT NULL OR o.source = 'demo'))
+                         'listing_id', i.listing_id, 'picture', i.picture_url, 'known', i.unit_cost IS NOT NULL OR o.source = 'demo'))
                          FILTER (WHERE i.id IS NOT NULL), '[]') AS items,
               (SELECT json_object_agg(l.external_id, l.picture_url) FROM listings l
                 WHERE l.external_id = ANY(array_agg(i.listing_id)) AND l.picture_url IS NOT NULL) AS pictures

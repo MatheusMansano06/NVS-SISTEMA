@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import type { TiktokOrder } from '../domain/tiktok-order.js';
+import type { TiktokFinanceTx, TiktokOrder } from '../domain/tiktok-order.js';
 
 export class TiktokApiError extends Error {
   constructor(message: string, readonly status: number, readonly code: number | null) {
@@ -23,6 +23,12 @@ export interface TiktokShop {
   cipher: string;
 }
 
+export interface TiktokStatement {
+  id: string;
+  /** Segundos Unix. */
+  statement_time: number;
+}
+
 export interface TiktokApi {
   authorizationUrl(state: string): string;
   exchangeCode(code: string): Promise<TiktokTokens>;
@@ -30,13 +36,18 @@ export interface TiktokApi {
   shops(token: string): Promise<TiktokShop[]>;
   /** Pedidos criados (`create`) ou alterados (`update`) em [from, to), em páginas. */
   searchOrders(token: string, cipher: string, from: Date, to: Date, by: 'create' | 'update', pageToken?: string): Promise<{ orders: TiktokOrder[]; next: string | null }>;
-  /** Extrato financeiro do pedido (vazio enquanto não houve repasse). */
-  orderTransactions(token: string, cipher: string, orderId: string): Promise<unknown>;
+  /** Extratos (um por repasse ou ajuste) com `statement_time` a partir de `from`, do mais antigo para o mais novo. */
+  statements(token: string, cipher: string, from: Date, pageToken?: string): Promise<{ statements: TiktokStatement[]; next: string | null }>;
+  /** Transações de um extrato: repasse de cada pedido (com tarifas, frete e devolução) e ajustes. */
+  statementTransactions(token: string, cipher: string, statementId: string, pageToken?: string): Promise<{ transactions: TiktokFinanceTx[]; next: string | null }>;
+  /** Pedidos ainda sem repasse, com os valores ESTIMADOS pelo TikTok. */
+  unsettled(token: string, cipher: string, pageToken?: string): Promise<{ transactions: TiktokFinanceTx[]; next: string | null }>;
 }
 
 const AUTH_HOST = 'https://auth.tiktok-shops.com';
 const API_HOST = 'https://open-api.tiktokglobalshop.com';
 export const TIKTOK_PAGE_SIZE = 50;
+const FINANCE_PAGE_SIZE = 100;
 
 /**
  * Assinatura das chamadas (versões 202309+): HMAC-SHA256 de
@@ -103,8 +114,30 @@ export class HttpTiktokApi implements TiktokApi {
     return { orders: d.orders ?? [], next: d.next_page_token || null };
   }
 
-  orderTransactions(token: string, cipher: string, orderId: string): Promise<unknown> {
-    return this.call('GET', `/finance/202501/orders/${encodeURIComponent(orderId)}/statement_transactions`, token, { shop_cipher: cipher });
+  async statements(token: string, cipher: string, from: Date, pageToken?: string) {
+    const query: Record<string, string> = {
+      shop_cipher: cipher, sort_field: 'statement_time', sort_order: 'ASC', page_size: String(FINANCE_PAGE_SIZE),
+      statement_time_ge: String(Math.floor(from.getTime() / 1000)),
+    };
+    if (pageToken) query.page_token = pageToken;
+    const d = await this.call<{ statements?: TiktokStatement[]; next_page_token?: string }>('GET', '/finance/202309/statements', token, query);
+    return { statements: d.statements ?? [], next: d.next_page_token || null };
+  }
+
+  async statementTransactions(token: string, cipher: string, statementId: string, pageToken?: string) {
+    const query: Record<string, string> = { shop_cipher: cipher, sort_field: 'order_create_time', page_size: String(FINANCE_PAGE_SIZE) };
+    if (pageToken) query.page_token = pageToken;
+    const d = await this.call<{ transactions?: TiktokFinanceTx[]; next_page_token?: string }>(
+      'GET', `/finance/202501/statements/${encodeURIComponent(statementId)}/statement_transactions`, token, query,
+    );
+    return { transactions: d.transactions ?? [], next: d.next_page_token || null };
+  }
+
+  async unsettled(token: string, cipher: string, pageToken?: string) {
+    const query: Record<string, string> = { shop_cipher: cipher, sort_field: 'order_create_time', sort_order: 'DESC', page_size: String(FINANCE_PAGE_SIZE) };
+    if (pageToken) query.page_token = pageToken;
+    const d = await this.call<{ transactions?: TiktokFinanceTx[]; next_page_token?: string }>('GET', '/finance/202507/orders/unsettled', token, query);
+    return { transactions: d.transactions ?? [], next: d.next_page_token || null };
   }
 
   private async call<T>(method: 'GET' | 'POST', path: string, token: string, query: Record<string, string>, body?: unknown): Promise<T> {

@@ -15,12 +15,14 @@ export interface IncomingOrder {
   /** Frete pago pelo comprador visto nos pagamentos (o envio pode refinar depois). */
   buyerShipping: number;
   refundPartial: number;
+  /** Desconto bancado pelo vendedor já conhecido no pedido (TikTok Shop). No Mercado Livre o cupom vem depois, pelo enriquecimento. */
+  couponSeller?: number;
   listingType: string | null;
   buyerNickname?: string | null;
   packId?: string | null;
   paymentType?: string | null;
   installments?: number | null;
-  items: { sku: string; title: string; quantity: number; unitPrice: number; listingId: string | null }[];
+  items: { sku: string; title: string; quantity: number; unitPrice: number; listingId: string | null; pictureUrl?: string | null }[];
 }
 
 /** Anúncio normalizado (foto, status, estoque). */
@@ -73,8 +75,8 @@ export class SalesIngestion {
       const { rows } = await db.query<{ id: string }>(
         `INSERT INTO orders (tenant_id, account_id, marketplace, external_id, status, ordered_at,
                              gross_amount, marketplace_fee, units, shipping_ref, buyer_shipping, refund_partial, listing_type,
-                             buyer_nickname, pack_id, payment_type, installments)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                             buyer_nickname, pack_id, payment_type, installments, coupon_seller)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, coalesce($18::numeric, 0))
          ON CONFLICT (tenant_id, marketplace, external_id) DO UPDATE
            SET status = EXCLUDED.status, ordered_at = EXCLUDED.ordered_at,
                gross_amount = EXCLUDED.gross_amount,
@@ -82,7 +84,11 @@ export class SalesIngestion {
                marketplace_fee = CASE WHEN orders.marketplace = 'tiktok_shop' AND orders.finance_enriched_at IS NOT NULL
                                       THEN orders.marketplace_fee ELSE EXCLUDED.marketplace_fee END,
                units = EXCLUDED.units, shipping_ref = EXCLUDED.shipping_ref, account_id = EXCLUDED.account_id,
-               refund_partial = EXCLUDED.refund_partial, listing_type = EXCLUDED.listing_type,
+               -- TikTok Shop: a devolução conferida no extrato também não volta a zero na reimportação
+               refund_partial = CASE WHEN orders.marketplace = 'tiktok_shop' AND orders.finance_enriched_at IS NOT NULL
+                                     THEN orders.refund_partial ELSE EXCLUDED.refund_partial END,
+               listing_type = EXCLUDED.listing_type,
+               coupon_seller = CASE WHEN $18::numeric IS NULL THEN orders.coupon_seller ELSE $18::numeric END,
                buyer_nickname = COALESCE(EXCLUDED.buyer_nickname, orders.buyer_nickname),
                pack_id = COALESCE(EXCLUDED.pack_id, orders.pack_id),
                payment_type = COALESCE(EXCLUDED.payment_type, orders.payment_type),
@@ -92,16 +98,16 @@ export class SalesIngestion {
          RETURNING id`,
         [tenantId, accountId, marketplace, o.externalId, o.status, o.orderedAt, o.gross, o.fee, o.units, o.shippingRef,
          o.buyerShipping, o.refundPartial, o.listingType, o.buyerNickname ?? null, o.packId ?? null,
-         o.paymentType ?? null, o.installments ?? null],
+         o.paymentType ?? null, o.installments ?? null, o.couponSeller ?? null],
       );
       const orderId = rows[0]!.id;
       orderIds.push(orderId);
       await db.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
       for (const it of o.items) {
         await db.query(
-          `INSERT INTO order_items (tenant_id, order_id, sku, title, quantity, unit_price, listing_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [tenantId, orderId, it.sku, it.title, it.quantity, it.unitPrice, it.listingId],
+          `INSERT INTO order_items (tenant_id, order_id, sku, title, quantity, unit_price, listing_id, picture_url)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [tenantId, orderId, it.sku, it.title, it.quantity, it.unitPrice, it.listingId, it.pictureUrl ?? null],
         );
       }
     }

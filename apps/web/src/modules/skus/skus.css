@@ -212,3 +212,25 @@ a.btn-ghost svg { transform: rotate(90deg); }
   .ean-date { text-align: right; }
   .ean-actions { justify-content: flex-start; }
 }
+
+/* ============ Plataformas e vínculo entre SKUs ============ */
+.tag-platform { background: var(--gray-100); color: var(--navy); }
+.tag-platform[data-p='mercado_livre'] { background: #fff4a8; color: #2d3277; }
+.tag-platform[data-p='tiktok_shop'] { background: #111; color: #fff; }
+.tag-link { background: var(--blue-soft); color: var(--blue); }
+.sku-link-btn { border: 0; background: none; padding: 0; font: inherit; font-size: .74rem; font-weight: 650; color: var(--blue); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.sku-field[data-locked] { opacity: .75; }
+.link-sku { display: grid; gap: 12px; min-width: min(560px, 80vw); }
+.link-sku h2 { margin: 0; color: var(--navy); font-size: 1.2rem; }
+.link-sku p { margin: 0; color: var(--gray-500); font-size: .9rem; line-height: 1.45; }
+.link-sku .search { max-width: none; }
+.link-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 50vh; overflow: auto; }
+.link-list[aria-busy='true'] { min-height: 80px; opacity: .6; }
+.link-list button {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 8px 14px 8px 8px; border: 0; border-radius: 18px; background: var(--gray-50); font: inherit; cursor: pointer;
+}
+.link-list button:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--blue); background: var(--surface); }
+.link-list .thumb { width: 44px; height: 44px; border-radius: 12px; }
+.link-list b { color: var(--navy); font-size: .88rem; white-space: nowrap; }
+.link-empty { padding: 18px; text-align: center; color: var(--gray-500); }

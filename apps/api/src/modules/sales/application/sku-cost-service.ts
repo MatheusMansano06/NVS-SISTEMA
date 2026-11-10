@@ -1,4 +1,4 @@
-import type { SaveSkuCostInput, SkuFilter, SkuImportReport, SkuListDto, TaxRateDto } from '@nvs/shared';
+import type { Marketplace, SaveSkuCostInput, SkuFilter, SkuImportReport, SkuListDto, TaxRateDto } from '@nvs/shared';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { ValidationError } from '../../../shared/kernel/errors.js';
@@ -26,12 +26,42 @@ export class SkuCostService {
     private readonly cache: Cache,
   ) {}
 
-  list(tenantId: string, q: { q?: string; filter: SkuFilter; offset: number; limit: number }): Promise<SkuListDto> {
+  list(tenantId: string, q: { q?: string; filter: SkuFilter; platform?: Marketplace; offset: number; limit: number }): Promise<SkuListDto> {
     return this.db.withTenant(tenantId, (db) => this.repo.list(db, q));
+  }
+
+  /**
+   * Vincula `sku` ao SKU do mesmo produto em outra plataforma: as vendas dele passam a usar o custo (e o histórico
+   * de custo) de `linkedSku`. Um nível só, para o custo ter uma origem clara.
+   */
+  async link(tenantId: string, userId: string, sku: string, linkedSku: string): Promise<{ affectedOrders: number }> {
+    if (sku === linkedSku) throw new ValidationError('Escolha um SKU diferente para vincular');
+    const affected = await this.db.withTenant(tenantId, async (db) => {
+      if (await this.repo.linkOf(db, linkedSku)) throw new ValidationError(`${linkedSku} já está vinculado a outro SKU. Vincule direto a ele.`);
+      if (await this.repo.isLinkTarget(db, sku)) throw new ValidationError(`Outros SKUs usam o custo de ${sku}. Desvincule-os antes.`);
+      await this.repo.setLink(db, tenantId, userId, sku, linkedSku);
+      return this.repo.applyCosts(db, { skus: [sku] });
+    });
+    await this.invalidate(tenantId);
+    return { affectedOrders: affected };
+  }
+
+  /** Desfaz o vínculo: o SKU volta a usar o próprio custo (ou fica sem custo). */
+  async unlink(tenantId: string, sku: string): Promise<boolean> {
+    const removed = await this.db.withTenant(tenantId, async (db) => {
+      if (!(await this.repo.removeLink(db, sku))) return false;
+      await this.repo.applyCosts(db, { skus: [sku] });
+      return true;
+    });
+    await this.invalidate(tenantId);
+    return removed;
   }
 
   async save(tenantId: string, userId: string, input: SaveSkuCostInput, today = todayIn()) {
     const result = await this.db.withTenant(tenantId, async (db) => {
+      // custo de SKU vinculado vem do destino: gravar aqui não teria efeito e confundiria
+      const target = await this.repo.linkOf(db, input.sku);
+      if (target) throw new ValidationError(`${input.sku} usa o custo de ${target}. Altere o custo lá ou desvincule.`);
       const changed = await this.write(db, tenantId, userId, input.sku, input.custoUnit, 'cadastro', today);
       const affected = changed ? await this.repo.applyCosts(db, { skus: [input.sku] }) : 0;
       return { sku: input.sku, custoUnit: input.custoUnit, affectedOrders: affected };

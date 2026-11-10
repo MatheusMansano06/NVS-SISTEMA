@@ -1,15 +1,18 @@
-import type { GenerateEansInput, GenerateEansResult, InternalEanDto, InternalEanListDto, SkuFilter, UpdateEanInput, SkuImportReport, SkuListDto, TaxRateDto } from '@nvs/shared';
+import type { Marketplace, GenerateEansInput, GenerateEansResult, InternalEanDto, InternalEanListDto, SkuFilter, UpdateEanInput, SkuImportReport, SkuListDto, TaxRateDto } from '@nvs/shared';
 import { http } from '../../shared/http';
 
 export const skusApi = {
-  list: (p: { q?: string; filter: SkuFilter; offset: number; limit?: number }, signal?: AbortSignal) => {
+  list: (p: { q?: string; filter: SkuFilter; platform?: Marketplace; offset: number; limit?: number }, signal?: AbortSignal) => {
     const qs = new URLSearchParams({ filter: p.filter, offset: String(p.offset), limit: String(p.limit ?? 50) });
     if (p.q) qs.set('q', p.q);
+    if (p.platform) qs.set('platform', p.platform);
     return http<SkuListDto>(`/api/v1/skus?${qs}`, { signal });
   },
   save: (sku: string, custoUnit: number) =>
     http<{ affectedOrders: number }>('/api/v1/skus', { method: 'PUT', body: { sku, custoUnit } }),
   remove: (sku: string) => http<void>('/api/v1/skus', { method: 'DELETE', body: { sku } }),
+  link: (sku: string, linkedSku: string) => http<{ affectedOrders: number }>('/api/v1/skus/link', { method: 'PUT', body: { sku, linkedSku } }),
+  unlink: (sku: string) => http<void>('/api/v1/skus/link', { method: 'DELETE', body: { sku } }),
   importCsv: (csv: string, dryRun: boolean, ignoreUnknown = false) =>
     http<SkuImportReport>('/api/v1/skus/import', { body: { csv, dryRun, ignoreUnknown } }),
   taxRate: () => http<TaxRateDto>('/api/v1/settings/tax-rate'),

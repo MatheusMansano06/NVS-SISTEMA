@@ -3,6 +3,7 @@ import type { SkuRowDto } from '@nvs/shared';
 import { int, money } from '../../shared/format';
 import { ApiError } from '../../shared/http';
 import { ProductThumb } from '../dashboard/components/ProductThumb';
+import { PLATFORM_LABELS } from './platforms';
 import { skusApi } from './skus-api';
 
 const toInput = (n: number | null) => (n === null ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -16,14 +17,40 @@ const parse = (s: string): number | null => {
 type State = 'idle' | 'saving' | 'saved' | 'error';
 
 /** Linha editável: salva sozinha ao sair do campo ou com Enter; Esc desfaz. */
-export function SkuRow({ row, onSaved }: { row: SkuRowDto; onSaved: (sku: string, custo: number) => void }) {
+export function SkuRow({
+  row,
+  onSaved,
+  platforms,
+  onLink,
+  onChanged,
+}: {
+  row: SkuRowDto;
+  onSaved: (sku: string, custo: number) => void;
+  /** Mostra as plataformas e o vínculo entre SKUs (empresa com mais de um marketplace). */
+  platforms?: boolean;
+  onLink?: (row: SkuRowDto) => void;
+  onChanged?: () => void;
+}) {
   const [custo, setCusto] = useState(toInput(row.custoUnit));
   const [state, setState] = useState<State>('idle');
   const [error, setError] = useState('');
 
   useEffect(() => setCusto(toInput(row.custoUnit)), [row.custoUnit]);
 
+  const linked = Boolean(row.linkedSku);
+
+  async function unlink() {
+    setError('');
+    try {
+      await skusApi.unlink(row.sku);
+      onChanged?.();
+    } catch (err) {
+      fail(err instanceof ApiError ? err.message : 'Não foi possível desvincular');
+    }
+  }
+
   async function commit() {
+    if (linked) return; // o custo vem do SKU vinculado
     const c = parse(custo);
     if (c === null && row.custoUnit === null) return; // nada digitado
     if (c === row.custoUnit) return;
@@ -77,6 +104,16 @@ export function SkuRow({ row, onSaved }: { row: SkuRowDto; onSaved: (sku: string
           {row.listingStatus === 'paused' && <span className="tag tag-paused">Pausado</span>}
           {row.listingStatus === 'active' && <span className="tag tag-active">Ativo</span>}
           {missing ? <span className="tag tag-missing">Sem custo</span> : <span className="tag tag-done">✓ Completo</span>}
+          {platforms && row.platforms.map((p) => <span key={p} className="tag tag-platform" data-p={p}>{PLATFORM_LABELS[p]}</span>)}
+          {platforms && linked && (
+            <>
+              <span className="tag tag-link" title="O custo deste SKU vem do SKU vinculado">Custo de {row.linkedSku}</span>
+              <button type="button" className="sku-link-btn" onClick={() => void unlink()}>Desvincular</button>
+            </>
+          )}
+          {platforms && !linked && onLink && (
+            <button type="button" className="sku-link-btn" onClick={() => onLink(row)}>Vincular a outro SKU</button>
+          )}
         </span>
       </div>
       <div className="sku-stats">
@@ -86,7 +123,7 @@ export function SkuRow({ row, onSaved }: { row: SkuRowDto; onSaved: (sku: string
       </div>
       <label className="sku-input sku-cost">
         <small>Custo unitário</small>
-        <span className="sku-field">
+        <span className="sku-field" data-locked={linked || undefined}>
           <i>R$</i>
           <input
             inputMode="decimal"
@@ -99,6 +136,8 @@ export function SkuRow({ row, onSaved }: { row: SkuRowDto; onSaved: (sku: string
             onKeyDown={onKey}
             aria-invalid={state === 'error' || undefined}
             aria-label={`Custo unitário de ${row.sku}`}
+            readOnly={linked}
+            title={linked ? `Custo de ${row.linkedSku}. Altere lá ou desvincule.` : undefined}
           />
         </span>
       </label>

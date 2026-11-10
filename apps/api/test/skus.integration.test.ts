@@ -219,4 +219,54 @@ describe.skipIf(!TEST_DB)('Cadastro de SKUs (custos)', () => {
     const otherList = (await app.inject({ method: 'GET', url: '/api/v1/skus?filter=done', cookies: other.cookies })).json();
     expect(otherList.items).toHaveLength(0); // custos de outra empresa não aparecem
   });
+
+  it('vínculo entre plataformas: o SKU do TikTok usa o custo do SKU do Mercado Livre e acompanha as mudanças', async () => {
+    const { cookies, tenantId } = await setup();
+    // mesma peça vendida no TikTok Shop com outro SKU (2 unidades)
+    await db.withTenant(tenantId, async (c) => {
+      const acc = await c.query(
+        `INSERT INTO marketplace_accounts (tenant_id, marketplace, nickname, external_id) VALUES ($1, 'tiktok_shop', 'Loja TT', 'tt1') RETURNING id`,
+        [tenantId],
+      );
+      const o = await c.query(
+        `INSERT INTO orders (tenant_id, account_id, marketplace, external_id, status, ordered_at, gross_amount, marketplace_fee, units)
+         VALUES ($1, $2, 'tiktok_shop', 'tt-1', 'paid', now() - interval '1 minute', 300, 20, 2) RETURNING id`,
+        [tenantId, acc.rows[0].id],
+      );
+      await c.query(`INSERT INTO order_items (tenant_id, order_id, sku, title, quantity, unit_price) VALUES ($1, $2, 'TT-A', 'Peça A', 2, 150)`, [tenantId, o.rows[0].id]);
+    });
+    const ttOrder = async () =>
+      (await db.withTenant(tenantId, (c) => c.query(`SELECT product_cost::float AS cost, cost_known FROM orders WHERE external_id = 'tt-1'`))).rows[0];
+    const list = async (qs = '') => (await app.inject({ method: 'GET', url: `/api/v1/skus?filter=all${qs}`, cookies })).json();
+    const row = async (sku: string) => (await list()).items.find((i: { sku: string }) => i.sku === sku);
+    const link = (sku: string, linkedSku: string) => app.inject({ method: 'PUT', url: '/api/v1/skus/link', cookies, payload: { sku, linkedSku } });
+
+    await put(cookies, { sku: 'SKU-A', custoUnit: 40 });
+    expect(await ttOrder()).toEqual({ cost: 0, cost_known: false });
+    // cada SKU mostra onde existe; o filtro separa por plataforma
+    expect(await row('TT-A')).toMatchObject({ platforms: ['tiktok_shop'], linkedSku: null, custoUnit: null });
+    expect((await row('SKU-A')).platforms).toEqual(['mercado_livre']);
+    expect((await list('&platform=tiktok_shop')).items.map((i: { sku: string }) => i.sku)).toEqual(['TT-A']);
+    expect((await list('&platform=mercado_livre')).counts.all).toBe(2);
+
+    expect((await link('TT-A', 'SKU-A')).json()).toEqual({ affectedOrders: 1 });
+    expect(await row('TT-A')).toMatchObject({ linkedSku: 'SKU-A', custoUnit: 40 });
+    expect(await ttOrder()).toEqual({ cost: 80, cost_known: true });
+    expect((await list()).counts).toEqual({ all: 3, done: 2, missing: 1 });
+
+    // custo do destino corrigido → as vendas do vinculado acompanham
+    await put(cookies, { sku: 'SKU-A', custoUnit: 50 });
+    expect(await ttOrder()).toEqual({ cost: 100, cost_known: true });
+
+    // sem cadeia de vínculos, sem custo próprio enquanto vinculado, sem vincular a si mesmo
+    expect((await put(cookies, { sku: 'TT-A', custoUnit: 10 })).statusCode).toBe(400);
+    expect((await link('SKU-B', 'TT-A')).statusCode).toBe(400);
+    expect((await link('SKU-A', 'SKU-B')).statusCode).toBe(400);
+    expect((await link('TT-A', 'TT-A')).statusCode).toBe(400);
+
+    const del = () => app.inject({ method: 'DELETE', url: '/api/v1/skus/link', cookies, payload: { sku: 'TT-A' } });
+    expect((await del()).statusCode).toBe(204);
+    expect(await ttOrder()).toEqual({ cost: 0, cost_known: false });
+    expect((await del()).statusCode).toBe(404);
+  });
 });

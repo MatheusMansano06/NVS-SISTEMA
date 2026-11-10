@@ -116,17 +116,18 @@ export function FinancePage() {
 
   const c = data?.cards;
   const adSpend = data?.adSpend ?? 0;
-  // mesma conta do Dashboard: MC − Ads sobre a mesma base da MC (vendas aprovadas com custo)
-  const mcBase = c && c.mcTotal !== null && c.mcPct ? c.mcTotal / (c.mcPct / 100) : 0;
-  const withAds = discountAds && adSpend > 0 && c?.mcTotal != null && mcBase > 0;
+  // TACOS = investimento em Ads ÷ receita bruta (vendas aprovadas) × 100; margem depois dos Ads = margem − TACOS
+  // (mesma conta do Radar ADS e do Dashboard)
+  const tacos = c && c.vendasAprovadas > 0 ? (adSpend / c.vendasAprovadas) * 100 : null;
+  const withAds = discountAds && adSpend > 0 && c?.mcTotal != null && c.mcPct != null && tacos !== null;
   const mcShown = c?.mcTotal == null ? null : withAds ? c.mcTotal - adSpend : c.mcTotal;
-  const mcPctShown = c?.mcPct == null ? null : withAds && mcShown !== null ? (mcShown / mcBase) * 100 : c.mcPct;
+  const mcPctShown = c?.mcPct == null ? null : withAds ? c.mcPct - tacos! : c.mcPct;
   const band = mcPctShown != null ? marginBand(mcPctShown) : null;
   const composicao =
     data && withAds && mcShown !== null && mcShown >= 0
       ? [
           ...data.composicao.filter((p) => p.key !== 'mc'),
-          { key: 'ads' as const, label: 'Ads', valor: adSpend, pct: (adSpend / mcBase) * 100 },
+          { key: 'ads' as const, label: 'Ads', valor: adSpend, pct: tacos ?? 0 },
           { key: 'mc' as const, label: 'MC', valor: mcShown, pct: mcPctShown ?? 0 },
         ]
       : (data?.composicao ?? []);
@@ -260,7 +261,11 @@ export function FinancePage() {
                 <p className="fin-big money">{money(c.vendasAprovadas)}</p>
                 <p className="fin-sub">
                   Cancel. <b className="money">{money(c.vendasCanceladas)}</b> · Dev. parcial <b className="money">{money(c.devolucoesParciais)}</b>{' '}
-                  · Faturamento <b className="money">{money(c.faturamento)}</b>
+                  {isTiktok && c.gmv !== null ? (
+                    <>· GMV <b className="money" title="Como no Seller Center: total pago pelos compradores, inclusive pedidos cancelados depois de pagos">{money(c.gmv)}</b></>
+                  ) : (
+                    <>· Faturamento <b className="money">{money(c.faturamento)}</b></>
+                  )}
                 </p>
                 <AreaChart
                   tone="dark"
@@ -313,17 +318,15 @@ export function FinancePage() {
                 <span>Investido em Ads</span>
                 <strong className="money">{money(adSpend)}</strong>
               </div>
-              <div className="ads-num ads-tacos" title="TACOS = investimento em Ads ÷ faturamento bruto × 100">
+              <div className="ads-num ads-tacos" title="TACOS = investimento em Ads ÷ receita bruta (vendas aprovadas) × 100">
                 <span>TACOS</span>
-                <strong>{c.faturamento > 0 ? pct(adSpend / c.faturamento) : '—'}</strong>
-                <small>Ads ÷ faturamento</small>
+                <strong>{tacos === null ? '—' : pct(tacos / 100)}</strong>
+                <small>Ads ÷ receita bruta</small>
               </div>
               <div className="ads-num">
                 <span>Margem antes → depois</span>
                 <strong>
-                  {c.mcPct === null || mcBase <= 0
-                    ? '—'
-                    : `${pct(c.mcPct / 100, 2)} → ${pct((c.mcTotal! - adSpend) / mcBase, 2)}`}
+                  {c.mcPct === null || tacos === null ? '—' : `${pct(c.mcPct / 100, 2)} → ${pct((c.mcPct - tacos) / 100, 2)}`}
                 </strong>
               </div>
               <label className="ads-toggle">

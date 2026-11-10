@@ -37,10 +37,11 @@ describe('TikTok Shop: pedido', () => {
     expect(o.units).toBe(3);
   });
 
-  it('não pago é ignorado; cancelado não tem tarifa', () => {
-    const base = { id: '4', create_time: 1_794_325_094, line_items: [{ ...line, sale_price: '12.49' }] };
+  it('não pago é ignorado (inclusive cancelado antes do pagamento); cancelado depois de pago não tem tarifa', () => {
+    const base = { id: '4', create_time: 1_794_325_094, payment: { total_amount: '12.49' }, line_items: [{ ...line, sale_price: '12.49' }] };
     expect(mapTiktokOrder({ ...base, status: 'UNPAID' })).toBeNull();
-    expect(mapTiktokOrder({ ...base, status: 'CANCELLED' })).toMatchObject({ status: 'cancelled', fee: 0 });
+    expect(mapTiktokOrder({ ...base, status: 'CANCELLED' })).toBeNull();
+    expect(mapTiktokOrder({ ...base, status: 'CANCELLED', paid_time: 1_794_325_100 })).toMatchObject({ status: 'cancelled', fee: 0, gmv: 12.49 });
   });
 
   it('estimativa provisória muda de faixa em R$ 50', () => {

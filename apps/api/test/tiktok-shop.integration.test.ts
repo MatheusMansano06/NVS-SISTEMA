@@ -47,10 +47,12 @@ describe.skipIf(!TEST_DB)('TikTok Shop: conexão, histórico e Análise Financei
    * D: cancelada · E: não paga (ignorada)
    */
   const orders = [
-    { id: id('A'), status: 'DELIVERED', create_time: sold, shipping_type: 'TIKTOK', line_items: [{ ...caneca, sale_price: '35.00', platform_discount: '5.00', room_id: 'LIVE1' }, { ...caneca, sale_price: '35.00', platform_discount: '5.00', room_id: 'LIVE1' }, { ...garrafa, room_id: '' }] },
+    { id: id('A'), status: 'DELIVERED', create_time: sold, shipping_type: 'TIKTOK', payment: { total_amount: '152.00' }, line_items: [{ ...caneca, sale_price: '35.00', platform_discount: '5.00', room_id: 'LIVE1' }, { ...caneca, sale_price: '35.00', platform_discount: '5.00', room_id: 'LIVE1' }, { ...garrafa, room_id: '' }] },
     { id: id('B'), status: 'IN_TRANSIT', create_time: sold, shipping_type: 'TIKTOK', line_items: [garrafa] },
     { id: id('C'), status: 'COMPLETED', create_time: sold, shipping_type: 'TIKTOK', line_items: [{ ...caneca, sale_price: '40.00' }] },
-    { id: id('D'), status: 'CANCELLED', create_time: sold, line_items: [garrafa] },
+    { id: id('D'), status: 'CANCELLED', create_time: sold, paid_time: sold, payment: { total_amount: '80.00' }, line_items: [garrafa] },
+    // cancelado antes do pagamento: não é venda e não entra em nada
+    { id: id('F'), status: 'CANCELLED', create_time: sold, line_items: [garrafa] },
     { id: id('E'), status: 'UNPAID', create_time: sold, line_items: [garrafa] },
   ];
   const statements: Record<string, TiktokFinanceTx[]> = {
@@ -158,6 +160,8 @@ describe.skipIf(!TEST_DB)('TikTok Shop: conexão, histórico e Análise Financei
 
     const tt = await summary('&marketplace=tiktok_shop');
     expect(tt.cards).toMatchObject({ qtdCanceladas: 1, tarifa: 46.8, freteVendedor: 15, cupomSeller: 15 });
+    // GMV como no Seller Center: total pago (A 152 + D 80, cancelado depois de pago); F nunca foi pago
+    expect(tt.cards.gmv).toBe(232);
     // só o pedido B continua em estimativa; anúncio descontado das vendas no extrato
     expect(tt.enriquecimentoPendente).toBe(1);
     expect(tt.adSpend).toBe(39);

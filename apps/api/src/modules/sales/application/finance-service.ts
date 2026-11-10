@@ -36,6 +36,7 @@ interface Row {
   bucket: LogisticBucketId;
   listing_type: string | null;
   live_room_id: string | null;
+  gmv: string | null;
   freight_uncertain: boolean;
   enriched: boolean;
   items: { sku: string; title: string; qty: number; price: number; listing_id: string | null; picture?: string | null; known: boolean }[];
@@ -101,7 +102,9 @@ export class FinanceService {
     let freteIncerto = 0;
     let pendente = 0;
 
+    let gmv: number | null = null;
     for (const o of orders) {
+      if (o.row.gmv !== null) gmv = (gmv ?? 0) + Number(o.row.gmv);
       const card = o.produto - o.cupom - (o.status === 'devolucao' ? o.devolucao : 0);
       const units = o.row.items.reduce((s, i) => s + i.qty, 0);
       if (o.row.freight_uncertain) freteIncerto++;
@@ -165,6 +168,7 @@ export class FinanceService {
       vendasCanceladas: q2(c.canc),
       devolucoesParciais: q2(c.dev),
       faturamento: q2(c.aprov + c.canc + c.dev),
+      gmv: gmv === null ? null : q2(gmv),
       custoTotal: anyCertified ? q2(cert.custo) : null,
       impostoTotal: anyCertified ? q2(cert.imposto) : null,
       tarifa: q2(c.tarifa),
@@ -531,7 +535,7 @@ export class FinanceService {
               to_char((o.ordered_at AT TIME ZONE '${TIMEZONE}')::date, 'YYYY-MM-DD') AS day,
               o.gross_amount AS produto, o.marketplace_fee AS tarifa, o.buyer_shipping AS fc, o.shipping_cost AS fv,
               o.coupon_seller AS cupom, o.refund_partial AS devolucao, o.product_cost AS custo, o.tax_amount AS imposto,
-              o.cost_known OR o.source = 'demo' AS cost_known, o.logistic_bucket AS bucket, o.listing_type, o.live_room_id, o.freight_uncertain,
+              o.cost_known OR o.source = 'demo' AS cost_known, o.logistic_bucket AS bucket, o.listing_type, o.live_room_id, o.gmv, o.freight_uncertain,
               (o.finance_enriched_at IS NOT NULL OR o.source = 'demo') AS enriched,
               coalesce(json_agg(json_build_object('sku', i.sku, 'title', i.title, 'qty', i.quantity, 'price', i.unit_price,
                          'listing_id', i.listing_id, 'picture', i.picture_url, 'known', i.unit_cost IS NOT NULL OR o.source = 'demo'))

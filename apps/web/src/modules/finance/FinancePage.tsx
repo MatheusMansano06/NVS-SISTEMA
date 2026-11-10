@@ -261,7 +261,11 @@ export function FinancePage() {
                 <p className="fin-big money">{money(c.vendasAprovadas)}</p>
                 <p className="fin-sub">
                   Cancel. <b className="money">{money(c.vendasCanceladas)}</b> · Dev. parcial <b className="money">{money(c.devolucoesParciais)}</b>{' '}
-                  · Faturamento <b className="money">{money(c.faturamento)}</b>
+                  {isTiktok && c.gmv !== null ? (
+                    <>· GMV <b className="money" title="Como no Seller Center: total pago pelos compradores, inclusive pedidos cancelados depois de pagos">{money(c.gmv)}</b></>
+                  ) : (
+                    <>· Faturamento <b className="money">{money(c.faturamento)}</b></>
+                  )}
                 </p>
                 <AreaChart
                   tone="dark"

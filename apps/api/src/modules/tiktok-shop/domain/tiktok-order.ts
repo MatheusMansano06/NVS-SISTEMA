@@ -6,6 +6,10 @@ export interface TiktokOrder {
   status: string;
   /** Segundos Unix. */
   create_time: number;
+  /** Quando foi pago (ausente = nunca pago). */
+  paid_time?: number | null;
+  /** Totais do pedido; `total_amount` é o que o comprador pagou (base do GMV do Seller Center). */
+  payment?: { total_amount?: string | null } | null;
   payment_method_name?: string | null;
   /** TIKTOK (logística da plataforma) ou SELLER (envio próprio). */
   shipping_type?: string | null;
@@ -54,13 +58,21 @@ export function estimateFee(unitPrice: number, quantity: number): number {
 }
 
 /**
+ * Pedido pago em algum momento. Cancelado antes do pagamento (comprador desistiu no checkout) não é venda e não
+ * entra no GMV do Seller Center. Pedido sem `paid_time` mas já em andamento conta como pago.
+ */
+export function wasPaid(o: Pick<TiktokOrder, 'status' | 'paid_time'>): boolean {
+  return Boolean(o.paid_time) || (o.status !== 'CANCELLED' && o.status !== 'UNPAID');
+}
+
+/**
  * Converte o pedido do TikTok Shop para o formato do módulo de vendas (status irrelevantes → null), do jeito que o
  * extrato do TikTok apresenta: faturado = preço de tabela; o desconto bancado pelo vendedor vai separado (cupom).
  * O desconto bancado pelo TikTok não reduz a receita: o TikTok repassa esse valor ao vendedor.
  */
 export function mapTiktokOrder(o: TiktokOrder): IncomingOrder | null {
   const status = o.status in STATUS ? STATUS[o.status] : 'paid';
-  if (!status) return null;
+  if (!status || !wasPaid(o)) return null;
 
   let coupon = 0;
   let fee = 0;
@@ -104,6 +116,7 @@ export function mapTiktokOrder(o: TiktokOrder): IncomingOrder | null {
     // a tela mostra como tipo de envio (não há "tipo de anúncio" no TikTok)
     listingType: o.shipping_type === 'SELLER' || o.shipping_type === 'TIKTOK' ? `tiktok_${o.shipping_type.toLowerCase()}` : null,
     paymentType: o.payment_method_name ?? null,
+    gmv: round2(num(o.payment?.total_amount)),
     liveRoomId: (o.line_items ?? []).find((li) => li.room_id)?.room_id ?? null,
     items,
   };

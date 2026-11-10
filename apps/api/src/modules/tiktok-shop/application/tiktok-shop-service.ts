@@ -4,7 +4,7 @@ import type { Database } from '../../../shared/infrastructure/database.js';
 import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js';
 import { AppError } from '../../../shared/kernel/errors.js';
 import { retentionCutoff, type IncomingOrder, type SalesIngestion } from '../../sales/index.js';
-import { compactBreakdown, mapTiktokOrder, readAmounts } from '../domain/tiktok-order.js';
+import { compactBreakdown, mapTiktokOrder, readAmounts, wasPaid } from '../domain/tiktok-order.js';
 import type { LedgerRow, PgTiktokRepository, TiktokConnectionRow } from '../infrastructure/pg-tiktok-repository.js';
 import { TiktokApiError, type TiktokApi } from '../infrastructure/tiktok-api.js';
 
@@ -209,6 +209,7 @@ export class TiktokShopService {
       const mapped = orders.map(mapTiktokOrder).filter((o): o is IncomingOrder => o !== null);
       await this.db.withTenant(tenantId, async (db) => {
         await this.sales.upsertOrders(db, tenantId, conn.account_id, 'tiktok_shop', mapped);
+        await this.repo.deleteOrders(db, conn.account_id, orders.filter((o) => !wasPaid(o)).map((o) => String(o.id)));
         await this.repo.closeCancelled(db, conn.account_id);
         await this.repo.setSync(db, conn.id, { status: 'running', imported: mapped.length });
       });

@@ -78,6 +78,8 @@ export const financeLinesQuerySchema = z.object({
 export type FinanceLinesQuery = z.infer<typeof financeLinesQuerySchema>;
 
 export interface FinanceCards {
+  /** TikTok Shop: GMV como no Seller Center (total pago pelo comprador, inclusive pedidos cancelados depois de pagos). */
+  gmv: number | null;
   vendasAprovadas: number;
   vendasCanceladas: number;
   devolucoesParciais: number;

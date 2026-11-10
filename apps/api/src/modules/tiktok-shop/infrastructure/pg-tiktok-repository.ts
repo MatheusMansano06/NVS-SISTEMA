@@ -152,6 +152,16 @@ export class PgTiktokRepository {
     );
   }
 
+  /** Pedidos que não são venda (cancelados antes do pagamento): saem do sistema se já tinham sido importados. */
+  async deleteOrders(db: Queryable, accountId: string, externalIds: string[]): Promise<number> {
+    if (!externalIds.length) return 0;
+    const { rowCount } = await db.query(
+      `DELETE FROM orders WHERE account_id = $1 AND marketplace = 'tiktok_shop' AND external_id = ANY($2)`,
+      [accountId, externalIds],
+    );
+    return rowCount ?? 0;
+  }
+
   /** Cancelado não tem repasse a conferir: sai da fila de "tarifa estimada". */
   async closeCancelled(db: Queryable, accountId: string): Promise<void> {
     await db.query(

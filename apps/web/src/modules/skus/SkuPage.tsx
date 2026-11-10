@@ -52,7 +52,7 @@ export function SkuPage() {
   }, [q]);
 
   const load = useCallback(
-    async () => {
+    async (fresh = false) => {
       const offset = (page - 1) * pageSize;
       ctrl.current?.abort();
       const c = new AbortController();
@@ -60,7 +60,7 @@ export function SkuPage() {
       setLoading(true);
       setError('');
       try {
-        const r = await skusApi.list({ q: query || undefined, filter, platform: platform || undefined, offset, limit: pageSize }, c.signal);
+        const r = await skusApi.list({ q: query || undefined, filter, platform: platform || undefined, fresh, offset, limit: pageSize }, c.signal);
         setItems(r.items);
         setMeta({ total: r.total, counts: r.counts });
       } catch (err) {
@@ -150,6 +150,9 @@ export function SkuPage() {
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
             <input placeholder="Buscar por SKU ou título" value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
+          <button type="button" className="icon-btn" onClick={() => void load(true)} aria-label="Atualizar lista" title="Reler anúncios e vendas agora" data-spinning={loading || undefined}>
+            <Icon name="refresh" />
+          </button>
           {multi && (
             <div className="seg" role="radiogroup" aria-label="Plataforma">
               <button type="button" role="radio" aria-checked={platform === ''} onClick={() => setPlatform('')}>Todas</button>

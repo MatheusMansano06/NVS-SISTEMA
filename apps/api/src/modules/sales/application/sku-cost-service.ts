@@ -42,9 +42,9 @@ export class SkuCostService {
    * A consulta que monta o cadastro lê 90 dias de vendas e leva segundos; a tela chama a cada busca, filtro e página.
    * Por isso a base (centenas de linhas por empresa) fica em memória e busca/filtro/página são feitos aqui.
    */
-  async list(tenantId: string, q: { q?: string; filter: SkuFilter; platform?: Marketplace; offset: number; limit: number }): Promise<SkuListDto> {
+  async list(tenantId: string, q: { q?: string; filter: SkuFilter; platform?: Marketplace; fresh?: boolean; offset: number; limit: number }): Promise<SkuListDto> {
     const needle = q.q?.trim().toLowerCase();
-    const found = (await this.rows(tenantId)).filter(
+    const found = (await (q.fresh ? this.loadRows(tenantId) : this.rows(tenantId))).filter(
       (r) =>
         (!needle || r.sku.toLowerCase().includes(needle) || (r.title ?? '').toLowerCase().includes(needle)) &&
         (!q.platform || r.platforms.includes(q.platform)),

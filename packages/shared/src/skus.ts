@@ -17,6 +17,8 @@ export const listSkusSchema = z.object({
   filter: z.enum(SKU_FILTERS).default('all'),
   /** Só os SKUs que existem (anúncio ou venda recente) nesta plataforma. */
   platform: z.enum(MARKETPLACES).optional(),
+  /** Relê anúncios e vendas agora (a lista normalmente vem de uma base guardada por alguns minutos). */
+  fresh: z.coerce.boolean().optional(),
   offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });

@@ -507,7 +507,8 @@ export class FinanceService {
           AND ($4::uuid IS NULL OR o.account_id = $4)
         GROUP BY o.id
         ORDER BY o.ordered_at DESC`,
-      [q.from, q.to, q.marketplace ?? null, q.accountId ?? null],
+      // sem filtro = Mercado Livre (o TikTok Shop tem aba própria; os números não se misturam)
+      [q.from, q.to, q.marketplace ?? 'mercado_livre', q.accountId ?? null],
     );
     return rows;
   }

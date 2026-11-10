@@ -9,6 +9,7 @@ const stopRadar = app.radar?.startScheduler();
 const stopReturns = app.returnsSync?.startScheduler();
 const stopMarketing = app.marketing?.startScheduler();
 const stopAdsRadar = app.adsRadar?.startScheduler();
+const stopTiktok = app.tiktok?.startScheduler();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
@@ -19,6 +20,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopReturns?.();
     stopMarketing?.();
     stopAdsRadar?.();
+    stopTiktok?.();
     app.close().then(() => process.exit(0));
   });
 }

@@ -38,6 +38,7 @@ const FullRouter = page(() => import('./modules/full/FullRouter'), 'FullRouter')
 const CentralDevolucoes = page(() => import('./modules/central/CentralDevolucoes'), 'CentralDevolucoes');
 const OperationApp = page(() => import('./modules/operation/OperationApp'), 'OperationApp');
 const TeamPage = page(() => import('./modules/operation/TeamPage'), 'TeamPage');
+const IntegrationsPage = page(() => import('./modules/integrations/IntegrationsPage'), 'IntegrationsPage');
 const MasterApp = page(() => import('./modules/master/MasterApp'), 'MasterApp');
 
 function Boot() {
@@ -82,6 +83,7 @@ function Routes() {
   const features = useFeatures();
   if (path.startsWith('/skus')) return <SkuPage />;
   if (path.startsWith('/equipe')) return <TeamPage />;
+  if (path.startsWith('/integracoes')) return <IntegrationsPage />;
   const g = GATED.find((x) => path.startsWith(x.prefix));
   if (g) {
     if (!features.includes(g.feature)) return <AppShell><FeatureGate feature={g.feature}>{null}</FeatureGate></AppShell>;

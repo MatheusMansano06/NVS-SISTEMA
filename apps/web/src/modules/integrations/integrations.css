@@ -1,0 +1,16 @@
+.integ { display: grid; gap: 18px; }
+.integ-card { display: grid; gap: 14px; }
+.integ-card .panel-head p { margin: 4px 0 0; color: var(--gray-500); font-size: .9rem; }
+.integ-card .panel-head .btn { width: auto; padding: 0 22px; height: 44px; }
+.integ-list { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.integ-list li {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-radius: 18px;
+  background: var(--gray-50, var(--gray-100)); font-size: .92rem;
+}
+.integ-list li > div { flex: 1; min-width: 200px; }
+.integ-list strong { color: var(--navy); }
+.integ-list small { display: block; color: var(--gray-500); margin-top: 2px; }
+.integ-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); flex: none; }
+.integ-dot[data-state='warn'] { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+.integ-dot[data-state='busy'] { background: var(--yellow); box-shadow: 0 0 0 4px var(--yellow-soft); animation: pulse 1.4s ease-in-out infinite; }
+.integ-empty { margin: 0; color: var(--gray-500); font-size: .9rem; }

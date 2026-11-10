@@ -19,7 +19,8 @@ const WHERE = `o.status = 'paid'
   AND ($3::text IS NULL OR o.marketplace = $3)
   AND ($4::uuid IS NULL OR o.account_id = $4)`;
 
-const params = (f: SalesFilter) => [f.range.from, f.range.to, f.marketplace ?? null, f.accountId ?? null];
+// sem filtro = Mercado Livre: os outros marketplaces (TikTok Shop) só aparecem quando pedidos, nunca misturados
+const params = (f: SalesFilter) => [f.range.from, f.range.to, f.marketplace ?? 'mercado_livre', f.accountId ?? null];
 const num = (v: unknown) => Number(v ?? 0);
 
 export class PgSalesRepository {
@@ -183,7 +184,7 @@ export class PgSalesRepository {
 
   async accounts(db: Queryable) {
     const { rows } = await db.query<{ id: string; marketplace: Marketplace; nickname: string }>(
-      'SELECT id, marketplace, nickname FROM marketplace_accounts ORDER BY nickname',
+      "SELECT id, marketplace, nickname FROM marketplace_accounts WHERE marketplace = 'mercado_livre' ORDER BY nickname",
     );
     return rows;
   }

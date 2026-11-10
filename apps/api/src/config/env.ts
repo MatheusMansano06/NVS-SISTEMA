@@ -19,6 +19,10 @@ const schema = z.object({
   ML_REDIRECT_URI: z.union([z.string().url().startsWith('https://'), z.literal('')]).optional(),
   /** PKCE no OAuth do ML (deve refletir a opção na configuração do app no DevCenter). */
   ML_USE_PKCE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  /** Integração TikTok Shop (opcional): chave e segredo do app no Partner Center; o service_id é o ID do app (link de autorização). */
+  TIKTOK_SHOP_APP_KEY: z.string().optional(),
+  TIKTOK_SHOP_APP_SECRET: z.string().optional(),
+  TIKTOK_SHOP_SERVICE_ID: z.string().optional(),
   /** Chave AES-256 (64 hex) para criptografar tokens de marketplaces em repouso. */
   TOKEN_ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'TOKEN_ENCRYPTION_KEY precisa ter 64 caracteres hex').optional(),
   /** Primeira conta do Painel Master (criada uma única vez, quando ainda não existe nenhuma). */

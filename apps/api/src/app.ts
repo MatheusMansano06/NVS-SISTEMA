@@ -65,6 +65,7 @@ import {
   mercadoLivreRoutes,
   type MlApi,
 } from './modules/mercado-livre/index.js';
+import { HttpTiktokApi, PgTiktokRepository, TiktokShopService, tiktokShopRoutes, type TiktokApi } from './modules/tiktok-shop/index.js';
 import { TokenCipher } from './shared/infrastructure/token-cipher.js';
 import { serveWeb } from './shared/infrastructure/web-static.js';
 import { PlatformService, platformRoutes } from './modules/platform/index.js';
@@ -92,6 +93,8 @@ declare module 'fastify' {
     marketing: MarketingService | null;
     /** Radar ADS (null sem ML configurado ou sem as leituras do Mercado Ads no cliente). */
     adsRadar: AdsRadarService | null;
+    /** Integração TikTok Shop (null quando não configurada no ambiente). */
+    tiktok: TiktokShopService | null;
     requirePermission: (
       p: Permission,
     ) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -104,12 +107,14 @@ export interface AppDeps {
   cache?: Cache;
   /** Substitui a API do Mercado Livre (testes). */
   mlApi?: MlApi;
+  /** Cliente do TikTok Shop (testes injetam um falso). */
+  tiktokApi?: TiktokApi;
   /** Teto de paginação da busca de pedidos do ML (testes usam um teto baixo para exercitar a divisão de período). */
   mlOrdersOffsetCap?: number;
 }
 
 /** Composition root: monta os módulos e injeta dependências. */
-export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: AppDeps): Promise<FastifyInstance> {
+export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap, tiktokApi }: AppDeps): Promise<FastifyInstance> {
   const database = db ?? new Database(env.DATABASE_URL);
   const events = new EventBus();
   const app = Fastify({
@@ -220,6 +225,21 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap }: App
   app.decorate('ml', ml);
   app.decorate('retention', new SalesRetention(database, app.log));
   await app.register(mercadoLivreRoutes(ml), { prefix: '/api/v1' });
+  // TikTok Shop: liberado por empresa (recurso `tiktok_shop`); os pedidos entram em `orders` e só a Análise Financeira os mostra
+  const tiktok =
+    env.TIKTOK_SHOP_APP_KEY && env.TIKTOK_SHOP_APP_SECRET && env.TIKTOK_SHOP_SERVICE_ID && env.TOKEN_ENCRYPTION_KEY
+      ? new TiktokShopService(
+          database,
+          new PgTiktokRepository(database),
+          tiktokApi ?? new HttpTiktokApi({ appKey: env.TIKTOK_SHOP_APP_KEY, appSecret: env.TIKTOK_SHOP_APP_SECRET, serviceId: env.TIKTOK_SHOP_SERVICE_ID }),
+          new TokenCipher(env.TOKEN_ENCRYPTION_KEY),
+          new SalesIngestion(),
+          app.log,
+          { paceMs: env.NODE_ENV === 'test' ? 0 : undefined },
+        )
+      : null;
+  app.decorate('tiktok', tiktok);
+  await app.register(tiktokShopRoutes(tiktok), { prefix: '/api/v1' });
   const mlLookups = mlClient ? new CachedMlLookups(mlClient, sharedCache) : null;
   const listingService = ml && mlClient && mlLookups ? new ListingService(database, new PgListingRepository(), ml, mlClient, mlLookups) : null;
   const flexService = listingService && ml && mlClient ? new FlexService(database, listingService, ml, mlClient, sharedCache) : null;

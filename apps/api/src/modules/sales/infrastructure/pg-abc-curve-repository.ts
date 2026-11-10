@@ -21,6 +21,7 @@ export class PgAbcCurveRepository {
          JOIN order_items i ON i.order_id = o.id
          LEFT JOIN listings l ON l.tenant_id = o.tenant_id AND l.marketplace = o.marketplace AND l.external_id = i.listing_id
         WHERE o.tenant_id = $3 AND i.tenant_id = $3 AND o.status = 'paid' AND i.listing_id IS NOT NULL
+          AND o.marketplace = 'mercado_livre'
           AND o.ordered_at >= ($1::date)::timestamp AT TIME ZONE '${TIMEZONE}'
           AND o.ordered_at < ($2::date + 1)::timestamp AT TIME ZONE '${TIMEZONE}'
         GROUP BY i.listing_id, l.title, l.picture_url, l.permalink`,

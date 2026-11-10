@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LOGISTIC_LABELS, marginBand, type FinanceSummaryDto, type MlStatusDto } from '@nvs/shared';
+import { LOGISTIC_LABELS, marginBand, type FinanceSummaryDto, type Marketplace } from '@nvs/shared';
 import { AppShell } from '../../app/AppShell';
 import { useGuidedTour } from '../../shared/tour/Tour';
 import { TOURS } from '../../shared/tour/tours';
 import { navigate } from '../../app/router';
 import { int, money, pct } from '../../shared/format';
 import { Icon } from '../../shared/ui/Icon';
+import { useFeature } from '../../shared/features';
 import { mlApi } from '../mercado-livre/ml-api';
+import { tiktokApi } from '../tiktok-shop/tiktok-api';
 import { AreaChart } from './components/AreaChart';
 import { Donut } from './components/Donut';
 import { FinanceTable } from './components/FinanceTable';
@@ -32,7 +34,11 @@ export function FinancePage() {
   const [range, setRange] = useState(() => presetRange('30d'));
   const [accountId, setAccountId] = useState('');
   const [considerarFc, setConsiderarFc] = useState(false);
-  const [accounts, setAccounts] = useState<MlStatusDto['connections']>([]);
+  // cada marketplace tem a sua aba: os números nunca se misturam
+  const hasTiktok = useFeature('tiktok_shop');
+  const [marketplace, setMarketplace] = useState<Marketplace>('mercado_livre');
+  const isTiktok = marketplace === 'tiktok_shop';
+  const [accounts, setAccounts] = useState<{ accountId: string; nickname: string }[] | null>(null);
   const [data, setData] = useState<FinanceSummaryDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -53,13 +59,26 @@ export function FinancePage() {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const filters: FinanceFilters = useMemo(
-    () => ({ from: range.from, to: range.to, accountId: accountId || undefined, considerarFreteComprador: considerarFc || undefined }),
-    [range, accountId, considerarFc],
+    () => ({ from: range.from, to: range.to, accountId: accountId || undefined, marketplace: isTiktok ? marketplace : undefined, considerarFreteComprador: considerarFc || undefined }),
+    [range, accountId, considerarFc, isTiktok, marketplace],
   );
 
   useEffect(() => {
-    mlApi.status().then((s) => setAccounts(s.connections)).catch(() => undefined);
-  }, []);
+    let alive = true;
+    setAccounts(null);
+    (isTiktok ? tiktokApi.status() : mlApi.status())
+      .then((s) => alive && setAccounts(s.connections))
+      .catch(() => alive && setAccounts([]));
+    return () => {
+      alive = false;
+    };
+  }, [isTiktok]);
+  const pickMarketplace = (m: Marketplace) => {
+    setMarketplace(m);
+    setAccountId('');
+    setTableFilter({});
+    setData(null);
+  };
 
   const load = useCallback(
     async (fresh = false) => {
@@ -117,7 +136,10 @@ export function FinancePage() {
             <h1>Análise Financeira</h1>
           </div>
           <div className="mkt-tabs" role="tablist" aria-label="Marketplace">
-            <button type="button" role="tab" aria-selected="true">Mercado Livre</button>
+            <button type="button" role="tab" aria-selected={!isTiktok} onClick={() => pickMarketplace('mercado_livre')}>Mercado Livre</button>
+            {hasTiktok && (
+              <button type="button" role="tab" aria-selected={isTiktok} onClick={() => pickMarketplace('tiktok_shop')}>TikTok Shop</button>
+            )}
             <button type="button" role="tab" aria-selected="false" disabled title="Em breve">Shopee <small>em breve</small></button>
           </div>
         </header>
@@ -157,7 +179,7 @@ export function FinancePage() {
               />
             </label>
           </div>
-          {accounts.length > 1 && (
+          {accounts && accounts.length > 1 && (
             <label className="select">
               <span className="sr-only">Conta</span>
               <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
@@ -184,6 +206,13 @@ export function FinancePage() {
         ) : (
         <>
         {error && <p className="banner banner-error" role="alert">{error}</p>}
+        {isTiktok && accounts?.length === 0 && (
+          <div className="nocost-banner" role="note">
+            <span className="nocost-icon" aria-hidden="true">!</span>
+            <p><strong>Nenhuma loja do TikTok Shop conectada.</strong> Conecte a loja em Integrações e eu trago o histórico de vendas.</p>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/integracoes')}>Abrir Integrações</button>
+          </div>
+        )}
 
         {data && data.semCusto.qtd > 0 && (
           <div className="nocost-banner" role="note">
@@ -199,8 +228,9 @@ export function FinancePage() {
         )}
         {data && data.enriquecimentoPendente > 0 && (
           <p className="banner banner-ok" role="status">
-            Fretes, cupons e devoluções de {int(data.enriquecimentoPendente)} venda(s) ainda estão sendo calculados pela
-            sincronização com o Mercado Livre. Os números se completam sozinhos.
+            {isTiktok
+              ? `${int(data.enriquecimentoPendente)} venda(s) ainda estão com a tarifa estimada (comissão + tarifa fixa): o TikTok Shop só informa a tarifa cobrada, afiliados e o frete depois do repasse. Os números se ajustam sozinhos.`
+              : `Fretes, cupons e devoluções de ${int(data.enriquecimentoPendente)} venda(s) ainda estão sendo calculados pela sincronização com o Mercado Livre. Os números se completam sozinhos.`}
           </p>
         )}
 
@@ -257,6 +287,7 @@ export function FinancePage() {
               </article>
             </section>
 
+            {!isTiktok && (
             <section className="ads-bar" aria-label="Mercado Ads">
               <div className="ads-bar-title">
                 <strong>Mercado Ads</strong>
@@ -285,10 +316,11 @@ export function FinancePage() {
                 Descontar Ads da margem
               </label>
             </section>
+            )}
 
             <section className="fin-minis" aria-label="Indicadores">
               <div>
-                <span>Tarifa ML</span>
+                <span>{isTiktok ? 'Tarifa TikTok' : 'Tarifa ML'}</span>
                 <b className="neg money">{money(c.tarifa)}</b>
                 <small>{c.faturamento ? pct(c.tarifa / c.faturamento) : '0%'} do faturamento</small>
               </div>
@@ -319,7 +351,7 @@ export function FinancePage() {
               </div>
             </section>
 
-            {data.breakdown.length > 0 && (
+            {!isTiktok && data.breakdown.length > 0 && (
               <section className="panel logistics" aria-label="Vendas por modalidade de frete">
                 <span className="fin-label">Vendas por modalidade de frete</span>
                 <div className="logi-bar">

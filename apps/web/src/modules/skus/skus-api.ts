@@ -2,10 +2,11 @@ import type { Marketplace, GenerateEansInput, GenerateEansResult, InternalEanDto
 import { http } from '../../shared/http';
 
 export const skusApi = {
-  list: (p: { q?: string; filter: SkuFilter; platform?: Marketplace; offset: number; limit?: number }, signal?: AbortSignal) => {
+  list: (p: { q?: string; filter: SkuFilter; platform?: Marketplace; fresh?: boolean; offset: number; limit?: number }, signal?: AbortSignal) => {
     const qs = new URLSearchParams({ filter: p.filter, offset: String(p.offset), limit: String(p.limit ?? 50) });
     if (p.q) qs.set('q', p.q);
     if (p.platform) qs.set('platform', p.platform);
+    if (p.fresh) qs.set('fresh', 'true');
     return http<SkuListDto>(`/api/v1/skus?${qs}`, { signal });
   },
   save: (sku: string, custoUnit: number) =>

@@ -493,12 +493,12 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
            FROM listings WHERE external_id = 'MLB0' LIMIT 1`,
       ),
     );
-    expect((await app.inject({ method: 'GET', url: '/api/v1/skus?q=FANTASMA', cookies })).json().counts.all).toBe(1);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/skus?q=FANTASMA&fresh=1', cookies })).json().counts.all).toBe(1);
 
     // reimportar não duplica
     await app.inject({ method: 'POST', url: '/api/v1/integrations/mercado-livre/sync', cookies, payload: {} });
     await app.ml!.whenIdle();
-    expect((await app.inject({ method: 'GET', url: '/api/v1/skus?q=FANTASMA', cookies })).json().counts.all).toBe(0);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/skus?q=FANTASMA&fresh=1', cookies })).json().counts.all).toBe(0);
     const ghost = await ghostDb.withTenant(meTid, (c) => c.query("SELECT status FROM listings WHERE external_id = 'MLB777'"));
     expect(ghost.rows[0].status).toBe('closed');
     await ghostDb.close();

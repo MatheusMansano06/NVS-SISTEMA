@@ -1,4 +1,4 @@
-import type { Marketplace, SaveSkuCostInput, SkuFilter, SkuImportReport, SkuListDto, TaxRateDto } from '@nvs/shared';
+import type { Marketplace, SaveSkuCostInput, SkuFilter, SkuImportReport, SkuListDto, SkuRowDto, TaxRateDto } from '@nvs/shared';
 import type { Cache } from '../../../shared/kernel/cache.js';
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
 import { ValidationError } from '../../../shared/kernel/errors.js';
@@ -7,6 +7,14 @@ import { parseSkuCsv } from '../domain/sku-csv.js';
 import { SINCE_ALWAYS, type PgSkuRepository } from '../infrastructure/pg-sku-repository.js';
 
 const same = (a: number, b: number) => Math.abs(a - b) < 0.005;
+/** A base do cadastro é servida da memória; passou disso, continua servindo e atualiza por trás. */
+const ROWS_FRESH_MS = 5 * 60_000;
+/** Depois disso a base é descartada (empresa que não abre o cadastro não ocupa memória). */
+const ROWS_KEEP_S = 3600;
+interface CachedRows {
+  at: number;
+  rows: SkuRowDto[];
+}
 
 /**
  * Vigência (regra do NVS-WMS): o PRIMEIRO valor vale para todo o histórico; alterações valem
@@ -26,8 +34,79 @@ export class SkuCostService {
     private readonly cache: Cache,
   ) {}
 
-  list(tenantId: string, q: { q?: string; filter: SkuFilter; platform?: Marketplace; offset: number; limit: number }): Promise<SkuListDto> {
-    return this.db.withTenant(tenantId, (db) => this.repo.list(db, q));
+  /** Leituras da base em andamento (uma por empresa) e versão que invalida a leitura que começou antes de uma gravação. */
+  private loadingRows = new Map<string, Promise<SkuRowDto[]>>();
+  private rowsVersion = new Map<string, number>();
+
+  /**
+   * A consulta que monta o cadastro lê 90 dias de vendas e leva segundos; a tela chama a cada busca, filtro e página.
+   * Por isso a base (centenas de linhas por empresa) fica em memória e busca/filtro/página são feitos aqui.
+   */
+  async list(tenantId: string, q: { q?: string; filter: SkuFilter; platform?: Marketplace; fresh?: boolean; offset: number; limit: number }): Promise<SkuListDto> {
+    const needle = q.q?.trim().toLowerCase();
+    const found = (await (q.fresh ? this.loadRows(tenantId) : this.rows(tenantId))).filter(
+      (r) =>
+        (!needle || r.sku.toLowerCase().includes(needle) || (r.title ?? '').toLowerCase().includes(needle)) &&
+        (!q.platform || r.platforms.includes(q.platform)),
+    );
+    const all = found.length;
+    const done = found.filter((r) => r.custoUnit !== null).length;
+    const picked = q.filter === 'all' ? found : found.filter((r) => (r.custoUnit === null) === (q.filter === 'missing'));
+    // sem custo primeiro, depois os mais vendidos
+    picked.sort(
+      (a, b) =>
+        Number(b.custoUnit === null) - Number(a.custoUnit === null) ||
+        b.units30d - a.units30d ||
+        Number(a.title === null) - Number(b.title === null) ||
+        (a.title ?? '').localeCompare(b.title ?? '') ||
+        a.sku.localeCompare(b.sku),
+    );
+    return { items: picked.slice(q.offset, q.offset + q.limit), total: picked.length, counts: { all, done, missing: all - done } };
+  }
+
+  private rowsKey(tenantId: string): string {
+    return `sku-rows:${tenantId}`;
+  }
+
+  private async rows(tenantId: string): Promise<SkuRowDto[]> {
+    const hit = await this.cache.get<CachedRows>(this.rowsKey(tenantId));
+    if (!hit) return this.loadRows(tenantId);
+    if (Date.now() - hit.at > ROWS_FRESH_MS) void this.loadRows(tenantId).catch(() => undefined);
+    return hit.rows;
+  }
+
+  private loadRows(tenantId: string): Promise<SkuRowDto[]> {
+    const running = this.loadingRows.get(tenantId);
+    if (running) return running;
+    const version = this.rowsVersion.get(tenantId) ?? 0;
+    const job = this.db
+      .withTenant(tenantId, (db) => this.repo.rows(db))
+      .then(async (rows) => {
+        // um custo gravado enquanto a consulta rodava: este resultado já nasceu velho, não vai para a memória
+        if ((this.rowsVersion.get(tenantId) ?? 0) === version) {
+          await this.cache.set<CachedRows>(this.rowsKey(tenantId), { at: Date.now(), rows }, ROWS_KEEP_S);
+        }
+        return rows;
+      })
+      .finally(() => this.loadingRows.delete(tenantId));
+    this.loadingRows.set(tenantId, job);
+    return job;
+  }
+
+  /**
+   * Custos mudaram. Com `cost` (um SKU salvo ou removido), só o custo dele e dos vinculados é ajustado na base em
+   * memória — cadastrar custos em sequência não refaz a consulta; nos outros casos a base é descartada.
+   */
+  private async touchRows(tenantId: string, cost?: { sku: string; custoUnit: number | null }): Promise<void> {
+    this.rowsVersion.set(tenantId, (this.rowsVersion.get(tenantId) ?? 0) + 1);
+    this.loadingRows.delete(tenantId);
+    const hit = cost ? await this.cache.get<CachedRows>(this.rowsKey(tenantId)) : undefined;
+    if (!hit || !cost) return this.cache.del(this.rowsKey(tenantId));
+    const now = new Date().toISOString();
+    const rows = hit.rows.map((r) =>
+      (r.linkedSku ?? r.sku) === cost.sku ? { ...r, custoUnit: cost.custoUnit, updatedAt: cost.custoUnit === null ? null : now } : r,
+    );
+    await this.cache.set<CachedRows>(this.rowsKey(tenantId), { at: hit.at, rows }, ROWS_KEEP_S);
   }
 
   /**
@@ -66,7 +145,7 @@ export class SkuCostService {
       const affected = changed ? await this.repo.applyCosts(db, { skus: [input.sku] }) : 0;
       return { sku: input.sku, custoUnit: input.custoUnit, affectedOrders: affected };
     });
-    await this.invalidate(tenantId);
+    await this.invalidate(tenantId, { sku: input.sku, custoUnit: input.custoUnit });
     return result;
   }
 
@@ -105,7 +184,7 @@ export class SkuCostService {
       await this.repo.applyCosts(db, { skus: [sku] });
       return true;
     });
-    await this.invalidate(tenantId);
+    if (removed) await this.invalidate(tenantId, { sku, custoUnit: null });
     return removed;
   }
 
@@ -199,9 +278,7 @@ export class SkuCostService {
   }
 
   async exportCsv(tenantId: string): Promise<string> {
-    const { items } = await this.db.withTenant(tenantId, (db) =>
-      this.repo.list(db, { filter: 'all', offset: 0, limit: 100_000 }),
-    );
+    const { items } = await this.list(tenantId, { filter: 'all', offset: 0, limit: 100_000 });
     const br = (n: number | null) => (n === null ? '' : n.toFixed(2).replace('.', ','));
     const esc = (s: string | null) => `"${(s ?? '').replace(/"/g, '""')}"`;
     const lines = ['sku;titulo;custo_unit;vendidos_30d;estoque'];
@@ -228,7 +305,8 @@ export class SkuCostService {
   }
 
   /** O dashboard e a análise têm cache curto: muda a versão para refletir na hora. */
-  private async invalidate(tenantId: string): Promise<void> {
+  private async invalidate(tenantId: string, cost?: { sku: string; custoUnit: number | null }): Promise<void> {
     await this.cache.set(`dash-version:${tenantId}`, Date.now(), 86_400);
+    await this.touchRows(tenantId, cost);
   }
 }

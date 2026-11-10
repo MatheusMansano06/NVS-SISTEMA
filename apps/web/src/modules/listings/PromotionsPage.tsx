@@ -1,3 +1,4 @@
+import { normalizeBrNumber } from '../../shared/br-number';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PROMOTION_TYPE_LABEL,
@@ -29,7 +30,7 @@ const STEPS = [
 const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '—');
 const toInput = (n: number | null) => (n === null ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const parse = (s: string): number | null => {
-  const t = s.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const t = normalizeBrNumber(s);
   const n = Number(t);
   return t && Number.isFinite(n) ? n : null;
 };

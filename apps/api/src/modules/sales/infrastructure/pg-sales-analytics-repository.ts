@@ -27,6 +27,8 @@ function ordersCte(f: SalesFilter, params: unknown[]): string {
   const where = [
     `o.ordered_at >= ($1::date)::timestamp AT TIME ZONE '${TIMEZONE}'`,
     `o.ordered_at < ($2::date + 1)::timestamp AT TIME ZONE '${TIMEZONE}'`,
+    // a tela de Vendas é do Mercado Livre; o TikTok Shop fica só na Análise Financeira
+    `o.marketplace = 'mercado_livre'`,
   ];
   if (f.accountId) {
     params.push(f.accountId);

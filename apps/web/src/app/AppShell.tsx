@@ -31,7 +31,7 @@ const NAV: { label: string; icon: IconName; path?: string; master?: boolean; fea
   { label: 'Supervisão Full', icon: 'truck', path: '/full', feature: 'full' },
   { label: 'Devoluções', icon: 'undo', path: '/devolucoes', feature: 'devolucoes' },
   { label: 'Equipe', icon: 'users', path: '/equipe', master: true },
-  { label: 'Integrações', icon: 'plug' },
+  { label: 'Integrações', icon: 'plug', path: '/integracoes' },
 ];
 
 /** Estrutura do sistema logado: menu lateral (gaveta no celular) + área de conteúdo. */

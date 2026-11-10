@@ -71,7 +71,7 @@ export interface UserDto {
  * Recursos que o Painel Master libera por empresa (e que cada plano inclui); o que não estiver liberado aparece como
  * "em breve". Dashboard, Cadastro de SKUs, Integrações e Equipe são a base e ficam sempre ligados.
  */
-export const TENANT_FEATURES = ['financeiro', 'dre', 'curva_abc', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full', 'viabilidade', 'radar_ads', 'radar_produtos'] as const;
+export const TENANT_FEATURES = ['financeiro', 'dre', 'curva_abc', 'vendas', 'anuncios', 'promocoes', 'marketing', 'precificador', 'radar_frete', 'devolucoes', 'full', 'viabilidade', 'radar_ads', 'radar_produtos', 'tiktok_shop'] as const;
 export type TenantFeature = (typeof TENANT_FEATURES)[number];
 export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: string; area: 'Análise' | 'Anúncios' | 'Operação' }> = {
   financeiro: { label: 'Análise Financeira', text: 'Margem de contribuição venda a venda, composição e exportação.', area: 'Análise' },
@@ -80,6 +80,7 @@ export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: s
   vendas: { label: 'Vendas', text: 'Pedidos, formas de pagamento, estados e DIFAL.', area: 'Análise' },
   precificador: { label: 'Precificador', text: 'Simula preço, tarifa, frete e margem antes de anunciar.', area: 'Análise' },
   radar_frete: { label: 'Flex e Radar de Frete', text: 'Frete pago por anúncio e oportunidades de Flex.', area: 'Análise' },
+  tiktok_shop: { label: 'TikTok Shop', text: 'Conectar lojas do TikTok Shop e ver a Análise Financeira delas.', area: 'Análise' },
   viabilidade: { label: 'Estudo de Viabilidade', text: 'Extensão do Chrome: data, vendas, tipo e visitas de qualquer anúncio do ML.', area: 'Análise' },
   anuncios: { label: 'Meus anúncios', text: 'Lista de anúncios com margem, edição, estoque e preço.', area: 'Anúncios' },
   promocoes: { label: 'Central de Promoção', text: 'Inscrever anúncios nas campanhas do ML vendo a margem.', area: 'Anúncios' },
@@ -92,8 +93,8 @@ export const TENANT_FEATURE_INFO: Record<TenantFeature, { label: string; text: s
 export const TENANT_FEATURE_LABELS: Record<TenantFeature, string> = Object.fromEntries(
   TENANT_FEATURES.map((f) => [f, TENANT_FEATURE_INFO[f].label]),
 ) as Record<TenantFeature, string>;
-/** Padrão de empresa nova e de plano novo: tudo, menos o que ainda está em teste (Full, Viabilidade, Radar ADS e Produto Campeão). */
-export const DEFAULT_TENANT_FEATURES: TenantFeature[] = TENANT_FEATURES.filter((f) => f !== 'full' && f !== 'viabilidade' && f !== 'radar_ads' && f !== 'radar_produtos');
+/** Padrão de empresa nova e de plano novo: tudo, menos o que ainda está em teste (Full, Viabilidade, Radar ADS, Produto Campeão e TikTok Shop). */
+export const DEFAULT_TENANT_FEATURES: TenantFeature[] = TENANT_FEATURES.filter((f) => f !== 'full' && f !== 'viabilidade' && f !== 'radar_ads' && f !== 'radar_produtos' && f !== 'tiktok_shop');
 
 export interface SessionDto {
   user: UserDto;

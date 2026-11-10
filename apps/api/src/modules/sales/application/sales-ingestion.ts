@@ -77,7 +77,10 @@ export class SalesIngestion {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          ON CONFLICT (tenant_id, marketplace, external_id) DO UPDATE
            SET status = EXCLUDED.status, ordered_at = EXCLUDED.ordered_at,
-               gross_amount = EXCLUDED.gross_amount, marketplace_fee = EXCLUDED.marketplace_fee,
+               gross_amount = EXCLUDED.gross_amount,
+               -- TikTok Shop: a tarifa já conferida no repasse não volta para a estimativa
+               marketplace_fee = CASE WHEN orders.marketplace = 'tiktok_shop' AND orders.finance_enriched_at IS NOT NULL
+                                      THEN orders.marketplace_fee ELSE EXCLUDED.marketplace_fee END,
                units = EXCLUDED.units, shipping_ref = EXCLUDED.shipping_ref, account_id = EXCLUDED.account_id,
                refund_partial = EXCLUDED.refund_partial, listing_type = EXCLUDED.listing_type,
                buyer_nickname = COALESCE(EXCLUDED.buyer_nickname, orders.buyer_nickname),

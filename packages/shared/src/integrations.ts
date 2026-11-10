@@ -52,3 +52,26 @@ export interface MlStatusDto {
   configured: boolean;
   connections: MlConnectionDto[];
 }
+
+/** Loja do TikTok Shop conectada. As vendas dela aparecem só na Análise Financeira (aba TikTok Shop). */
+export interface TiktokConnectionDto {
+  id: string;
+  accountId: string;
+  nickname: string;
+  shopId: string;
+  status: 'active' | 'revoked' | 'error';
+  lastError: string | null;
+  syncing: boolean;
+  /** Aviso da última sincronização (ex.: extrato financeiro indisponível → tarifas estimadas). */
+  syncError: string | null;
+  ordersImported: number;
+  /** Histórico de vendas já trazido por completo. */
+  historyDone: boolean;
+  lastSyncedAt: string | null;
+}
+
+export interface TiktokStatusDto {
+  /** Integração configurada no ambiente E liberada para a empresa. */
+  configured: boolean;
+  connections: TiktokConnectionDto[];
+}

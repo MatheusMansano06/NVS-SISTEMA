@@ -58,8 +58,8 @@ export function FinanceBreakdown({ range, marketplace, accountId, adSpend, disco
   const share = (v: number) => (c && c.faturamento > 0 ? pct(v / c.faturamento) : '—');
   const custoImposto = c && c.custoTotal !== null ? c.custoTotal + (c.impostoTotal ?? 0) : null;
   const mcAds = c && c.mcTotal !== null ? c.mcTotal - adSpend : null;
-  // base da MC = vendas aprovadas que têm custo (a mesma do % da Análise Financeira)
-  const mcBase = c && c.mcTotal !== null && c.mcPct ? c.mcTotal / (c.mcPct / 100) : (c?.vendasAprovadas ?? 0);
+  // margem depois dos Ads = margem − TACOS (Ads ÷ receita bruta), a mesma conta da Análise Financeira
+  const mcPctAds = c && c.mcPct !== null && c.vendasAprovadas > 0 ? c.mcPct - (adSpend / c.vendasAprovadas) * 100 : null;
   const byBucket = new Map(data?.breakdown.map((b) => [b.bucket, b.valor]) ?? []);
 
   return (
@@ -143,7 +143,7 @@ export function FinanceBreakdown({ range, marketplace, accountId, adSpend, disco
                       <div><dt>Depois dos Ads</dt><dd className="money">{money(mcAds)}</dd></div>
                       <div>
                         <dt>Margem</dt>
-                        <dd>{mcBase > 0 ? pct(mcAds / mcBase, 2) : '—'}</dd>
+                        <dd>{mcPctAds === null ? '—' : pct(mcPctAds / 100, 2)}</dd>
                       </div>
                     </dl>
                   )}

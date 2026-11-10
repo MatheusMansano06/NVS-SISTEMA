@@ -118,7 +118,21 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap, tikto
   const database = db ?? new Database(env.DATABASE_URL);
   const events = new EventBus();
   const app = Fastify({
-    logger: env.NODE_ENV === 'test' ? false : { level: env.LOG_LEVEL },
+    logger:
+      env.NODE_ENV === 'test'
+        ? false
+        : {
+            level: env.LOG_LEVEL,
+            serializers: {
+              // o retorno do OAuth (Mercado Livre, TikTok Shop) traz o código de autorização na URL: não vai para o log
+              req: (req: { method: string; url: string; hostname: string; ip: string }) => ({
+                method: req.method,
+                url: req.url.replace(/([?&](?:code|state)=)[^&]*/g, '$1***'),
+                host: req.hostname,
+                remoteAddress: req.ip,
+              }),
+            },
+          },
     bodyLimit: 100_000,
     trustProxy: true,
   });

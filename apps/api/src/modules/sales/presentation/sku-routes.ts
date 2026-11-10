@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { importSkusSchema, listSkusSchema, saveSkuCostSchema, taxRateSchema } from '@nvs/shared';
+import { importSkusSchema, linkSkuSchema, listSkusSchema, saveSkuCostSchema, taxRateSchema } from '@nvs/shared';
 import type { z } from 'zod';
 import { NotFoundError, ValidationError } from '../../../shared/kernel/errors.js';
 import type { SkuCostService } from '../application/sku-cost-service.js';
@@ -26,6 +26,18 @@ export function skuRoutes(service: SkuCostService) {
       const { sku } = (req.body ?? {}) as { sku?: string };
       if (!sku) throw new ValidationError('Informe o SKU');
       if (!(await service.remove(req.user.tenantId, req.user.sub, sku))) throw new NotFoundError('SKU sem custo cadastrado');
+      return reply.code(204).send();
+    });
+
+    // vínculo entre plataformas: o SKU passa a usar o custo do SKU escolhido
+    app.put('/skus/link', write, async (req) => {
+      const { sku, linkedSku } = parse(linkSkuSchema, req.body);
+      return service.link(req.user.tenantId, req.user.sub, sku, linkedSku);
+    });
+    app.delete('/skus/link', write, async (req, reply) => {
+      const { sku } = (req.body ?? {}) as { sku?: string };
+      if (!sku) throw new ValidationError('Informe o SKU');
+      if (!(await service.unlink(req.user.tenantId, sku))) throw new NotFoundError('SKU sem vínculo');
       return reply.code(204).send();
     });
 

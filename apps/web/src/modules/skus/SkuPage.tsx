@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SkuFilter, SkuListDto, SkuRowDto } from '@nvs/shared';
+import type { Marketplace, SkuFilter, SkuListDto, SkuRowDto } from '@nvs/shared';
 import { AppShell } from '../../app/AppShell';
 import { useGuidedTour } from '../../shared/tour/Tour';
 import { TOURS } from '../../shared/tour/tours';
@@ -7,7 +7,10 @@ import { pct } from '../../shared/format';
 import { Button } from '../../shared/ui/Button';
 import { Icon } from '../../shared/ui/Icon';
 import { Modal } from '../../shared/ui/Modal';
+import { useFeature } from '../../shared/features';
 import { EanTab } from './EanTab';
+import { LinkSkuModal } from './LinkSkuModal';
+import { PLATFORM_LABELS } from './platforms';
 import { ImportModal } from './ImportModal';
 import { TaxRateCard } from './TaxRateCard';
 import { Pagination } from '../../shared/ui/Pagination';
@@ -20,11 +23,17 @@ const FILTERS: { id: SkuFilter; label: string }[] = [
   { id: 'done', label: 'Com custo' },
   { id: 'all', label: 'Todos' },
 ];
+/** Plataformas que a empresa pode ter além do Mercado Livre (cada uma é um recurso liberado). */
+const PLATFORMS: Marketplace[] = ['mercado_livre', 'tiktok_shop'];
 
 /** Cadastro de SKUs: custo unitário e imposto que alimentam lucro, margem e a análise financeira. */
 export function SkuPage() {
   const [view, setView] = useState<'costs' | 'ean'>(() => (new URLSearchParams(window.location.search).get('aba') === 'ean' ? 'ean' : 'costs'));
   const [filter, setFilter] = useState<SkuFilter>('missing');
+  // mais de um marketplace: SKUs separados por plataforma e vínculo entre eles
+  const multi = useFeature('tiktok_shop');
+  const [platform, setPlatform] = useState<Marketplace | ''>('');
+  const [linking, setLinking] = useState<SkuRowDto | null>(null);
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<SkuRowDto[]>([]);
@@ -51,7 +60,7 @@ export function SkuPage() {
       setLoading(true);
       setError('');
       try {
-        const r = await skusApi.list({ q: query || undefined, filter, offset, limit: pageSize }, c.signal);
+        const r = await skusApi.list({ q: query || undefined, filter, platform: platform || undefined, offset, limit: pageSize }, c.signal);
         setItems(r.items);
         setMeta({ total: r.total, counts: r.counts });
       } catch (err) {
@@ -60,7 +69,7 @@ export function SkuPage() {
         if (ctrl.current === c) setLoading(false);
       }
     },
-    [filter, query, page, pageSize],
+    [filter, platform, query, page, pageSize],
   );
 
   useEffect(() => {
@@ -68,7 +77,7 @@ export function SkuPage() {
   }, [load]);
 
   // mudou busca/filtro → volta para a página 1
-  useEffect(() => setPage(1), [filter, query, pageSize]);
+  useEffect(() => setPage(1), [filter, platform, query, pageSize]);
 
   const goTo = (p: number) => {
     setPage(p);
@@ -141,6 +150,14 @@ export function SkuPage() {
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
             <input placeholder="Buscar por SKU ou título" value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
+          {multi && (
+            <div className="seg" role="radiogroup" aria-label="Plataforma">
+              <button type="button" role="radio" aria-checked={platform === ''} onClick={() => setPlatform('')}>Todas</button>
+              {PLATFORMS.map((p) => (
+                <button key={p} type="button" role="radio" aria-checked={platform === p} onClick={() => setPlatform(p)}>{PLATFORM_LABELS[p]}</button>
+              ))}
+            </div>
+          )}
           <div className="seg" role="radiogroup" aria-label="Filtro">
             {FILTERS.map((f) => (
               <button key={f.id} type="button" role="radio" aria-checked={filter === f.id} onClick={() => setFilter(f.id)}>
@@ -170,7 +187,7 @@ export function SkuPage() {
         ) : (
           <ul className="sku-list" aria-busy={loading}>
             {items.map((r) => (
-              <SkuRow key={r.sku} row={r} onSaved={onSaved} />
+              <SkuRow key={r.sku} row={r} onSaved={onSaved} platforms={multi} onLink={setLinking} onChanged={() => void load()} />
             ))}
           </ul>
         )}
@@ -181,6 +198,17 @@ export function SkuPage() {
         </>}
       </div>
 
+      <Modal open={linking !== null} onClose={() => setLinking(null)} label="Vincular a outro SKU">
+        {linking && (
+          <LinkSkuModal
+            row={linking}
+            onDone={() => {
+              setLinking(null);
+              void load();
+            }}
+          />
+        )}
+      </Modal>
       <Modal open={importing} onClose={() => setImporting(false)} label="Importar planilha">
         <ImportModal onDone={() => void load()} />
       </Modal>

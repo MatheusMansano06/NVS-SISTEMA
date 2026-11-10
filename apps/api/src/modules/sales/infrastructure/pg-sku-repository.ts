@@ -1,4 +1,4 @@
-import type { SkuFilter, SkuRowDto } from '@nvs/shared';
+import type { Marketplace, SkuFilter, SkuRowDto } from '@nvs/shared';
 import type { Queryable } from '../../../shared/infrastructure/database.js';
 import { TIMEZONE } from '../domain/period.js';
 
@@ -102,7 +102,12 @@ export class PgSkuRepository {
    * e recalcula os pedidos afetados. `all` = todas as vendas.
    */
   async applyCosts(db: Queryable, by: { skus?: string[]; orderIds?: string[]; all?: boolean }): Promise<number> {
-    const where = by.all ? 'true' : by.skus ? 'i.sku = ANY($1)' : 'i.order_id = ANY($1)';
+    // custo de um SKU mudou → recalcula também as vendas dos SKUs vinculados a ele
+    const where = by.all
+      ? 'true'
+      : by.skus
+        ? '(i.sku = ANY($1) OR i.sku IN (SELECT k.sku FROM sku_links k WHERE k.linked_sku = ANY($1)))'
+        : 'i.order_id = ANY($1)';
     const key = by.skus ?? by.orderIds ?? [];
     if (!by.all && !key.length) return 0;
     // recálculos da mesma empresa em fila (evita deadlock entre notificações/sincronização simultâneas)
@@ -111,7 +116,8 @@ export class PgSkuRepository {
     const { rows } = await db.query<{ order_id: string }>(
       `UPDATE order_items i SET
          unit_cost = (SELECT h.custo_unit FROM sku_cost_history h
-                       WHERE h.sku = i.sku AND h.vigente_desde <= ${saleDay}
+                       WHERE h.sku = coalesce((SELECT k.linked_sku FROM sku_links k WHERE k.sku = i.sku), i.sku)
+                         AND h.vigente_desde <= ${saleDay}
                        ORDER BY h.vigente_desde DESC, h.registrado_em DESC LIMIT 1),
          tax_pct = (SELECT t.rate_pct FROM tax_rate_history t
                      WHERE t.vigente_desde <= ${saleDay}
@@ -143,13 +149,15 @@ export class PgSkuRepository {
    * e os vendidos nos últimos 90 dias (ainda pesam na margem). Anúncio encerrado/excluído e venda antiga do histórico
    * não entram — o custo cadastrado deles continua guardado.
    */
-  async list(db: Queryable, q: { q?: string; filter: SkuFilter; offset: number; limit: number }) {
+  async list(db: Queryable, q: { q?: string; filter: SkuFilter; platform?: Marketplace; offset: number; limit: number }) {
     const base = `
       WITH all_skus AS (
-        SELECT sku FROM listings WHERE sku IS NOT NULL AND status NOT IN ('closed', 'inactive')
-        UNION SELECT unnest(variation_skus) FROM listings WHERE status NOT IN ('closed', 'inactive')
-        UNION SELECT i.sku FROM order_items i JOIN orders o ON o.id = i.order_id
-               WHERE o.ordered_at >= now() - interval '90 days'
+        SELECT sku, array_agg(DISTINCT marketplace ORDER BY marketplace) AS platforms FROM (
+          SELECT sku, marketplace FROM listings WHERE sku IS NOT NULL AND status NOT IN ('closed', 'inactive')
+          UNION SELECT unnest(variation_skus), marketplace FROM listings WHERE status NOT IN ('closed', 'inactive')
+          UNION SELECT i.sku, o.marketplace FROM order_items i JOIN orders o ON o.id = i.order_id
+                 WHERE o.ordered_at >= now() - interval '90 days'
+        ) x GROUP BY sku
       ),
       sold AS (
         SELECT i.sku, sum(i.quantity) AS units, sum(i.quantity * i.unit_price) / nullif(sum(i.quantity), 0) AS avg_price
@@ -168,11 +176,13 @@ export class PgSkuRepository {
       rows AS MATERIALIZED (
         SELECT s.sku, coalesce(l.title, seen.title) AS title, l.picture_url, l.permalink, l.status AS listing_status,
                l.available_quantity AS stock, coalesce(sold.units, 0) AS units30, sold.avg_price,
-               c.custo_unit, c.updated_at
+               c.custo_unit, c.updated_at, s.platforms, k.linked_sku
           FROM all_skus s
           LEFT JOIN sold ON sold.sku = s.sku
           LEFT JOIN seen ON seen.sku = s.sku
-          LEFT JOIN sku_costs c ON c.sku = s.sku
+          LEFT JOIN sku_links k ON k.sku = s.sku
+          -- SKU vinculado mostra o custo do SKU de destino
+          LEFT JOIN sku_costs c ON c.sku = coalesce(k.linked_sku, s.sku)
           LEFT JOIN lmap direct ON direct.key = s.sku
           LEFT JOIN lmap via_sale ON via_sale.key = seen.listing_id
           CROSS JOIN LATERAL (SELECT coalesce(direct.title, via_sale.title) AS title, coalesce(direct.picture_url, via_sale.picture_url) AS picture_url,
@@ -180,7 +190,7 @@ export class PgSkuRepository {
                                      coalesce(direct.available_quantity, via_sale.available_quantity) AS available_quantity) l
          WHERE s.sku IS NOT NULL AND s.sku <> ''
       )`;
-    const search = `($1::text IS NULL OR sku ILIKE '%' || $1 || '%' OR title ILIKE '%' || $1 || '%')`;
+    const search = `($1::text IS NULL OR sku ILIKE '%' || $1 || '%' OR title ILIKE '%' || $1 || '%') AND ($4::text IS NULL OR $4 = ANY(platforms))`;
     const filter =
       q.filter === 'missing' ? 'custo_unit IS NULL' : q.filter === 'done' ? 'custo_unit IS NOT NULL' : 'true';
     // contadores e página na mesma consulta (a base é montada uma vez)
@@ -193,13 +203,15 @@ export class PgSkuRepository {
             ORDER BY (custo_unit IS NULL) DESC, units30 DESC, title NULLS LAST, sku
             LIMIT $2 OFFSET $3
          ) p ON true`,
-      [q.q || null, q.limit, q.offset],
+      [q.q || null, q.limit, q.offset, q.platform ?? null],
     );
     const all = Number(rows[0]?.all_n ?? 0);
     const done = Number(rows[0]?.done_n ?? 0);
     const page = rows.filter((r) => r.sku !== null);
     const items: SkuRowDto[] = page.map((r) => ({
       sku: r.sku,
+      platforms: r.platforms ?? [],
+      linkedSku: r.linked_sku ?? null,
       title: r.title,
       pictureUrl: r.picture_url,
       permalink: r.permalink,
@@ -212,6 +224,29 @@ export class PgSkuRepository {
     }));
     const total = q.filter === 'missing' ? all - done : q.filter === 'done' ? done : all;
     return { items, total, counts: { all, done, missing: all - done } };
+  }
+
+  // ---------- vínculo de SKU entre plataformas
+  async linkOf(db: Queryable, sku: string): Promise<string | null> {
+    const { rows } = await db.query<{ linked_sku: string }>('SELECT linked_sku FROM sku_links WHERE sku = $1', [sku]);
+    return rows[0]?.linked_sku ?? null;
+  }
+
+  /** Algum SKU está vinculado a este? (destino de vínculo não pode virar vínculo) */
+  async isLinkTarget(db: Queryable, sku: string): Promise<boolean> {
+    return ((await db.query('SELECT 1 FROM sku_links WHERE linked_sku = $1 LIMIT 1', [sku])).rowCount ?? 0) > 0;
+  }
+
+  async setLink(db: Queryable, tenantId: string, userId: string, sku: string, linkedSku: string): Promise<void> {
+    await db.query(
+      `INSERT INTO sku_links (tenant_id, sku, linked_sku, created_by) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (tenant_id, sku) DO UPDATE SET linked_sku = EXCLUDED.linked_sku, created_by = EXCLUDED.created_by, created_at = now()`,
+      [tenantId, sku, linkedSku, userId],
+    );
+  }
+
+  async removeLink(db: Queryable, sku: string): Promise<boolean> {
+    return ((await db.query('DELETE FROM sku_links WHERE sku = $1', [sku])).rowCount ?? 0) > 0;
   }
 
   /** SKUs que existem no marketplace (anúncios e variações, mais o que já foi vendido): grafias exatas e MAIÚSCULO → grafia. */

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MARKETPLACES, type Marketplace } from './onboarding.js';
 
 const money = z.coerce.number().finite().positive('O custo precisa ser maior que zero').max(10_000_000);
 
@@ -14,6 +15,8 @@ export type SkuFilter = (typeof SKU_FILTERS)[number];
 export const listSkusSchema = z.object({
   q: z.string().trim().max(120).optional(),
   filter: z.enum(SKU_FILTERS).default('all'),
+  /** Só os SKUs que existem (anúncio ou venda recente) nesta plataforma. */
+  platform: z.enum(MARKETPLACES).optional(),
   offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
@@ -26,8 +29,18 @@ export const importSkusSchema = z.object({
 });
 
 
+/** Vincula um SKU ao SKU do mesmo produto em outra plataforma: passa a usar o custo dele. */
+export const linkSkuSchema = z.object({
+  sku: z.string().trim().min(1).max(120),
+  linkedSku: z.string().trim().min(1).max(120),
+});
+
 export interface SkuRowDto {
   sku: string;
+  /** Plataformas em que o SKU existe (anúncio ativo ou venda nos últimos 90 dias). */
+  platforms: Marketplace[];
+  /** SKU de outra plataforma ao qual este está vinculado (o custo mostrado é o dele). */
+  linkedSku: string | null;
   title: string | null;
   pictureUrl: string | null;
   permalink: string | null;

@@ -24,6 +24,8 @@ interface Logger {
 const DAY = 86_400_000;
 /** O access token dura ~7 dias; renova com folga de 1 hora. */
 const REFRESH_MARGIN_MS = 60 * 60_000;
+/** Tempo do token em memória (bem menor que a folga de renovação). */
+const TOKEN_MEMO_MS = 5 * 60_000;
 /** Janela de busca dos pedidos no histórico. */
 const WINDOW_MS = 15 * DAY;
 /** Sem sinal de vida por 10 min, a sincronização é dada como interrompida (servidor reiniciou). */
@@ -40,7 +42,9 @@ export class TiktokShopService {
   private active = new Set<string>();
   private background = new Set<Promise<void>>();
   /** Uma amostra do formato real por processo (sem dados do comprador), para conferir os campos da API. */
-  private sampled = { order: false, settlement: false };
+  private sampled = { order: false, settlement: false, unsettled: false };
+  /** Token em memória por alguns minutos: a conferência do extrato faz milhares de chamadas e não precisa ir ao banco em cada uma. */
+  private tokens = new Map<string, { token: string; until: number }>();
 
   constructor(
     private readonly db: Database,
@@ -103,6 +107,14 @@ export class TiktokShopService {
 
   /** Access token válido; perto de expirar, renova (o refresh token muda a cada renovação) com a linha travada. */
   private async accessToken(tenantId: string, connectionId: string): Promise<string> {
+    const hit = this.tokens.get(connectionId);
+    if (hit && hit.until > Date.now()) return hit.token;
+    const token = await this.readToken(tenantId, connectionId);
+    this.tokens.set(connectionId, { token, until: Date.now() + TOKEN_MEMO_MS });
+    return token;
+  }
+
+  private async readToken(tenantId: string, connectionId: string): Promise<string> {
     try {
       return await this.db.withTenant(tenantId, async (db) => {
         const fresh = (c: TiktokConnectionRow) => c.expires_at.getTime() - Date.now() > REFRESH_MARGIN_MS;
@@ -149,10 +161,13 @@ export class TiktokShopService {
   }
 
   // ================= Sincronização
-  /** Inicia em segundo plano (histórico completo na primeira vez; depois, só o que mudou). */
-  startSync(tenantId: string, connectionId: string): void {
+  /**
+   * Inicia em segundo plano (histórico completo na primeira vez; depois, só o que mudou).
+   * `deep` (botão "Sincronizar agora"): confere o extrato de TODAS as vendas ainda com tarifa estimada.
+   */
+  startSync(tenantId: string, connectionId: string, deep = false): void {
     if (this.active.has(connectionId)) return;
-    const job: Promise<void> = this.runSync(tenantId, connectionId).finally(() => this.background.delete(job));
+    const job: Promise<void> = this.runSync(tenantId, connectionId, deep).finally(() => this.background.delete(job));
     this.background.add(job);
   }
 
@@ -161,7 +176,7 @@ export class TiktokShopService {
     await Promise.allSettled([...this.background]);
   }
 
-  private async runSync(tenantId: string, connectionId: string): Promise<void> {
+  private async runSync(tenantId: string, connectionId: string, deep = false): Promise<void> {
     if (this.active.has(connectionId)) return;
     this.active.add(connectionId);
     const mark = (s: Parameters<PgTiktokRepository['setSync']>[2]) => this.db.withTenant(tenantId, (db) => this.repo.setSync(db, connectionId, s));
@@ -181,8 +196,10 @@ export class TiktokShopService {
         // de hora em hora: pedidos novos e os que mudaram (cancelamento, entrega)
         await this.importOrders(tenantId, conn, new Date(now.getTime() - 3 * DAY), now, 'update');
       }
-      const settleError = await this.settle(tenantId, conn, full ? new Date(0) : new Date(now.getTime() - 60 * DAY), full ? 50_000 : 400);
-      await mark({ status: 'idle', error: settleError, backfilled: full, synced: true });
+      const all = full || deep;
+      const settled = await this.settle(tenantId, conn, all ? new Date(0) : new Date(now.getTime() - 60 * DAY), all ? 50_000 : 400);
+      this.log.info({ tenantId, connectionId, full, deep, ...settled }, 'TikTok Shop: sincronização concluída');
+      await mark({ status: 'idle', error: settled.warning, backfilled: full, synced: true });
     } catch (err) {
       this.log.error({ err, tenantId, connectionId }, 'TikTok Shop: sincronização falhou');
       await mark({ status: 'failed', error: err instanceof TiktokApiError ? err.message : 'Falha inesperada na sincronização' }).catch(() => undefined);
@@ -217,10 +234,11 @@ export class TiktokShopService {
    * Retorna um aviso quando o TikTok recusa o extrato (ex.: app sem a permissão de Finanças): os pedidos
    * continuam valendo com a tarifa estimada.
    */
-  private async settle(tenantId: string, conn: TiktokConnectionRow, since: Date, limit: number): Promise<string | null> {
+  private async settle(tenantId: string, conn: TiktokConnectionRow, since: Date, limit: number): Promise<{ pending: number; settled: number; warning: string | null }> {
     const until = new Date(Date.now() - SETTLE_AFTER_MS);
     const pending = await this.db.withTenant(tenantId, (db) => this.repo.pendingSettlement(db, conn.account_id, since, until, limit));
     let n = 0;
+    let settled = 0;
     for (const o of pending) {
       const token = await this.accessToken(tenantId, conn.id);
       let data: unknown;
@@ -229,12 +247,18 @@ export class TiktokShopService {
       } catch (err) {
         if (err instanceof TiktokApiError && err.code !== null && err.status < 500) {
           this.log.error({ err, code: err.code }, 'TikTok Shop: extrato do pedido recusado');
-          return `Não consegui ler o extrato financeiro (${err.message}). As tarifas estão estimadas.`;
+          return { pending: pending.length, settled, warning: `Não consegui ler o extrato financeiro (${err.message}). As tarifas estão estimadas.` };
         }
         throw err;
       }
       const s = parseSettlement(data);
+      if (!s && !this.sampled.unsettled) {
+        // formato de quem ainda não foi repassado (ou que o leitor não reconheceu): uma amostra para conferência
+        this.sampled.unsettled = true;
+        this.log.info({ sample: JSON.stringify(data).slice(0, 2000) }, 'TikTok Shop: amostra de extrato sem repasse');
+      }
       if (s) {
+        settled++;
         if (!this.sampled.settlement) {
           this.sampled.settlement = true;
           this.log.info({ sample: JSON.stringify(data).slice(0, 4000) }, 'TikTok Shop: amostra de extrato do pedido');
@@ -248,7 +272,7 @@ export class TiktokShopService {
       if (++n % 25 === 0) await this.db.withTenant(tenantId, (db) => this.repo.setSync(db, conn.id, { status: 'running' }));
       await this.pace();
     }
-    return null;
+    return { pending: pending.length, settled, warning: null };
   }
 
   private pace(): Promise<void> {

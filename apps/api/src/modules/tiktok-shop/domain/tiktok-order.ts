@@ -97,13 +97,16 @@ export interface TiktokSettlement {
   shipping: number;
 }
 
+/** Onde as transações podem vir, conforme a versão da API (por extrato, genérico ou por SKU). */
+const TX_LISTS = ['statement_transactions', 'transactions', 'sku_transactions'] as const;
+
 /**
  * Lê o extrato de um pedido. Aceita os totais no nível do pedido ou a soma das transações (formatos 202309/202501).
  * No extrato, cobranças vêm negativas. Sem nenhuma transação = pedido ainda não repassado → null.
  */
 export function parseSettlement(data: unknown): TiktokSettlement | null {
   const d = (data ?? {}) as Record<string, unknown>;
-  const txs = (Array.isArray(d.statement_transactions) ? d.statement_transactions : Array.isArray(d.transactions) ? d.transactions : []) as Record<string, unknown>[];
+  const txs = (TX_LISTS.map((k) => d[k]).find((v) => Array.isArray(v) && v.length) ?? []) as Record<string, unknown>[];
   if (!txs.length) return null;
   const total = (field: string) => (d[field] != null ? num(d[field]) : txs.reduce((s, t) => s + num(t[field]), 0));
   return {

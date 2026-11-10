@@ -51,8 +51,8 @@ export const LISTING_TYPE_LABELS: Record<string, string> = {
 
 /** TikTok Shop não tem modalidade de frete nem tipo de anúncio: a tela mostra quem faz o envio. */
 export const TIKTOK_SHIPPING_LABELS: Record<string, string> = {
-  tiktok_tiktok: 'Envio TikTok',
-  tiktok_seller: 'Envio próprio',
+  tiktok_tiktok: 'Enviado pela plataforma',
+  tiktok_seller: 'Enviado pelo vendedor',
 };
 
 export const COST_FILTERS = ['com_custo', 'sem_custo'] as const;

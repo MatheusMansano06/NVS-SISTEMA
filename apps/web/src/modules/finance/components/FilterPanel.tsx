@@ -13,6 +13,44 @@ interface Props {
   onConsiderarFc: (v: boolean) => void;
 }
 
+/** Filtros ativos, na ordem em que aparecem como etiquetas. */
+function activeChips(value: LineFilters, considerarFc: boolean): { key: keyof LineFilters | 'fc'; label: string }[] {
+  const chips: { key: keyof LineFilters | 'fc'; label: string }[] = [];
+  if (value.status) chips.push({ key: 'status', label: `Status: ${STATUS[value.status]}` });
+  if (value.listingType) chips.push({ key: 'listingType', label: `Modalidade: ${LISTING_TYPE_LABELS[value.listingType] ?? value.listingType}` });
+  if (value.bucket) chips.push({ key: 'bucket', label: `Frete: ${LOGISTIC_LABELS[value.bucket]}` });
+  if (value.custo) chips.push({ key: 'custo', label: COSTS[value.custo] });
+  if (value.margem) chips.push({ key: 'margem', label: `Margem: ${BANDS[value.margem]}` });
+  if (value.sku) chips.push({ key: 'sku', label: `SKU: ${value.sku}` });
+  if (value.pedido) chips.push({ key: 'pedido', label: `Pedido/MLB: ${value.pedido}` });
+  if (considerarFc) chips.push({ key: 'fc', label: 'Considerando frete comprador' });
+  return chips;
+}
+
+/**
+ * Etiquetas dos filtros ativos, numa linha própria logo abaixo do título da tabela (ficavam espremidas entre os
+ * botões e quebravam o alinhamento).
+ */
+export function FilterChips({ value, onChange, considerarFc, onConsiderarFc }: Props) {
+  const chips = activeChips(value, considerarFc);
+  if (!chips.length) return null;
+  const remove = (k: keyof LineFilters | 'fc') => (k === 'fc' ? onConsiderarFc(false) : onChange({ ...value, [k]: undefined }));
+  return (
+    <div className="fchips-row" aria-label="Filtros ativos">
+      <span className="fchips-title">Filtrando por</span>
+      <ul className="fchips">
+        {chips.map((c) => (
+          <li key={c.key}>
+            {c.label}
+            <button type="button" aria-label={`Remover filtro ${c.label}`} onClick={() => remove(c.key)}>×</button>
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="link fchips-clear" onClick={() => { onChange({}); onConsiderarFc(false); }}>Limpar filtros</button>
+    </div>
+  );
+}
+
 /** Botão "+ Filtro" com painel de campos rotulados (padrão do NVS-WMS) e chips dos filtros ativos. */
 export function FilterPanel({ value, onChange, considerarFc, onConsiderarFc }: Props) {
   const [open, setOpen] = useState(false);
@@ -40,40 +78,13 @@ export function FilterPanel({ value, onChange, considerarFc, onConsiderarFc }: P
 
   const set = <K extends keyof LineFilters>(k: K, v: LineFilters[K] | '') => onChange({ ...value, [k]: v || undefined });
 
-  const chips: { key: keyof LineFilters | 'fc'; label: string }[] = [];
-  if (value.status) chips.push({ key: 'status', label: `Status: ${STATUS[value.status]}` });
-  if (value.listingType) chips.push({ key: 'listingType', label: `Modalidade: ${LISTING_TYPE_LABELS[value.listingType] ?? value.listingType}` });
-  if (value.bucket) chips.push({ key: 'bucket', label: `Frete: ${LOGISTIC_LABELS[value.bucket]}` });
-  if (value.custo) chips.push({ key: 'custo', label: COSTS[value.custo] });
-  if (value.margem) chips.push({ key: 'margem', label: `Margem: ${BANDS[value.margem]}` });
-  if (value.sku) chips.push({ key: 'sku', label: `SKU: ${value.sku}` });
-  if (value.pedido) chips.push({ key: 'pedido', label: `Pedido/MLB: ${value.pedido}` });
-  if (considerarFc) chips.push({ key: 'fc', label: 'Considerando frete comprador' });
+  const chips = activeChips(value, considerarFc);
 
   return (
     <div className="fpanel" ref={box}>
       <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         + Filtro{chips.length ? <span className="fcount">{chips.length}</span> : null}
       </button>
-      {chips.length > 0 && (
-        <ul className="fchips">
-          {chips.map((c) => (
-            <li key={c.key}>
-              {c.label}
-              <button
-                type="button"
-                aria-label={`Remover filtro ${c.label}`}
-                onClick={() => (c.key === 'fc' ? onConsiderarFc(false) : set(c.key, undefined))}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-          <li className="fchips-clear">
-            <button type="button" className="link" onClick={() => { onChange({}); onConsiderarFc(false); }}>Limpar</button>
-          </li>
-        </ul>
-      )}
 
       {open && (
         <div className="fpop" role="dialog" aria-label="Filtros">

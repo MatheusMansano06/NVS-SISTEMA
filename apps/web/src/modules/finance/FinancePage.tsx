@@ -229,7 +229,7 @@ export function FinancePage() {
         {data && data.enriquecimentoPendente > 0 && (
           <p className="banner banner-ok" role="status">
             {isTiktok
-              ? `${int(data.enriquecimentoPendente)} venda(s) ainda estão com a tarifa estimada (comissão + tarifa fixa): o TikTok Shop só informa a tarifa cobrada, afiliados e o frete depois do repasse. Os números se ajustam sozinhos.`
+              ? `${int(data.enriquecimentoPendente)} venda(s) ainda não foram repassadas pelo TikTok Shop: tarifa e frete delas são a estimativa do próprio TikTok e viram o valor do extrato quando o repasse sair.`
               : `Fretes, cupons e devoluções de ${int(data.enriquecimentoPendente)} venda(s) ainda estão sendo calculados pela sincronização com o Mercado Livre. Os números se completam sozinhos.`}
           </p>
         )}
@@ -287,11 +287,11 @@ export function FinancePage() {
               </article>
             </section>
 
-            {!isTiktok && (
-            <section className="ads-bar" aria-label="Mercado Ads">
+            {(!isTiktok || adSpend > 0) && (
+            <section className="ads-bar" aria-label={isTiktok ? 'TikTok Ads' : 'Mercado Ads'}>
               <div className="ads-bar-title">
-                <strong>Mercado Ads</strong>
-                <small>mesmo período do filtro</small>
+                <strong>{isTiktok ? 'TikTok Ads' : 'Mercado Ads'}</strong>
+                <small>{isTiktok ? 'descontado das vendas no extrato' : 'mesmo período do filtro'}</small>
               </div>
               <div className="ads-num">
                 <span>Investido em Ads</span>
@@ -325,9 +325,9 @@ export function FinancePage() {
                 <small>{c.faturamento ? pct(c.tarifa / c.faturamento) : '0%'} do faturamento</small>
               </div>
               <div>
-                <span>Cupons seller</span>
+                <span>{isTiktok ? 'Descontos seus' : 'Cupons seller'}</span>
                 <b className="neg money">{money(c.cupomSeller)}</b>
-                <small>descontos bancados por você</small>
+                <small>{isTiktok ? 'promoções e cupons bancados por você' : 'descontos bancados por você'}</small>
               </div>
               <div>
                 <span>Frete total</span>

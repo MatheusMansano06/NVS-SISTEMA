@@ -49,6 +49,12 @@ export const LISTING_TYPE_LABELS: Record<string, string> = {
   free: 'Grátis',
 };
 
+/** TikTok Shop não tem modalidade de frete nem tipo de anúncio: a tela mostra quem faz o envio. */
+export const TIKTOK_SHIPPING_LABELS: Record<string, string> = {
+  tiktok_tiktok: 'Envio TikTok',
+  tiktok_seller: 'Envio próprio',
+};
+
 export const COST_FILTERS = ['com_custo', 'sem_custo'] as const;
 
 export const financeLinesQuerySchema = z.object({

@@ -4,8 +4,8 @@ import type { Database } from '../../../shared/infrastructure/database.js';
 import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js';
 import { AppError } from '../../../shared/kernel/errors.js';
 import { retentionCutoff, type IncomingOrder, type SalesIngestion } from '../../sales/index.js';
-import { mapTiktokOrder, parseSettlement } from '../domain/tiktok-order.js';
-import type { PgTiktokRepository, TiktokConnectionRow } from '../infrastructure/pg-tiktok-repository.js';
+import { compactBreakdown, mapTiktokOrder, readAmounts } from '../domain/tiktok-order.js';
+import type { LedgerRow, PgTiktokRepository, TiktokConnectionRow } from '../infrastructure/pg-tiktok-repository.js';
 import { TiktokApiError, type TiktokApi } from '../infrastructure/tiktok-api.js';
 
 export type TiktokCallbackResult = { ok: true } | { ok: false; reason: 'denied' | 'state' | 'locked' | 'exchange' | 'noshop' | 'taken' };
@@ -30,8 +30,6 @@ const TOKEN_MEMO_MS = 5 * 60_000;
 const WINDOW_MS = 15 * DAY;
 /** Sem sinal de vida por 10 min, a sincronização é dada como interrompida (servidor reiniciou). */
 const STALE_MS = 10 * 60_000;
-/** O repasse só sai depois da entrega: pedidos muito novos nem são consultados. */
-const SETTLE_AFTER_MS = 2 * DAY;
 
 /**
  * Integração TikTok Shop: OAuth (state), tokens criptografados com renovação automática, histórico de vendas
@@ -41,8 +39,6 @@ const SETTLE_AFTER_MS = 2 * DAY;
 export class TiktokShopService {
   private active = new Set<string>();
   private background = new Set<Promise<void>>();
-  /** Uma amostra do formato real por processo (sem dados do comprador), para conferir os campos da API. */
-  private sampled = { order: false, settlement: false, unsettled: false };
   /** Token em memória por alguns minutos: a conferência do extrato faz milhares de chamadas e não precisa ir ao banco em cada uma. */
   private tokens = new Map<string, { token: string; until: number }>();
 
@@ -161,13 +157,10 @@ export class TiktokShopService {
   }
 
   // ================= Sincronização
-  /**
-   * Inicia em segundo plano (histórico completo na primeira vez; depois, só o que mudou).
-   * `deep` (botão "Sincronizar agora"): confere o extrato de TODAS as vendas ainda com tarifa estimada.
-   */
-  startSync(tenantId: string, connectionId: string, deep = false): void {
+  /** Inicia em segundo plano (histórico completo na primeira vez; depois, só o que mudou). */
+  startSync(tenantId: string, connectionId: string): void {
     if (this.active.has(connectionId)) return;
-    const job: Promise<void> = this.runSync(tenantId, connectionId, deep).finally(() => this.background.delete(job));
+    const job: Promise<void> = this.runSync(tenantId, connectionId).finally(() => this.background.delete(job));
     this.background.add(job);
   }
 
@@ -176,7 +169,7 @@ export class TiktokShopService {
     await Promise.allSettled([...this.background]);
   }
 
-  private async runSync(tenantId: string, connectionId: string, deep = false): Promise<void> {
+  private async runSync(tenantId: string, connectionId: string): Promise<void> {
     if (this.active.has(connectionId)) return;
     this.active.add(connectionId);
     const mark = (s: Parameters<PgTiktokRepository['setSync']>[2]) => this.db.withTenant(tenantId, (db) => this.repo.setSync(db, connectionId, s));
@@ -186,20 +179,20 @@ export class TiktokShopService {
       const full = !conn.backfilled;
       await mark({ status: 'running', reset: full });
       const now = new Date();
+      // histórico: tudo o que a retenção guarda (13 meses)
+      const history = new Date(`${retentionCutoff()}T03:00:00Z`);
       if (full) {
-        // histórico: tudo o que a retenção guarda (13 meses), do mais recente para o mais antigo
-        const from = new Date(`${retentionCutoff()}T03:00:00Z`);
-        for (let end = now; end > from; end = new Date(end.getTime() - WINDOW_MS)) {
-          await this.importOrders(tenantId, conn, new Date(Math.max(from.getTime(), end.getTime() - WINDOW_MS)), end, 'create');
+        // do mais recente para o mais antigo
+        for (let end = now; end > history; end = new Date(end.getTime() - WINDOW_MS)) {
+          await this.importOrders(tenantId, conn, new Date(Math.max(history.getTime(), end.getTime() - WINDOW_MS)), end, 'create');
         }
       } else {
         // de hora em hora: pedidos novos e os que mudaram (cancelamento, entrega)
         await this.importOrders(tenantId, conn, new Date(now.getTime() - 3 * DAY), now, 'update');
       }
-      const all = full || deep;
-      const settled = await this.settle(tenantId, conn, all ? new Date(0) : new Date(now.getTime() - 60 * DAY), all ? 50_000 : 400);
-      this.log.info({ tenantId, connectionId, full, deep, ...settled }, 'TikTok Shop: sincronização concluída');
-      await mark({ status: 'idle', error: settled.warning, backfilled: full, synced: true });
+      const finance = await this.syncFinance(tenantId, conn, history);
+      this.log.info({ tenantId, connectionId, full, ...finance }, 'TikTok Shop: sincronização concluída');
+      await mark({ status: 'idle', error: finance.warning, backfilled: full, synced: true });
     } catch (err) {
       this.log.error({ err, tenantId, connectionId }, 'TikTok Shop: sincronização falhou');
       await mark({ status: 'failed', error: err instanceof TiktokApiError ? err.message : 'Falha inesperada na sincronização' }).catch(() => undefined);
@@ -213,11 +206,6 @@ export class TiktokShopService {
     do {
       const token = await this.accessToken(tenantId, conn.id);
       const { orders, next } = await this.api.searchOrders(token, conn.shop_cipher, from, to, by, page);
-      if (!this.sampled.order && orders[0]) {
-        this.sampled.order = true;
-        const o = orders[0];
-        this.log.info({ keys: Object.keys(o), status: o.status, payment: o.payment, lineItem: o.line_items?.[0] }, 'TikTok Shop: amostra de pedido');
-      }
       const mapped = orders.map(mapTiktokOrder).filter((o): o is IncomingOrder => o !== null);
       await this.db.withTenant(tenantId, async (db) => {
         await this.sales.upsertOrders(db, tenantId, conn.account_id, 'tiktok_shop', mapped);
@@ -230,49 +218,88 @@ export class TiktokShopService {
   }
 
   /**
-   * Troca a tarifa estimada pela cobrada de fato (extrato do pedido) e grava o frete pago pelo vendedor.
-   * Retorna um aviso quando o TikTok recusa o extrato (ex.: app sem a permissão de Finanças): os pedidos
-   * continuam valendo com a tarifa estimada.
+   * Financeiro fiel ao TikTok, em duas partes:
+   *  1. Extratos (repasses e ajustes) desde a última leitura → guardados por transação e somados por pedido:
+   *     tarifas, frete, devolução e reembolsos passam a ser os do extrato.
+   *  2. Pedidos ainda sem repasse → tarifa e frete ESTIMADOS pelo próprio TikTok (já com frete grátis, afiliado e
+   *     tarifa por item), no lugar da conta provisória feita na importação.
+   * Se o TikTok recusar (ex.: app sem a permissão de Finanças), devolve um aviso e os pedidos ficam com o provisório.
    */
-  private async settle(tenantId: string, conn: TiktokConnectionRow, since: Date, limit: number): Promise<{ pending: number; settled: number; warning: string | null }> {
-    const until = new Date(Date.now() - SETTLE_AFTER_MS);
-    const pending = await this.db.withTenant(tenantId, (db) => this.repo.pendingSettlement(db, conn.account_id, since, until, limit));
-    let n = 0;
-    let settled = 0;
-    for (const o of pending) {
-      const token = await this.accessToken(tenantId, conn.id);
-      let data: unknown;
-      try {
-        data = await this.api.orderTransactions(token, conn.shop_cipher, o.external_id);
-      } catch (err) {
-        if (err instanceof TiktokApiError && err.code !== null && err.status < 500) {
-          this.log.error({ err, code: err.code }, 'TikTok Shop: extrato do pedido recusado');
-          return { pending: pending.length, settled, warning: `Não consegui ler o extrato financeiro (${err.message}). As tarifas estão estimadas.` };
+  private async syncFinance(tenantId: string, conn: TiktokConnectionRow, history: Date) {
+    const result = { statements: 0, transactions: 0, settledOrders: 0, estimatedOrders: 0, unreadable: 0, warning: null as string | null };
+    try {
+      // relê os 3 dias anteriores à última leitura: extrato "em processamento" ainda recebe transações
+      const from = conn.statements_until ? new Date(conn.statements_until.getTime() - 3 * DAY) : history;
+      const startedAt = new Date();
+      const touched = new Set<string>();
+      let page: string | undefined;
+      do {
+        const { statements, next } = await this.api.statements(await this.accessToken(tenantId, conn.id), conn.shop_cipher, from, page);
+        for (const st of statements) {
+          const rows: LedgerRow[] = [];
+          let txPage: string | undefined;
+          do {
+            const { transactions, next: txNext } = await this.api.statementTransactions(await this.accessToken(tenantId, conn.id), conn.shop_cipher, st.id, txPage);
+            for (const tx of transactions) {
+              const a = readAmounts(tx);
+              if (!a.consistent) result.unreadable++;
+              const order = tx.order_id || tx.adjustment_order_id || null;
+              if (order) touched.add(order);
+              rows.push({
+                transaction_id: tx.id || `${st.id}:${order ?? ''}:${tx.type ?? ''}`,
+                statement_id: st.id,
+                statement_time: new Date(st.statement_time * 1000).toISOString(),
+                type: tx.type || 'ORDER',
+                order_external_id: order,
+                revenue: a.revenue, fee: a.fee, shipping: a.shipping, adjustment: a.adjustment, settlement: a.settlement, refund: a.refund,
+                breakdown: compactBreakdown(tx),
+              });
+            }
+            txPage = txNext ?? undefined;
+            await this.pace();
+          } while (txPage);
+          await this.db.withTenant(tenantId, async (db) => {
+            await this.repo.upsertTransactions(db, tenantId, conn.account_id, rows);
+            await this.repo.setSync(db, conn.id, { status: 'running' }); // sinal de vida
+          });
+          result.statements++;
+          result.transactions += rows.length;
         }
-        throw err;
-      }
-      const s = parseSettlement(data);
-      if (!s && !this.sampled.unsettled) {
-        // formato de quem ainda não foi repassado (ou que o leitor não reconheceu): uma amostra para conferência
-        this.sampled.unsettled = true;
-        this.log.info({ sample: JSON.stringify(data).slice(0, 2000) }, 'TikTok Shop: amostra de extrato sem repasse');
-      }
-      if (s) {
-        settled++;
-        if (!this.sampled.settlement) {
-          this.sampled.settlement = true;
-          this.log.info({ sample: JSON.stringify(data).slice(0, 4000) }, 'TikTok Shop: amostra de extrato do pedido');
-        }
-        await this.db.withTenant(tenantId, async (db) => {
-          await this.repo.setSettlement(db, o.id, s.fee, s.shipping);
-          await this.sales.recompute(db, [o.id]);
+        page = next ?? undefined;
+      } while (page);
+
+      result.settledOrders = await this.db.withTenant(tenantId, async (db) => {
+        const ids = await this.repo.applyLedger(db, conn.account_id, [...touched]);
+        await this.sales.recompute(db, ids);
+        await this.repo.setStatementsUntil(db, conn.id, startedAt);
+        return ids.length;
+      });
+
+      // estimativas do TikTok para o que ainda não foi repassado
+      page = undefined;
+      do {
+        const { transactions, next } = await this.api.unsettled(await this.accessToken(tenantId, conn.id), conn.shop_cipher, page);
+        const rows = transactions
+          .filter((t) => (t.type ?? 'ORDER') === 'ORDER' && t.order_id)
+          .map((t) => {
+            const a = readAmounts(t, true);
+            return { order: String(t.order_id), fee: a.fee, shipping: a.shipping };
+          });
+        result.estimatedOrders += await this.db.withTenant(tenantId, async (db) => {
+          const ids = await this.repo.applyEstimates(db, conn.account_id, rows);
+          await this.sales.recompute(db, ids);
+          return ids.length;
         });
-      }
-      // sinal de vida a cada 25 pedidos
-      if (++n % 25 === 0) await this.db.withTenant(tenantId, (db) => this.repo.setSync(db, conn.id, { status: 'running' }));
-      await this.pace();
+        page = next ?? undefined;
+        await this.pace();
+      } while (page);
+    } catch (err) {
+      if (!(err instanceof TiktokApiError) || err.code === null || err.status >= 500) throw err;
+      this.log.error({ err, code: err.code }, 'TikTok Shop: leitura do financeiro recusada');
+      result.warning = `Não consegui ler o financeiro do TikTok (${err.message}). Tarifas e fretes estão provisórios.`;
     }
-    return { pending: pending.length, settled, warning: null };
+    if (result.unreadable) this.log.error({ unreadable: result.unreadable }, 'TikTok Shop: transações em que a soma das partes não bateu com o líquido');
+    return result;
   }
 
   private pace(): Promise<void> {

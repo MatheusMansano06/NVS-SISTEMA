@@ -17,11 +17,28 @@ export interface TiktokConnectionRow {
   orders_imported: number;
   backfilled: boolean;
   last_synced_at: Date | null;
+  statements_until: Date | null;
   updated_at: Date;
 }
 
+/** Transação de extrato já normalizada (ver a migration 0059). */
+export interface LedgerRow {
+  transaction_id: string;
+  statement_id: string;
+  statement_time: string;
+  type: string;
+  order_external_id: string | null;
+  revenue: number;
+  fee: number;
+  shipping: number;
+  adjustment: number;
+  settlement: number;
+  refund: number;
+  breakdown: Record<string, number>;
+}
+
 const COLS = `c.id, c.tenant_id, c.account_id, c.shop_id, c.shop_cipher, a.nickname, c.access_token_enc, c.refresh_token_enc,
-  c.expires_at, c.status, c.last_error, c.sync_status, c.sync_error, c.orders_imported, c.backfilled, c.last_synced_at, c.updated_at`;
+  c.expires_at, c.status, c.last_error, c.sync_status, c.sync_error, c.orders_imported, c.backfilled, c.last_synced_at, c.statements_until, c.updated_at`;
 const FROM = 'FROM tiktok_connections c JOIN marketplace_accounts a ON a.id = c.account_id';
 
 export class PgTiktokRepository {
@@ -135,18 +152,6 @@ export class PgTiktokRepository {
     );
   }
 
-  /** Vendas ainda sem o extrato conferido (tarifa estimada), das mais recentes para as antigas. */
-  async pendingSettlement(db: Queryable, accountId: string, since: Date, until: Date, limit: number): Promise<{ id: string; external_id: string }[]> {
-    const { rows } = await db.query<{ id: string; external_id: string }>(
-      `SELECT id, external_id FROM orders
-        WHERE account_id = $1 AND marketplace = 'tiktok_shop' AND status = 'paid' AND finance_enriched_at IS NULL
-          AND ordered_at >= $2 AND ordered_at < $3
-        ORDER BY ordered_at DESC LIMIT $4`,
-      [accountId, since, until, limit],
-    );
-    return rows;
-  }
-
   /** Cancelado não tem repasse a conferir: sai da fila de "tarifa estimada". */
   async closeCancelled(db: Queryable, accountId: string): Promise<void> {
     await db.query(
@@ -156,10 +161,69 @@ export class PgTiktokRepository {
     );
   }
 
-  async setSettlement(db: Queryable, orderId: string, fee: number, shipping: number): Promise<void> {
+  async setStatementsUntil(db: Queryable, id: string, until: Date): Promise<void> {
+    await db.query('UPDATE tiktok_connections SET statements_until = $2, updated_at = now() WHERE id = $1', [id, until]);
+  }
+
+  /** Grava as transações de um extrato. Reler o mesmo extrato só atualiza (a chave é o id da transação). */
+  async upsertTransactions(db: Queryable, tenantId: string, accountId: string, rows: LedgerRow[]): Promise<void> {
+    if (!rows.length) return;
     await db.query(
-      `UPDATE orders SET marketplace_fee = $2, shipping_cost = $3, logistic_bucket = 'outros', finance_enriched_at = now() WHERE id = $1`,
-      [orderId, fee, shipping],
+      `INSERT INTO tiktok_statement_transactions
+         (tenant_id, account_id, transaction_id, statement_id, statement_time, type, order_external_id,
+          revenue, fee, shipping, adjustment, settlement, refund, breakdown)
+       SELECT $1, $2, x.transaction_id, x.statement_id, x.statement_time, x.type, x.order_external_id,
+              x.revenue, x.fee, x.shipping, x.adjustment, x.settlement, x.refund, x.breakdown
+         FROM jsonb_to_recordset($3::jsonb) AS x(transaction_id text, statement_id text, statement_time timestamptz, type text,
+              order_external_id text, revenue numeric, fee numeric, shipping numeric, adjustment numeric, settlement numeric,
+              refund numeric, breakdown jsonb)
+       ON CONFLICT (tenant_id, account_id, transaction_id) DO UPDATE
+         SET statement_id = EXCLUDED.statement_id, statement_time = EXCLUDED.statement_time, type = EXCLUDED.type,
+             order_external_id = EXCLUDED.order_external_id, revenue = EXCLUDED.revenue, fee = EXCLUDED.fee,
+             shipping = EXCLUDED.shipping, adjustment = EXCLUDED.adjustment, settlement = EXCLUDED.settlement,
+             refund = EXCLUDED.refund, breakdown = EXCLUDED.breakdown`,
+      [tenantId, accountId, JSON.stringify(rows)],
     );
+  }
+
+  /**
+   * Leva o extrato para os pedidos: tarifa, frete e devolução passam a ser a soma das transações do pedido.
+   * Reembolso do TikTok ligado ao pedido (crédito) abate primeiro a devolução e depois as tarifas; cobrança extra
+   * (ajuste negativo) entra como tarifa. Vale para os pedidos de `externalIds` e para os que ainda estavam só com
+   * estimativa. Retorna os pedidos alterados (para recalcular imposto e custo).
+   */
+  async applyLedger(db: Queryable, accountId: string, externalIds: string[]): Promise<string[]> {
+    const { rows } = await db.query<{ id: string }>(
+      `UPDATE orders o
+          SET marketplace_fee = greatest(x.fee + x.charge - greatest(x.credit - x.refund, 0), 0),
+              shipping_cost = greatest(x.shipping, 0),
+              refund_partial = greatest(x.refund - x.credit, 0),
+              logistic_bucket = 'outros', finance_enriched_at = now()
+         FROM (SELECT order_external_id, sum(fee) AS fee, sum(shipping) AS shipping, sum(refund) AS refund,
+                      sum(greatest(adjustment, 0)) AS credit, sum(greatest(-adjustment, 0)) AS charge
+                 FROM tiktok_statement_transactions
+                WHERE account_id = $1 AND order_external_id IS NOT NULL
+                GROUP BY order_external_id) x
+        WHERE o.account_id = $1 AND o.marketplace = 'tiktok_shop' AND o.external_id = x.order_external_id
+          AND (o.finance_enriched_at IS NULL OR o.external_id = ANY($2))
+        RETURNING o.id`,
+      [accountId, externalIds],
+    );
+    return rows.map((r) => r.id);
+  }
+
+  /** Pedidos ainda sem repasse: tarifa e frete estimados pelo próprio TikTok (continuam marcados como estimativa). */
+  async applyEstimates(db: Queryable, accountId: string, rows: { order: string; fee: number; shipping: number }[]): Promise<string[]> {
+    if (!rows.length) return [];
+    const { rows: out } = await db.query<{ id: string }>(
+      `UPDATE orders o SET marketplace_fee = greatest(x.fee, 0), shipping_cost = greatest(x.shipping, 0)
+         FROM jsonb_to_recordset($2::jsonb) AS x("order" text, fee numeric, shipping numeric)
+        WHERE o.account_id = $1 AND o.marketplace = 'tiktok_shop' AND o.external_id = x."order"
+          AND o.status = 'paid' AND o.finance_enriched_at IS NULL
+          AND (o.marketplace_fee, o.shipping_cost) IS DISTINCT FROM (greatest(x.fee, 0), greatest(x.shipping, 0))
+        RETURNING o.id`,
+      [accountId, JSON.stringify(rows)],
+    );
+    return out.map((r) => r.id);
   }
 }

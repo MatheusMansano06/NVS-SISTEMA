@@ -58,6 +58,10 @@ describe('TikTok Shop: extrato do pedido', () => {
     expect(s).toEqual({ fee: 14, shipping: 5 });
   });
 
+  it('aceita as transações agrupadas por SKU', () => {
+    expect(parseSettlement({ sku_transactions: [{ fee_and_tax_amount: '-7', shipping_cost_amount: '-2' }, { fee_and_tax_amount: '-3' }] })).toEqual({ fee: 10, shipping: 2 });
+  });
+
   it('prefere os totais do pedido quando vêm prontos; frete a favor do vendedor vira 0', () => {
     const s = parseSettlement({ fee_and_tax_amount: '-20', shipping_cost_amount: '4', statement_transactions: [{ fee_and_tax_amount: '-1' }] });
     expect(s).toEqual({ fee: 20, shipping: 0 });

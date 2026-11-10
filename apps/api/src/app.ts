@@ -140,8 +140,8 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap, tikto
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
-        // fotos dos anúncios vêm do CDN do Mercado Livre
-        'img-src': ["'self'", 'data:', 'https://*.mlstatic.com'],
+        // fotos dos anúncios: CDN do Mercado Livre e do TikTok Shop
+        'img-src': ["'self'", 'data:', 'https://*.mlstatic.com', 'https://*.ibyteimg.com', 'https://*.tiktokcdn.com'],
       },
     },
   });

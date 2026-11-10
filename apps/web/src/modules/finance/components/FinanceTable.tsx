@@ -5,11 +5,28 @@ import { Pagination } from '../../../shared/ui/Pagination';
 import { ProductThumb } from '../../dashboard/components/ProductThumb';
 import { financeApi, type FinanceFilters, type LineFilters } from '../finance-api';
 import { shortDay } from '../dates';
-import { FilterPanel } from './FilterPanel';
+import { FilterChips, FilterPanel } from './FilterPanel';
 
 const STATUS_LABEL: Record<SaleStatus, string> = { aprovada: 'Aprovada', cancelada: 'Cancelada', devolucao: 'Dev. parcial' };
 /** Valores sem "R$" em cada célula (o cabeçalho avisa): a tabela cabe na tela. */
 const v = (n: number | null) => (n === null ? '—' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+/** ID longo (TikTok tem 18 dígitos): mostra o fim e copia o número inteiro ao clicar nele ou no ícone. */
+function OrderId({ id }: { id: string }) {
+  const [done, setDone] = useState(false);
+  const short = id.length > 12 ? `…${id.slice(-8)}` : id;
+  const copy = () =>
+    void navigator.clipboard?.writeText(id).then(() => {
+      setDone(true);
+      window.setTimeout(() => setDone(false), 1200);
+    });
+  return (
+    <button type="button" className="order-id mono" onClick={copy} title={done ? 'Copiado!' : `${id} (clique para copiar)`} aria-label={`Copiar pedido ${id}`}>
+      <span>{short}</span>
+      <span className="copy" aria-hidden="true">{done ? '✓' : '⧉'}</span>
+    </button>
+  );
+}
 
 function Copy({ text, label }: { text: string; label: string }) {
   const [done, setDone] = useState(false);
@@ -40,7 +57,7 @@ const COLUMNS: Col[] = [
     cls: 'c-ped',
     render: (l) => (
       <span className="two">
-        <span className="mono">{l.orderId}<Copy text={l.orderId} label="pedido" /></span>
+        <OrderId id={l.orderId} />
         <small>{shortDay(l.date)}</small>
       </span>
     ),
@@ -206,6 +223,7 @@ export function FinanceTable({ filters, initial, version, onConsiderarFc }: Prop
           </a>
         </div>
       </header>
+      <FilterChips value={lf} onChange={setLf} considerarFc={Boolean(filters.considerarFreteComprador)} onConsiderarFc={onConsiderarFc} />
 
       <div className="fin-wrap" aria-busy={loading}>
         <table className="fin">

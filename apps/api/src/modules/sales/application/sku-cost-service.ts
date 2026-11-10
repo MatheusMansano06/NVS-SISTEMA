@@ -137,11 +137,16 @@ export class SkuCostService {
   }
 
   async save(tenantId: string, userId: string, input: SaveSkuCostInput, today = todayIn()) {
+    const v = input.vigenteDesde;
+    if (v && v !== 'sempre' && (v > today || v < '2000-01-01' || Number.isNaN(Date.parse(v))))
+      throw new ValidationError('A data de vigência deve ser um dia válido até hoje.');
     const result = await this.db.withTenant(tenantId, async (db) => {
       // custo de SKU vinculado vem do destino: gravar aqui não teria efeito e confundiria
       const target = await this.repo.linkOf(db, input.sku);
       if (target) throw new ValidationError(`${input.sku} usa o custo de ${target}. Altere o custo lá ou desvincule.`);
-      const changed = await this.write(db, tenantId, userId, input.sku, input.custoUnit, 'cadastro', today);
+      const changed = input.vigenteDesde
+        ? await this.writeFrom(db, tenantId, userId, input.sku, input.custoUnit, input.vigenteDesde === 'sempre' ? SINCE_ALWAYS : input.vigenteDesde)
+        : await this.write(db, tenantId, userId, input.sku, input.custoUnit, 'cadastro', today);
       const affected = changed ? await this.repo.applyCosts(db, { skus: [input.sku] }) : 0;
       return { sku: input.sku, custoUnit: input.custoUnit, affectedOrders: affected };
     });
@@ -284,6 +289,23 @@ export class SkuCostService {
     const lines = ['sku;titulo;custo_unit;vendidos_30d;estoque'];
     for (const r of items) lines.push([esc(r.sku), esc(r.title), br(r.custoUnit), r.units30d, r.stock ?? ''].join(';'));
     return '﻿' + lines.join('\r\n');
+  }
+
+  /**
+   * Custo com vigência escolhida: vale a partir de `since` e substitui as alterações feitas desse dia em diante
+   * (como a alíquota com "vale desde"). O que veio antes de `since` mantém o custo da época.
+   */
+  private async writeFrom(db: Queryable, tenantId: string, userId: string, sku: string, custoUnit: number, since: string): Promise<boolean> {
+    await db.query('DELETE FROM sku_cost_history WHERE sku = $1 AND vigente_desde >= $2', [sku, since]);
+    await this.repo.addHistory(db, { tenantId, sku, custoUnit, since, origem: 'cadastro', userId });
+    // custo atual = o da vigência mais recente que sobrou
+    const { rows } = await db.query<{ custo_unit: string | null }>(
+      'SELECT custo_unit FROM sku_cost_history WHERE sku = $1 ORDER BY vigente_desde DESC, registrado_em DESC LIMIT 1',
+      [sku],
+    );
+    const latest = rows[0]?.custo_unit == null ? custoUnit : Number(rows[0].custo_unit);
+    await this.repo.upsert(db, tenantId, userId, sku, latest);
+    return true;
   }
 
   /** Grava custo + vigência. Retorna false se nada mudou. */

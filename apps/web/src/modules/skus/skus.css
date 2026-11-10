@@ -237,3 +237,11 @@ a.btn-ghost svg { transform: rotate(90deg); }
 .link-empty { padding: 18px; text-align: center; color: var(--gray-500); }
 .link-list .sku-main strong { font-size: .88rem; }
 .link-sku p code { word-break: break-all; }
+
+/* ============ Vigência do novo custo ============ */
+.sku-since { grid-column: 2 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: 16px; background: var(--blue-soft); font-size: .85rem; color: var(--navy); }
+.sku-since .btn { height: 34px; padding: 0 14px; }
+.sku-since-date { display: inline-flex; align-items: center; gap: 6px; }
+.sku-since-date input { height: 34px; padding: 0 10px; border: 0; border-radius: 10px; box-shadow: inset 0 0 0 1.5px var(--gray-100); background: var(--surface); font: inherit; color: var(--navy); }
+.sku-since .link { margin-left: auto; }
+@media (max-width: 640px) { .sku-since { grid-column: 1 / -1; } }

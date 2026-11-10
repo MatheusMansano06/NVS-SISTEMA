@@ -6,6 +6,11 @@ const money = z.coerce.number().finite().positive('O custo precisa ser maior que
 export const saveSkuCostSchema = z.object({
   sku: z.string().trim().min(1).max(120),
   custoUnit: money,
+  /**
+   * Desde quando o custo vale: 'sempre' (todas as vendas) ou um dia (AAAA-MM-DD, até hoje). Substitui as alterações
+   * feitas a partir dessa data. Ausente = regra padrão (primeiro custo vale sempre; mudança vale a partir de hoje).
+   */
+  vigenteDesde: z.union([z.literal('sempre'), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida.')]).optional(),
 });
 export type SaveSkuCostInput = z.infer<typeof saveSkuCostSchema>;
 

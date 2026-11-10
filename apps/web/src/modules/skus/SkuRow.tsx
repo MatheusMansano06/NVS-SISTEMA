@@ -41,6 +41,10 @@ export function SkuRow({
   const linked = Boolean(row.linkedSku);
   // custo acima do preço de venda costuma ser erro de digitação: só grava se a pessoa confirmar o mesmo valor
   const warned = useRef<{ value: number; at: number } | null>(null);
+  // SKU que já tinha custo: antes de gravar, a pessoa escolhe desde quando o novo valor vale
+  const [pending, setPending] = useState<number | null>(null);
+  const [since, setSince] = useState('');
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 
   async function unlink() {
     setError('');
@@ -53,7 +57,7 @@ export function SkuRow({
   }
 
   async function commit() {
-    if (linked) return; // o custo vem do SKU vinculado
+    if (linked || pending !== null) return; // o custo vem do SKU vinculado / esperando a escolha da vigência
     const c = parse(custo);
     if (c === null && row.custoUnit === null) return; // nada digitado
     if (c === row.custoUnit) return;
@@ -67,10 +71,22 @@ export function SkuRow({
       }
     }
     warned.current = null;
+    setError('');
+    // primeiro custo vale para todo o histórico: só pergunta quando é uma alteração
+    if (row.custoUnit !== null) {
+      setState('idle');
+      setPending(c);
+      return;
+    }
+    await save(c);
+  }
+
+  async function save(c: number, vigenteDesde?: string) {
+    setPending(null);
     setState('saving');
     setError('');
     try {
-      await skusApi.save(row.sku, c);
+      await skusApi.save(row.sku, c, vigenteDesde);
       setState('saved');
       onSaved(row.sku, c);
       window.setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 1800);
@@ -158,6 +174,33 @@ export function SkuRow({
         {state === 'saved' && <span className="saved" aria-label="Salvo">✓</span>}
       </span>
       {state === 'error' && <p className="sku-error" role="alert">{error}</p>}
+      {pending !== null && (
+        <div className="sku-since" role="group" aria-label="Desde quando vale o novo custo">
+          <span>
+            <b>{money(pending)}</b> vale para as vendas:
+          </span>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => void save(pending)}>De hoje em diante</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void save(pending, 'sempre')} title="Recalcula todas as vendas com este custo">
+            Desde sempre
+          </button>
+          <span className="sku-since-date">
+            <input type="date" max={today} value={since} onChange={(e) => setSince(e.target.value)} aria-label="A partir da data" />
+            <button type="button" className="btn btn-ghost btn-sm" disabled={!since} onClick={() => void save(pending, since)}>
+              A partir desta data
+            </button>
+          </span>
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setPending(null);
+              setCusto(toInput(row.custoUnit));
+            }}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
     </li>
   );
 }

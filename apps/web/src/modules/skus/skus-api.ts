@@ -9,8 +9,8 @@ export const skusApi = {
     if (p.fresh) qs.set('fresh', 'true');
     return http<SkuListDto>(`/api/v1/skus?${qs}`, { signal });
   },
-  save: (sku: string, custoUnit: number) =>
-    http<{ affectedOrders: number }>('/api/v1/skus', { method: 'PUT', body: { sku, custoUnit } }),
+  save: (sku: string, custoUnit: number, vigenteDesde?: string) =>
+    http<{ affectedOrders: number }>('/api/v1/skus', { method: 'PUT', body: { sku, custoUnit, vigenteDesde } }),
   remove: (sku: string) => http<void>('/api/v1/skus', { method: 'DELETE', body: { sku } }),
   link: (sku: string, linkedSku: string) => http<{ affectedOrders: number }>('/api/v1/skus/link', { method: 'PUT', body: { sku, linkedSku } }),
   unlink: (sku: string) => http<void>('/api/v1/skus/link', { method: 'DELETE', body: { sku } }),

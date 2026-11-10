@@ -47,7 +47,7 @@ describe.skipIf(!TEST_DB)('TikTok Shop: conexão, histórico e Análise Financei
    * D: cancelada · E: não paga (ignorada)
    */
   const orders = [
-    { id: id('A'), status: 'DELIVERED', create_time: sold, shipping_type: 'TIKTOK', line_items: [{ ...caneca, sale_price: '35.00', platform_discount: '5.00' }, { ...caneca, sale_price: '35.00', platform_discount: '5.00' }, garrafa] },
+    { id: id('A'), status: 'DELIVERED', create_time: sold, shipping_type: 'TIKTOK', line_items: [{ ...caneca, sale_price: '35.00', platform_discount: '5.00', room_id: 'LIVE1' }, { ...caneca, sale_price: '35.00', platform_discount: '5.00', room_id: 'LIVE1' }, { ...garrafa, room_id: '' }] },
     { id: id('B'), status: 'IN_TRANSIT', create_time: sold, shipping_type: 'TIKTOK', line_items: [garrafa] },
     { id: id('C'), status: 'COMPLETED', create_time: sold, shipping_type: 'TIKTOK', line_items: [{ ...caneca, sale_price: '40.00' }] },
     { id: id('D'), status: 'CANCELLED', create_time: sold, line_items: [garrafa] },
@@ -169,6 +169,14 @@ describe.skipIf(!TEST_DB)('TikTok Shop: conexão, histórico e Análise Financei
     const ml = await summary();
     expect(ml.cards).toMatchObject({ vendasAprovadas: 0, qtdAprovadas: 0 });
     expect(ml.adSpend).toBe(0);
+    expect(ml.lives).toEqual([]);
+
+    // live: só o pedido A (vendido na live LIVE1); fora da live: B e C
+    const live = await summary('&marketplace=tiktok_shop&canal=live');
+    expect(live.cards).toMatchObject({ qtdAprovadas: 1, vendasAprovadas: 160 });
+    expect(live.lives).toEqual([expect.objectContaining({ roomId: 'LIVE1', pedidos: 1, unidades: 3, faturamento: 160, mc: null })]);
+    expect(live.adSpend).toBe(0);
+    expect((await summary('&marketplace=tiktok_shop&canal=fora_live')).cards).toMatchObject({ qtdAprovadas: 1, qtdDevolucoes: 1 });
     const dash = await get('/api/v1/dashboard/summary?period=30d');
     expect(dash.statusCode).toBe(200);
     expect(JSON.stringify(dash.json())).not.toContain('Loja TikTok');

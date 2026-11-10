@@ -17,6 +17,8 @@ export interface IncomingOrder {
   refundPartial: number;
   /** Desconto bancado pelo vendedor já conhecido no pedido (TikTok Shop). No Mercado Livre o cupom vem depois, pelo enriquecimento. */
   couponSeller?: number;
+  /** TikTok Shop: live em que a venda aconteceu. */
+  liveRoomId?: string | null;
   listingType: string | null;
   buyerNickname?: string | null;
   packId?: string | null;
@@ -75,8 +77,8 @@ export class SalesIngestion {
       const { rows } = await db.query<{ id: string }>(
         `INSERT INTO orders (tenant_id, account_id, marketplace, external_id, status, ordered_at,
                              gross_amount, marketplace_fee, units, shipping_ref, buyer_shipping, refund_partial, listing_type,
-                             buyer_nickname, pack_id, payment_type, installments, coupon_seller)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, coalesce($18::numeric, 0))
+                             buyer_nickname, pack_id, payment_type, installments, coupon_seller, live_room_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, coalesce($18::numeric, 0), $19)
          ON CONFLICT (tenant_id, marketplace, external_id) DO UPDATE
            SET status = EXCLUDED.status, ordered_at = EXCLUDED.ordered_at,
                gross_amount = EXCLUDED.gross_amount,
@@ -89,6 +91,7 @@ export class SalesIngestion {
                                      THEN orders.refund_partial ELSE EXCLUDED.refund_partial END,
                listing_type = EXCLUDED.listing_type,
                coupon_seller = CASE WHEN $18::numeric IS NULL THEN orders.coupon_seller ELSE $18::numeric END,
+               live_room_id = coalesce(EXCLUDED.live_room_id, orders.live_room_id),
                buyer_nickname = COALESCE(EXCLUDED.buyer_nickname, orders.buyer_nickname),
                pack_id = COALESCE(EXCLUDED.pack_id, orders.pack_id),
                payment_type = COALESCE(EXCLUDED.payment_type, orders.payment_type),
@@ -98,7 +101,7 @@ export class SalesIngestion {
          RETURNING id`,
         [tenantId, accountId, marketplace, o.externalId, o.status, o.orderedAt, o.gross, o.fee, o.units, o.shippingRef,
          o.buyerShipping, o.refundPartial, o.listingType, o.buyerNickname ?? null, o.packId ?? null,
-         o.paymentType ?? null, o.installments ?? null, o.couponSeller ?? null],
+         o.paymentType ?? null, o.installments ?? null, o.couponSeller ?? null, o.liveRoomId ?? null],
       );
       const orderId = rows[0]!.id;
       orderIds.push(orderId);

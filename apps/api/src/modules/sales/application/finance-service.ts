@@ -35,6 +35,7 @@ interface Row {
   cost_known: boolean;
   bucket: LogisticBucketId;
   listing_type: string | null;
+  live_room_id: string | null;
   freight_uncertain: boolean;
   enriched: boolean;
   items: { sku: string; title: string; qty: number; price: number; listing_id: string | null; picture?: string | null; known: boolean }[];
@@ -96,6 +97,7 @@ export class FinanceService {
     const sem = { qtd: 0, valor: 0, skus: new Set<string>() };
     const buckets = new Map<LogisticBucketId, number>();
     const days = new Map<string, { aprovadas: number; mc: number; certified: number }>();
+    const lives = new Map<string, { day: string; pedidos: number; unidades: number; faturamento: number; mc: number; base: number; semCusto: boolean }>();
     let freteIncerto = 0;
     let pendente = 0;
 
@@ -121,6 +123,18 @@ export class FinanceService {
         c.aprov += card;
         c.qA++;
         c.units += units;
+        if (o.row.live_room_id) {
+          const l = lives.get(o.row.live_room_id) ?? { day: o.row.day, pedidos: 0, unidades: 0, faturamento: 0, mc: 0, base: 0, semCusto: false };
+          if (o.row.day < l.day) l.day = o.row.day;
+          l.pedidos++;
+          l.unidades += units;
+          l.faturamento += card;
+          if (o.certified) {
+            l.mc += o.mc;
+            l.base += card;
+          } else l.semCusto = true;
+          lives.set(o.row.live_room_id, l);
+        }
         buckets.set(o.row.bucket, (buckets.get(o.row.bucket) ?? 0) + card);
       }
       const d = days.get(o.row.day) ?? { aprovadas: 0, mc: 0, certified: 0 };
@@ -181,6 +195,12 @@ export class FinanceService {
 
     return {
       range: { from: q.from, to: q.to },
+      lives: [...lives.entries()]
+        .map(([roomId, l]) => ({
+          roomId, day: l.day, pedidos: l.pedidos, unidades: l.unidades, faturamento: q2(l.faturamento),
+          mc: l.semCusto ? null : q2(l.mc), mcPct: l.semCusto || !l.base ? null : q2((l.mc / l.base) * 100),
+        }))
+        .sort((a, b) => b.day.localeCompare(a.day) || b.faturamento - a.faturamento),
       cards,
       composicao,
       series: fillDays(q.from, q.to).map((day) => {
@@ -437,6 +457,8 @@ export class FinanceService {
    * anúncio pago por cartão ou saldo de anúncios não passa pelo extrato da loja.
    */
   private async adSpend(tenantId: string, q: FinanceQuery): Promise<number> {
+    // o extrato não diz para qual live/vídeo foi o anúncio: com filtro de canal, não há como atribuir
+    if (q.canal) return 0;
     if (q.marketplace === 'tiktok_shop') {
       const { rows } = await this.db.withTenant(tenantId, (db) =>
         db.query<{ cost: string }>(
@@ -463,7 +485,7 @@ export class FinanceService {
   /** Pedidos do período com MC calculada (cache curto, invalidado quando custos mudam). */
   private async computed(tenantId: string, q: FinanceQuery): Promise<Computed[]> {
     const version = (await this.cache.get<number>(`dash-version:${tenantId}`)) ?? 0;
-    const key = `fin:${tenantId}:${version}:${q.from}:${q.to}:${q.marketplace ?? '*'}:${q.accountId ?? '*'}:${q.considerarFreteComprador ? 'fc' : ''}`;
+    const key = `fin:${tenantId}:${version}:${q.from}:${q.to}:${q.marketplace ?? '*'}:${q.accountId ?? '*'}:${q.considerarFreteComprador ? 'fc' : ''}:${q.canal ?? ''}`;
     if (!q.fresh) {
       const hit = await this.cache.get<Computed[]>(key);
       if (hit) return hit;
@@ -509,7 +531,7 @@ export class FinanceService {
               to_char((o.ordered_at AT TIME ZONE '${TIMEZONE}')::date, 'YYYY-MM-DD') AS day,
               o.gross_amount AS produto, o.marketplace_fee AS tarifa, o.buyer_shipping AS fc, o.shipping_cost AS fv,
               o.coupon_seller AS cupom, o.refund_partial AS devolucao, o.product_cost AS custo, o.tax_amount AS imposto,
-              o.cost_known OR o.source = 'demo' AS cost_known, o.logistic_bucket AS bucket, o.listing_type, o.freight_uncertain,
+              o.cost_known OR o.source = 'demo' AS cost_known, o.logistic_bucket AS bucket, o.listing_type, o.live_room_id, o.freight_uncertain,
               (o.finance_enriched_at IS NOT NULL OR o.source = 'demo') AS enriched,
               coalesce(json_agg(json_build_object('sku', i.sku, 'title', i.title, 'qty', i.quantity, 'price', i.unit_price,
                          'listing_id', i.listing_id, 'picture', i.picture_url, 'known', i.unit_cost IS NOT NULL OR o.source = 'demo'))
@@ -521,10 +543,11 @@ export class FinanceService {
           AND o.ordered_at <  ($2::date + 1)::timestamp AT TIME ZONE '${TIMEZONE}'
           AND ($3::text IS NULL OR o.marketplace = $3)
           AND ($4::uuid IS NULL OR o.account_id = $4)
+          AND ($5::text IS NULL OR ($5 = 'live') = (o.live_room_id IS NOT NULL))
         GROUP BY o.id
         ORDER BY o.ordered_at DESC`,
       // sem filtro = Mercado Livre (o TikTok Shop tem aba própria; os números não se misturam)
-      [q.from, q.to, q.marketplace ?? 'mercado_livre', q.accountId ?? null],
+      [q.from, q.to, q.marketplace ?? 'mercado_livre', q.accountId ?? null, q.canal ?? null],
     );
     return rows;
   }

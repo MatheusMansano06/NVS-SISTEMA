@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { MlStatusDto, TiktokStatusDto } from '@nvs/shared';
+import type { MlStatusDto, ShopeeStatusDto, TiktokStatusDto } from '@nvs/shared';
 import { AppShell } from '../../app/AppShell';
 import { useFeature } from '../../shared/features';
 import { Button } from '../../shared/ui/Button';
 import { goToMercadoLivre, mlApi } from '../mercado-livre/ml-api';
 import { consumeTiktokReturn, goToTiktokShop, tiktokApi } from '../tiktok-shop/tiktok-api';
+import { consumeShopeeReturn, goToShopee, shopeeApi } from '../shopee/shopee-api';
 import '../dashboard/dashboard.css';
 import './integrations.css';
 
@@ -102,12 +103,25 @@ const tiktokRows = (s: TiktokStatusDto): Row[] =>
           : (c.syncError ?? `${c.ordersImported} pedido(s) · atualizada ${time(c.lastSyncedAt) ?? 'há pouco'} · automática a cada hora`),
   }));
 
+const shopeeRows = (s: ShopeeStatusDto): Row[] =>
+  tiktokRows(s).map((row, i) => {
+    const exp = s.connections[i]!.authExpiresAt;
+    const days = exp ? Math.ceil((new Date(exp).getTime() - Date.now()) / 86_400_000) : null;
+    // a autorização da Shopee vence (até 1 ano): avisa no último mês
+    return row.state === 'ok' && days !== null && days <= 30
+      ? { ...row, state: 'warn', detail: `A autorização vence em ${Math.max(0, days)} dia(s). Clique em conectar para renovar.` }
+      : row;
+  });
+
 /** Integrações: contas de marketplace conectadas à empresa (várias por marketplace). */
 export function IntegrationsPage() {
   const hasTiktok = useFeature('tiktok_shop');
   const [ml, setMl] = useState<MlStatusDto | null>(null);
   const [tiktok, setTiktok] = useState<TiktokStatusDto | null>(null);
+  const hasShopee = useFeature('shopee');
+  const [shopee, setShopee] = useState<ShopeeStatusDto | null>(null);
   const [back] = useState(consumeTiktokReturn);
+  const [backShopee] = useState(consumeShopeeReturn);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
@@ -117,18 +131,22 @@ export function IntegrationsPage() {
     void Promise.all([
       mlApi.status().catch(() => null),
       hasTiktok ? tiktokApi.status().catch(() => null) : null,
-    ]).then(([m, t]) => {
+      hasShopee ? shopeeApi.status().catch(() => null) : null,
+    ]).then(([m, t, sh]) => {
       if (!alive) return;
       if (m) setMl(m);
       if (t) setTiktok(t);
-      const busy = m?.connections.some((c) => c.sync?.status === 'running') || t?.connections.some((c) => c.syncing) || (back?.connected && !t?.connections.length);
+      if (sh) setShopee(sh);
+      const busy =
+        m?.connections.some((c) => c.sync?.status === 'running') || t?.connections.some((c) => c.syncing) || sh?.connections.some((c) => c.syncing) ||
+        (back?.connected && !t?.connections.length) || (backShopee?.connected && !sh?.connections.length);
       if (busy) timer = window.setTimeout(reload, POLL_RUNNING_MS);
     });
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [hasTiktok, tick, back, reload]);
+  }, [hasTiktok, hasShopee, tick, back, backShopee, reload]);
 
   return (
     <AppShell>
@@ -141,6 +159,8 @@ export function IntegrationsPage() {
         </header>
         {back?.connected && <p className="banner banner-ok" role="status">Loja do TikTok Shop conectada. Estou trazendo o histórico de vendas em segundo plano.</p>}
         {back?.error && <p className="banner banner-error" role="alert">{back.error}</p>}
+        {backShopee?.connected && <p className="banner banner-ok" role="status">Loja da Shopee conectada. Estou trazendo o histórico de vendas em segundo plano.</p>}
+        {backShopee?.error && <p className="banner banner-error" role="alert">{backShopee.error}</p>}
 
         {ml?.configured !== false && (
           <Card
@@ -159,6 +179,16 @@ export function IntegrationsPage() {
             rows={tiktok ? tiktokRows(tiktok) : null}
             onConnect={goToTiktokShop}
             onSync={(id) => tiktokApi.sync(id)}
+            onChange={reload}
+          />
+        )}
+        {hasShopee && shopee?.configured !== false && (
+          <Card
+            title="Shopee"
+            text="Vendas e repasses da loja, para a Análise Financeira (aba Shopee). Você pode conectar mais de uma loja."
+            rows={shopee ? shopeeRows(shopee) : null}
+            onConnect={goToShopee}
+            onSync={(id) => shopeeApi.sync(id)}
             onChange={reload}
           />
         )}

@@ -23,6 +23,10 @@ const schema = z.object({
   TIKTOK_SHOP_APP_KEY: z.string().optional(),
   TIKTOK_SHOP_APP_SECRET: z.string().optional(),
   TIKTOK_SHOP_SERVICE_ID: z.string().optional(),
+  /** Integração Shopee (opcional): partner_id e partner key do app no Open Platform; o retorno da autorização vai para SHOPEE_REDIRECT_URI. */
+  SHOPEE_PARTNER_ID: z.string().optional(),
+  SHOPEE_PARTNER_KEY: z.string().optional(),
+  SHOPEE_REDIRECT_URI: z.union([z.string().url().startsWith('https://'), z.literal('')]).optional(),
   /** Chave AES-256 (64 hex) para criptografar tokens de marketplaces em repouso. */
   TOKEN_ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'TOKEN_ENCRYPTION_KEY precisa ter 64 caracteres hex').optional(),
   /** Primeira conta do Painel Master (criada uma única vez, quando ainda não existe nenhuma). */

@@ -24,14 +24,16 @@ const FILTERS: { id: SkuFilter; label: string }[] = [
   { id: 'all', label: 'Todos' },
 ];
 /** Plataformas que a empresa pode ter além do Mercado Livre (cada uma é um recurso liberado). */
-const PLATFORMS: Marketplace[] = ['mercado_livre', 'tiktok_shop'];
+const PLATFORMS: Marketplace[] = ['mercado_livre', 'tiktok_shop', 'shopee'];
 
 /** Cadastro de SKUs: custo unitário e imposto que alimentam lucro, margem e a análise financeira. */
 export function SkuPage() {
   const [view, setView] = useState<'costs' | 'ean'>(() => (new URLSearchParams(window.location.search).get('aba') === 'ean' ? 'ean' : 'costs'));
   const [filter, setFilter] = useState<SkuFilter>('missing');
   // mais de um marketplace: SKUs separados por plataforma e vínculo entre eles
-  const multi = useFeature('tiktok_shop');
+  const hasTiktok = useFeature('tiktok_shop');
+  const hasShopee = useFeature('shopee');
+  const multi = hasTiktok || hasShopee;
   const [platform, setPlatform] = useState<Marketplace | ''>('');
   const [linking, setLinking] = useState<SkuRowDto | null>(null);
   const [q, setQ] = useState('');
@@ -156,7 +158,7 @@ export function SkuPage() {
           {multi && (
             <div className="seg" role="radiogroup" aria-label="Plataforma">
               <button type="button" role="radio" aria-checked={platform === ''} onClick={() => setPlatform('')}>Todas</button>
-              {PLATFORMS.map((p) => (
+              {PLATFORMS.filter((p) => p === 'mercado_livre' || (p === 'tiktok_shop' ? hasTiktok : hasShopee)).map((p) => (
                 <button key={p} type="button" role="radio" aria-checked={platform === p} onClick={() => setPlatform(p)}>{PLATFORM_LABELS[p]}</button>
               ))}
             </div>

@@ -122,7 +122,8 @@ describe.skipIf(!TEST_DB)('Shopee: conexão, histórico, escrow e Análise Finan
     const state = new URL((await get(`${base}/connect`)).json().url).searchParams.get('state')!;
 
     expect((await app.inject({ method: 'GET', url: `${base}/callback?code=x&state=nope&shop_id=${shopId}` })).headers.location).toBe('/integracoes?shopee=error&reason=state');
-    expect((await app.inject({ method: 'GET', url: `${base}/callback?code=x&state=${state}&shop_id=${shopId}` })).headers.location).toBe('/integracoes?shopee=connected');
+    // o state volta no caminho do retorno, como o link de autorização envia
+    expect((await app.inject({ method: 'GET', url: `${base}/callback/${state}?code=x&shop_id=${shopId}` })).headers.location).toBe('/integracoes?shopee=connected');
     await app.shopee!.idle();
 
     const status = (await get(`${base}/status`)).json();

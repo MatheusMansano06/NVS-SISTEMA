@@ -42,7 +42,6 @@ export interface ShopeeApi {
 }
 
 const API_HOST = 'https://partner.shopeemobile.com';
-const AUTH_HOST = 'https://open.shopee.com.br';
 export const SHOPEE_BATCH = 50;
 const ESCROW_BATCH = 20; // a Shopee recomenda até 20 por chamada no lote de escrow
 const PAGE_SIZE = 100;
@@ -58,9 +57,16 @@ const unix = (d: Date) => Math.floor(d.getTime() / 1000);
 export class HttpShopeeApi implements ShopeeApi {
   constructor(private readonly opts: { partnerId: string; partnerKey: string; redirectUri: string; host?: string }) {}
 
+  /**
+   * Link clássico e assinado (`shop/auth_partner`): o código que ele devolve é aceito pelo `auth/token/get` (o do link
+   * novo `open.shopee.com.br/auth` voltou recusado como `invalid_code`). O `state` vai no caminho do retorno.
+   */
   authorizationUrl(state: string): string {
-    const q = new URLSearchParams({ partner_id: this.opts.partnerId, auth_type: 'seller', redirect_uri: this.opts.redirectUri, response_type: 'code', state });
-    return `${AUTH_HOST}/auth?${q}`;
+    const path = '/api/v2/shop/auth_partner';
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const sign = signShopee(this.opts.partnerKey, this.opts.partnerId + path + timestamp);
+    const redirect = `${this.opts.redirectUri.replace(/\/$/, '')}/${encodeURIComponent(state)}`;
+    return `${this.opts.host ?? API_HOST}${path}?${new URLSearchParams({ partner_id: this.opts.partnerId, timestamp, sign, redirect })}`;
   }
 
   exchangeCode(code: string, owner: { shopId?: string; mainAccountId?: string }): Promise<ShopeeTokens> {

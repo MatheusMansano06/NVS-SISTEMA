@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ShopeeStatusDto } from '@nvs/shared';
 import { AppError } from '../../../shared/kernel/errors.js';
 import type { ShopeeService } from '../application/shopee-service.js';
@@ -22,13 +22,17 @@ export function shopeeRoutes(service: ShopeeService | null) {
       url: await require().authorizationUrl(req.user.tenantId, req.user.sub),
     }));
 
-    // a Shopee redireciona o navegador para cá (domínio cadastrado no app); voltamos para Integrações com o resultado
-    app.get(`${base}/callback`, async (req, reply) => {
+    // a Shopee redireciona o navegador para cá (domínio cadastrado no app); voltamos para Integrações com o resultado.
+    // O state vem no caminho (/callback/:state), que é como o link de autorização o envia.
+    const callback = async (req: FastifyRequest, reply: FastifyReply) => {
       const q = req.query as { code?: string; state?: string; shop_id?: string; main_account_id?: string; error?: string };
+      const state = (req.params as { state?: string }).state ?? q.state;
       if (!service) return reply.redirect('/integracoes?shopee=error&reason=config');
-      const result = await service.handleCallback(q);
+      const result = await service.handleCallback({ ...q, state });
       return reply.redirect(result.ok ? '/integracoes?shopee=connected' : `/integracoes?shopee=error&reason=${result.reason}`);
-    });
+    };
+    app.get(`${base}/callback`, callback);
+    app.get(`${base}/callback/:state`, callback);
 
     app.get(`${base}/status`, { preHandler: app.authenticate }, async (req): Promise<ShopeeStatusDto> => {
       if (!service) return { configured: false, connections: [] };

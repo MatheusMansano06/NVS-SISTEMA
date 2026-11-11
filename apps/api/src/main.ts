@@ -10,6 +10,7 @@ const stopReturns = app.returnsSync?.startScheduler();
 const stopMarketing = app.marketing?.startScheduler();
 const stopAdsRadar = app.adsRadar?.startScheduler();
 const stopTiktok = app.tiktok?.startScheduler();
+const stopShopee = app.shopee?.startScheduler();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
@@ -21,6 +22,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopMarketing?.();
     stopAdsRadar?.();
     stopTiktok?.();
+    stopShopee?.();
     app.close().then(() => process.exit(0));
   });
 }

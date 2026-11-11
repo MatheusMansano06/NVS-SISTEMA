@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { LISTING_TYPE_LABELS, LOGISTIC_LABELS, TIKTOK_SHIPPING_LABELS, marginBand, type FinanceLineDto, type SaleStatus } from '@nvs/shared';
+import { LISTING_TYPE_LABELS, LOGISTIC_LABELS, SHOPEE_SHIPPING_LABELS, TIKTOK_SHIPPING_LABELS, marginBand, type FinanceLineDto, type SaleStatus } from '@nvs/shared';
 import { Icon } from '../../../shared/ui/Icon';
 import { Pagination } from '../../../shared/ui/Pagination';
 import { ProductThumb } from '../../dashboard/components/ProductThumb';
@@ -70,8 +70,8 @@ const COLUMNS: Col[] = [
       <span className="two">
         <span className={`st st-${l.status}`}>{STATUS_LABEL[l.status]}</span>
         <small className="chip">
-          {l.listingType && TIKTOK_SHIPPING_LABELS[l.listingType]
-            ? TIKTOK_SHIPPING_LABELS[l.listingType]
+          {l.listingType && (TIKTOK_SHIPPING_LABELS[l.listingType] ?? SHOPEE_SHIPPING_LABELS[l.listingType])
+            ? (TIKTOK_SHIPPING_LABELS[l.listingType] ?? SHOPEE_SHIPPING_LABELS[l.listingType])
             : `${LOGISTIC_LABELS[l.bucket]}${l.listingType ? ` · ${LISTING_TYPE_LABELS[l.listingType] ?? ''}` : ''}`}
         </small>
       </span>

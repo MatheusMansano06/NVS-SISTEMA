@@ -75,3 +75,15 @@ export interface TiktokStatusDto {
   configured: boolean;
   connections: TiktokConnectionDto[];
 }
+
+/** Loja da Shopee conectada. As vendas dela aparecem só na Análise Financeira (aba Shopee). */
+export interface ShopeeConnectionDto extends TiktokConnectionDto {
+  /** Fim da autorização da loja (até 1 ano); depois disso é preciso conectar de novo. */
+  authExpiresAt: string | null;
+}
+
+export interface ShopeeStatusDto {
+  /** Integração configurada no ambiente E liberada para a empresa. */
+  configured: boolean;
+  connections: ShopeeConnectionDto[];
+}

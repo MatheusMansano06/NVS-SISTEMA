@@ -66,6 +66,7 @@ import {
   type MlApi,
 } from './modules/mercado-livre/index.js';
 import { HttpTiktokApi, PgTiktokRepository, TiktokShopService, tiktokShopRoutes, type TiktokApi } from './modules/tiktok-shop/index.js';
+import { HttpShopeeApi, PgShopeeRepository, ShopeeService, shopeeRoutes, type ShopeeApi } from './modules/shopee/index.js';
 import { TokenCipher } from './shared/infrastructure/token-cipher.js';
 import { serveWeb } from './shared/infrastructure/web-static.js';
 import { PlatformService, platformRoutes } from './modules/platform/index.js';
@@ -95,6 +96,8 @@ declare module 'fastify' {
     adsRadar: AdsRadarService | null;
     /** Integração TikTok Shop (null quando não configurada no ambiente). */
     tiktok: TiktokShopService | null;
+    /** Integração Shopee (null quando não configurada no ambiente). */
+    shopee: ShopeeService | null;
     requirePermission: (
       p: Permission,
     ) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -109,12 +112,14 @@ export interface AppDeps {
   mlApi?: MlApi;
   /** Cliente do TikTok Shop (testes injetam um falso). */
   tiktokApi?: TiktokApi;
+  /** Cliente da Shopee (testes injetam um falso). */
+  shopeeApi?: ShopeeApi;
   /** Teto de paginação da busca de pedidos do ML (testes usam um teto baixo para exercitar a divisão de período). */
   mlOrdersOffsetCap?: number;
 }
 
 /** Composition root: monta os módulos e injeta dependências. */
-export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap, tiktokApi }: AppDeps): Promise<FastifyInstance> {
+export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap, tiktokApi, shopeeApi }: AppDeps): Promise<FastifyInstance> {
   const database = db ?? new Database(env.DATABASE_URL);
   const events = new EventBus();
   const app = Fastify({
@@ -141,7 +146,7 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap, tikto
     contentSecurityPolicy: {
       directives: {
         // fotos dos anúncios: CDN do Mercado Livre e do TikTok Shop
-        'img-src': ["'self'", 'data:', 'https://*.mlstatic.com', 'https://*.ibyteimg.com', 'https://*.tiktokcdn.com'],
+        'img-src': ["'self'", 'data:', 'https://*.mlstatic.com', 'https://*.ibyteimg.com', 'https://*.tiktokcdn.com', 'https://*.shopee.com.br', 'https://*.susercontent.com'],
       },
     },
   });
@@ -254,6 +259,21 @@ export async function buildApp({ env, db, cache, mlApi, mlOrdersOffsetCap, tikto
       : null;
   app.decorate('tiktok', tiktok);
   await app.register(tiktokShopRoutes(tiktok), { prefix: '/api/v1' });
+  // Shopee: liberada por empresa (recurso `shopee`); os pedidos entram em `orders` e só a Análise Financeira os mostra
+  const shopee =
+    env.SHOPEE_PARTNER_ID && env.SHOPEE_PARTNER_KEY && env.SHOPEE_REDIRECT_URI && env.TOKEN_ENCRYPTION_KEY
+      ? new ShopeeService(
+          database,
+          new PgShopeeRepository(database),
+          shopeeApi ?? new HttpShopeeApi({ partnerId: env.SHOPEE_PARTNER_ID, partnerKey: env.SHOPEE_PARTNER_KEY, redirectUri: env.SHOPEE_REDIRECT_URI }),
+          new TokenCipher(env.TOKEN_ENCRYPTION_KEY),
+          new SalesIngestion(),
+          app.log,
+          { paceMs: env.NODE_ENV === 'test' ? 0 : undefined },
+        )
+      : null;
+  app.decorate('shopee', shopee);
+  await app.register(shopeeRoutes(shopee), { prefix: '/api/v1' });
   const mlLookups = mlClient ? new CachedMlLookups(mlClient, sharedCache) : null;
   const listingService = ml && mlClient && mlLookups ? new ListingService(database, new PgListingRepository(), ml, mlClient, mlLookups) : null;
   const flexService = listingService && ml && mlClient ? new FlexService(database, listingService, ml, mlClient, sharedCache) : null;

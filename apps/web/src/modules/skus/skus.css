@@ -217,6 +217,7 @@ a.btn-ghost svg { transform: rotate(90deg); }
 .tag-platform { background: var(--gray-100); color: var(--navy); }
 .tag-platform[data-p='mercado_livre'] { background: #fff4a8; color: #2d3277; }
 .tag-platform[data-p='tiktok_shop'] { background: #111; color: #fff; }
+.tag-platform[data-p='shopee'] { background: #ee4d2d; color: #fff; }
 .tag-link { background: var(--blue-soft); color: var(--blue); }
 .sku-link-btn { border: 0; background: none; padding: 0; font: inherit; font-size: .74rem; font-weight: 650; color: var(--blue); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .sku-field[data-locked] { opacity: .75; }

@@ -57,6 +57,12 @@ export const TIKTOK_SHIPPING_LABELS: Record<string, string> = {
   tiktok_seller: 'Enviado pelo vendedor',
 };
 
+/** Shopee: quem faz o envio (Full da Shopee ou o próprio vendedor). */
+export const SHOPEE_SHIPPING_LABELS: Record<string, string> = {
+  shopee_full: 'Full Shopee',
+  shopee_seller: 'Enviado pelo vendedor',
+};
+
 export const COST_FILTERS = ['com_custo', 'sem_custo'] as const;
 
 export const financeLinesQuerySchema = z.object({

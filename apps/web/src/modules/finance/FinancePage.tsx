@@ -9,6 +9,7 @@ import { Icon } from '../../shared/ui/Icon';
 import { useFeature } from '../../shared/features';
 import { mlApi } from '../mercado-livre/ml-api';
 import { tiktokApi } from '../tiktok-shop/tiktok-api';
+import { shopeeApi } from '../shopee/shopee-api';
 import { AreaChart } from './components/AreaChart';
 import { Donut } from './components/Donut';
 import { FinanceTable } from './components/FinanceTable';
@@ -40,6 +41,9 @@ export function FinancePage() {
   const hasTiktok = useFeature('tiktok_shop');
   const [marketplace, setMarketplace] = useState<Marketplace>('mercado_livre');
   const isTiktok = marketplace === 'tiktok_shop';
+  const hasShopee = useFeature('shopee');
+  const isShopee = marketplace === 'shopee';
+  const isMl = marketplace === 'mercado_livre';
   const [canal, setCanal] = useState<'' | 'live' | 'fora_live'>('');
   const [livesOpen, setLivesOpen] = useState(false);
   const [accounts, setAccounts] = useState<{ accountId: string; nickname: string }[] | null>(null);
@@ -63,20 +67,20 @@ export function FinancePage() {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const filters: FinanceFilters = useMemo(
-    () => ({ from: range.from, to: range.to, accountId: accountId || undefined, marketplace: isTiktok ? marketplace : undefined, canal: isTiktok && canal ? canal : undefined, considerarFreteComprador: considerarFc || undefined }),
-    [range, accountId, considerarFc, isTiktok, marketplace, canal],
+    () => ({ from: range.from, to: range.to, accountId: accountId || undefined, marketplace: isMl ? undefined : marketplace, canal: isTiktok && canal ? canal : undefined, considerarFreteComprador: considerarFc || undefined }),
+    [range, accountId, considerarFc, isTiktok, isMl, marketplace, canal],
   );
 
   useEffect(() => {
     let alive = true;
     setAccounts(null);
-    (isTiktok ? tiktokApi.status() : mlApi.status())
+    (isTiktok ? tiktokApi.status() : isShopee ? shopeeApi.status() : mlApi.status())
       .then((s) => alive && setAccounts(s.connections))
       .catch(() => alive && setAccounts([]));
     return () => {
       alive = false;
     };
-  }, [isTiktok]);
+  }, [isTiktok, isShopee]);
   const pickMarketplace = (m: Marketplace) => {
     setMarketplace(m);
     setCanal('');
@@ -143,11 +147,15 @@ export function FinancePage() {
             <h1>Análise Financeira</h1>
           </div>
           <div className="mkt-tabs" role="tablist" aria-label="Marketplace">
-            <button type="button" role="tab" aria-selected={!isTiktok} onClick={() => pickMarketplace('mercado_livre')}>Mercado Livre</button>
+            <button type="button" role="tab" aria-selected={isMl} onClick={() => pickMarketplace('mercado_livre')}>Mercado Livre</button>
             {hasTiktok && (
               <button type="button" role="tab" aria-selected={isTiktok} onClick={() => pickMarketplace('tiktok_shop')}>TikTok Shop</button>
             )}
-            <button type="button" role="tab" aria-selected="false" disabled title="Em breve">Shopee <small>em breve</small></button>
+            {hasShopee ? (
+              <button type="button" role="tab" aria-selected={isShopee} onClick={() => pickMarketplace('shopee')}>Shopee</button>
+            ) : (
+              <button type="button" role="tab" aria-selected="false" disabled title="Em breve">Shopee <small>em breve</small></button>
+            )}
           </div>
         </header>
 
@@ -231,6 +239,14 @@ export function FinancePage() {
           </div>
         )}
 
+        {isShopee && accounts?.length === 0 && (
+          <div className="nocost-banner" role="note">
+            <span className="nocost-icon" aria-hidden="true">!</span>
+            <p><strong>Nenhuma loja da Shopee conectada.</strong> Conecte a loja em Integrações e eu trago o histórico de vendas.</p>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/integracoes')}>Abrir Integrações</button>
+          </div>
+        )}
+
         {data && data.semCusto.qtd > 0 && (
           <div className="nocost-banner" role="note">
             <span className="nocost-icon" aria-hidden="true">!</span>
@@ -247,7 +263,9 @@ export function FinancePage() {
           <p className="banner banner-ok" role="status">
             {isTiktok
               ? `${int(data.enriquecimentoPendente)} venda(s) ainda não foram repassadas pelo TikTok Shop: tarifa e frete delas são a estimativa do próprio TikTok e viram o valor do extrato quando o repasse sair.`
-              : `Fretes, cupons e devoluções de ${int(data.enriquecimentoPendente)} venda(s) ainda estão sendo calculados pela sincronização com o Mercado Livre. Os números se completam sozinhos.`}
+              : isShopee
+                ? `${int(data.enriquecimentoPendente)} venda(s) ainda não tiveram o repasse liberado pela Shopee: tarifa e frete delas são a estimativa da própria Shopee e viram o valor definitivo quando o repasse sair.`
+                : `Fretes, cupons e devoluções de ${int(data.enriquecimentoPendente)} venda(s) ainda estão sendo calculados pela sincronização com o Mercado Livre. Os números se completam sozinhos.`}
           </p>
         )}
 
@@ -308,7 +326,7 @@ export function FinancePage() {
               </article>
             </section>
 
-            {(!isTiktok || adSpend > 0) && (
+            {(isMl || adSpend > 0) && (
             <section className="ads-bar" aria-label={isTiktok ? 'TikTok Ads' : 'Mercado Ads'}>
               <div className="ads-bar-title">
                 <strong>{isTiktok ? 'TikTok Ads' : 'Mercado Ads'}</strong>
@@ -339,14 +357,14 @@ export function FinancePage() {
 
             <section className="fin-minis" aria-label="Indicadores">
               <div>
-                <span>{isTiktok ? 'Tarifa TikTok' : 'Tarifa ML'}</span>
+                <span>{isTiktok ? 'Tarifa TikTok' : isShopee ? 'Tarifa Shopee' : 'Tarifa ML'}</span>
                 <b className="neg money">{money(c.tarifa)}</b>
                 <small>{c.faturamento ? pct(c.tarifa / c.faturamento) : '0%'} do faturamento</small>
               </div>
               <div>
-                <span>{isTiktok ? 'Descontos seus' : 'Cupons seller'}</span>
+                <span>{!isMl ? 'Descontos seus' : 'Cupons seller'}</span>
                 <b className="neg money">{money(c.cupomSeller)}</b>
-                <small>{isTiktok ? 'promoções e cupons bancados por você' : 'descontos bancados por você'}</small>
+                <small>{!isMl ? 'promoções e cupons bancados por você' : 'descontos bancados por você'}</small>
               </div>
               <div>
                 <span>Frete total</span>
@@ -370,7 +388,7 @@ export function FinancePage() {
               </div>
             </section>
 
-            {!isTiktok && data.breakdown.length > 0 && (
+            {isMl && data.breakdown.length > 0 && (
               <section className="panel logistics" aria-label="Vendas por modalidade de frete">
                 <span className="fin-label">Vendas por modalidade de frete</span>
                 <div className="logi-bar">

@@ -82,6 +82,15 @@ describe.skipIf(!TEST_DB)('TikTok Shop: conexão, histórico e Análise Financei
       transactions: [{ type: 'ORDER', id: id('u1'), order_id: id('B'), est_revenue_amount: '80', est_fee_tax_amount: '-14.8', est_shipping_cost_amount: '-3', est_settlement_amount: '62.2' }],
       next: null,
     }),
+    // caneca desativada e sem estoque; garrafa ativa; excluído não entra
+    searchProducts: async () => ({
+      products: [
+        { id: 'p1', title: 'Caneca', status: 'SELLER_DEACTIVATED', skus: [{ price: { tax_exclusive_price: '45.00' }, inventory: [{ quantity: 0 }] }] },
+        { id: 'p2', title: 'Garrafa', status: 'ACTIVATE', skus: [{ price: { tax_exclusive_price: '80.00' }, inventory: [{ quantity: 5 }] }] },
+        { id: 'p3', title: 'Antigo', status: 'DELETED' },
+      ],
+      next: null,
+    }),
   };
 
   beforeAll(async () => {
@@ -181,9 +190,20 @@ describe.skipIf(!TEST_DB)('TikTok Shop: conexão, histórico e Análise Financei
     expect(live.lives).toEqual([expect.objectContaining({ roomId: 'LIVE1', pedidos: 1, unidades: 3, faturamento: 160, mc: null })]);
     expect(live.adSpend).toBe(0);
     expect((await summary('&marketplace=tiktok_shop&canal=fora_live')).cards).toMatchObject({ qtdAprovadas: 1, qtdDevolucoes: 1 });
-    const dash = await get('/api/v1/dashboard/summary?period=30d');
+    // Dashboard sem filtro = Mercado Livre: vendas, anúncios e pausados do TikTok não entram
+    const dash = await get('/api/v1/dashboard/summary?period=30d&fresh=true');
     expect(dash.statusCode).toBe(200);
-    expect(JSON.stringify(dash.json())).not.toContain('Loja TikTok');
+    expect(dash.json()).toMatchObject({ kpis: { orders: 0, adSpend: 0 }, paused: { total: 0 } });
+    // Dashboard do TikTok Shop: só os números do TikTok, anúncio do extrato e produto desativado como pausado
+    const ttDash = (await get('/api/v1/dashboard/summary?period=30d&marketplace=tiktok_shop&fresh=true')).json();
+    expect(ttDash.kpis).toMatchObject({ orders: 3, adSpend: 39 });
+    expect(ttDash.topProducts.find((p: { sku: string }) => p.sku === 'TT-CANECA')).toMatchObject({ pictureUrl: 'https://img/caneca.jpg' });
+    expect(ttDash.paused).toEqual({
+      total: 1,
+      outOfStock: 1,
+      items: [expect.objectContaining({ id: 'p1', title: 'Caneca', price: 45, outOfStock: true, pictureUrl: 'https://img/caneca.jpg', accountNickname: 'Loja TikTok' })],
+    });
+    expect(ttDash.accounts).toContainEqual(expect.objectContaining({ marketplace: 'tiktok_shop', nickname: 'Loja TikTok' }));
 
     // atualização seguinte reimporta os pedidos e relê os extratos: nada dobra e nada volta para o provisório
     expect((await app.inject({ method: 'POST', url: `${base}/sync`, cookies, payload: {} })).statusCode).toBe(202);

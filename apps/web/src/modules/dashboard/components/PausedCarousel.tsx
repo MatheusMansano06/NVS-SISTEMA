@@ -4,8 +4,8 @@ import { money } from '../../../shared/format';
 import { Icon } from '../../../shared/ui/Icon';
 import { ProductThumb } from './ProductThumb';
 
-/** Carrossel dos anúncios pausados no Mercado Livre — sem estoque primeiro, para agir rápido. */
-export function PausedCarousel({ paused }: { paused: DashboardDto['paused'] }) {
+/** Carrossel dos anúncios pausados (Mercado Livre ou produtos desativados no TikTok Shop) — sem estoque primeiro. */
+export function PausedCarousel({ paused, tiktok = false }: { paused: DashboardDto['paused']; tiktok?: boolean }) {
   const track = useRef<HTMLUListElement>(null);
   const scroll = (dir: 1 | -1) => {
     const el = track.current;
@@ -44,7 +44,7 @@ export function PausedCarousel({ paused }: { paused: DashboardDto['paused'] }) {
             <li key={l.id} className="pcard" data-oos={l.outOfStock || undefined} style={{ ['--d' as string]: `${Math.min(i, 8) * 50}ms` }}>
               <div className="pcard-photo">
                 <ProductThumb src={l.pictureUrl} alt={l.title} />
-                <span className="pcard-badge">{l.outOfStock ? 'Sem estoque' : 'Pausado'}</span>
+                <span className="pcard-badge">{l.outOfStock ? 'Sem estoque' : tiktok ? 'Desativado' : 'Pausado'}</span>
               </div>
               <strong title={l.title}>{l.title}</strong>
               <span className="pcard-meta">

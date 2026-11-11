@@ -78,6 +78,9 @@ export function Dashboard() {
 
   const name = session?.user.name ?? '';
   const k = data?.kpis;
+  // DRE e Mercado Ads são do Mercado Livre; no TikTok, o anúncio vem do extrato da loja
+  const isTiktok = filters.marketplace === 'tiktok_shop';
+  const adsLabel = isTiktok ? 'TikTok Ads' : 'Mercado Ads';
   const p = data?.previous;
 
   const tour = useGuidedTour('dashboard', TOURS.dashboard, Boolean(data) && !loading);
@@ -119,6 +122,7 @@ export function Dashboard() {
           filters={filters}
           onChange={setFilters}
           accounts={data?.accounts ?? []}
+          tiktok={Boolean(session?.tenant.features.includes('tiktok_shop'))}
           hidden={hidden}
           onToggleHidden={toggleHidden}
           onRefresh={refresh}
@@ -180,9 +184,9 @@ export function Dashboard() {
               </KpiCard>
             </section>
 
-            <section className="ads-bar" aria-label="Mercado Ads">
+            <section className="ads-bar" aria-label={adsLabel}>
               <div className="ads-bar-title">
-                <strong>Mercado Ads</strong>
+                <strong>{adsLabel}</strong>
                 <small>{data.invoiceLabel ?? PERIOD_LABELS[filters.period]}</small>
               </div>
               <div className="ads-num">
@@ -214,7 +218,7 @@ export function Dashboard() {
               discountAds={discountAds}
               stamp={data.generatedAt}
             />
-            {!data.isDemo && session?.tenant.features.includes('dre') && (
+            {!data.isDemo && !isTiktok && session?.tenant.features.includes('dre') && (
               <DreCard accountId={filters.accountId} stamp={data.generatedAt} />
             )}
 
@@ -237,7 +241,7 @@ export function Dashboard() {
             <RevenueChart series={data.series} granularity={data.granularity} />
             <div className="dash-duo">
               <TopFive products={data.topProducts} />
-              <PausedCarousel paused={data.paused} />
+              <PausedCarousel paused={data.paused} tiktok={isTiktok} />
             </div>
             {!data.isDemo && (
               <LowMarginAlert range={data.range} marketplace={filters.marketplace} accountId={filters.accountId} stamp={data.generatedAt} />

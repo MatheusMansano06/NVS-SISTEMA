@@ -1,17 +1,19 @@
-import { PERIODS, PERIOD_LABELS, type DashboardDto, type Marketplace } from '@nvs/shared';
+import { PERIODS, PERIOD_LABELS, type DashboardDto, type Marketplace, type Period } from '@nvs/shared';
 import { Icon } from '../../../shared/ui/Icon';
 import type { DashboardFilters } from '../dashboard-api';
 
 const MARKETPLACE_OPTIONS: { id: Marketplace; label: string; soon?: boolean }[] = [
   { id: 'mercado_livre', label: 'Mercado Livre' },
   { id: 'shopee', label: 'Shopee', soon: true },
-  { id: 'tiktok_shop', label: 'TikTok Shop', soon: true },
+  { id: 'tiktok_shop', label: 'TikTok Shop' },
 ];
 
 interface Props {
   filters: DashboardFilters;
   onChange: (f: DashboardFilters) => void;
   accounts: DashboardDto['accounts'];
+  /** Empresa com o TikTok Shop liberado (recurso `tiktok_shop`). */
+  tiktok: boolean;
   hidden: boolean;
   onToggleHidden: () => void;
   onRefresh: () => void;
@@ -19,15 +21,20 @@ interface Props {
   updatedAt?: string;
 }
 
-export function FilterBar({ filters, onChange, accounts, hidden, onToggleHidden, onRefresh, loading, updatedAt }: Props) {
-  const activeIndex = PERIODS.indexOf(filters.period);
-  const visibleAccounts = accounts.filter((a) => !filters.marketplace || a.marketplace === filters.marketplace);
+export function FilterBar({ filters, onChange, accounts, tiktok, hidden, onToggleHidden, onRefresh, loading, updatedAt }: Props) {
+  // um marketplace por vez, nunca somados: sem escolha = Mercado Livre
+  const marketplace = filters.marketplace ?? 'mercado_livre';
+  // fatura é do Mercado Livre
+  const periods: readonly Period[] = marketplace === 'mercado_livre' ? PERIODS : PERIODS.filter((p) => p !== 'invoice');
+  const activeIndex = periods.indexOf(filters.period);
+  const visibleAccounts = accounts.filter((a) => a.marketplace === marketplace);
+  const options = MARKETPLACE_OPTIONS.filter((m) => m.id !== 'tiktok_shop' || tiktok);
 
   return (
     <div className="filters" role="toolbar" aria-label="Filtros do dashboard">
-      <div className="periods" role="radiogroup" aria-label="Período" style={{ ['--i' as string]: activeIndex, ['--n' as string]: PERIODS.length }}>
+      <div className="periods" role="radiogroup" aria-label="Período" style={{ ['--i' as string]: activeIndex, ['--n' as string]: periods.length }}>
         <span className="periods-thumb" aria-hidden="true" />
-        {PERIODS.map((p) => (
+        {periods.map((p) => (
           <button
             key={p}
             type="button"
@@ -44,13 +51,14 @@ export function FilterBar({ filters, onChange, accounts, hidden, onToggleHidden,
         <label className="select">
           <span className="sr-only">Marketplace</span>
           <select
-            value={filters.marketplace ?? ''}
-            onChange={(e) =>
-              onChange({ ...filters, marketplace: (e.target.value || undefined) as Marketplace | undefined, accountId: undefined })
-            }
+            value={marketplace}
+            onChange={(e) => {
+              const next = e.target.value as Marketplace;
+              const period = next !== 'mercado_livre' && filters.period === 'invoice' ? 'this_month' : filters.period;
+              onChange({ ...filters, period, marketplace: next === 'mercado_livre' ? undefined : next, accountId: undefined });
+            }}
           >
-            <option value="">Marketplaces</option>
-            {MARKETPLACE_OPTIONS.map((m) => (
+            {options.map((m) => (
               <option key={m.id} value={m.id} disabled={m.soon}>
                 {m.label}
                 {m.soon ? ' (em breve)' : ''}

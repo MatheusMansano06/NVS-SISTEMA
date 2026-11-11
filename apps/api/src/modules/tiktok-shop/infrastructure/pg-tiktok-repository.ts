@@ -1,4 +1,5 @@
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
+import type { TiktokProductRow } from '../domain/tiktok-product.js';
 
 export interface TiktokConnectionRow {
   id: string;
@@ -220,6 +221,25 @@ export class PgTiktokRepository {
       [accountId, externalIds],
     );
     return rows.map((r) => r.id);
+  }
+
+  /** Grava uma página do catálogo da loja (reler só atualiza). */
+  async upsertProducts(db: Queryable, tenantId: string, accountId: string, rows: TiktokProductRow[]): Promise<void> {
+    if (!rows.length) return;
+    await db.query(
+      `INSERT INTO tiktok_products (tenant_id, account_id, product_id, title, status, price, available_quantity, updated_at)
+       SELECT $1, $2, x.product_id, x.title, x.status, x.price, x.available_quantity, now()
+         FROM jsonb_to_recordset($3::jsonb) AS x(product_id text, title text, status text, price numeric, available_quantity integer)
+       ON CONFLICT (tenant_id, account_id, product_id) DO UPDATE
+         SET title = EXCLUDED.title, status = EXCLUDED.status, price = EXCLUDED.price,
+             available_quantity = EXCLUDED.available_quantity, updated_at = now()`,
+      [tenantId, accountId, JSON.stringify(rows)],
+    );
+  }
+
+  /** Depois de ler o catálogo inteiro: o que não veio mais (excluído no TikTok) sai. */
+  async pruneProducts(db: Queryable, accountId: string, before: Date): Promise<void> {
+    await db.query('DELETE FROM tiktok_products WHERE account_id = $1 AND updated_at < $2', [accountId, before]);
   }
 
   /** Pedidos ainda sem repasse: tarifa e frete estimados pelo próprio TikTok (continuam marcados como estimativa). */

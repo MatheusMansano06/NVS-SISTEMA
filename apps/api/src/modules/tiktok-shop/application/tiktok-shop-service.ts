@@ -5,6 +5,7 @@ import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js
 import { AppError } from '../../../shared/kernel/errors.js';
 import { retentionCutoff, type IncomingOrder, type SalesIngestion } from '../../sales/index.js';
 import { compactBreakdown, mapTiktokOrder, readAmounts, wasPaid } from '../domain/tiktok-order.js';
+import { mapTiktokProduct, type TiktokProductRow } from '../domain/tiktok-product.js';
 import type { LedgerRow, PgTiktokRepository, TiktokConnectionRow } from '../infrastructure/pg-tiktok-repository.js';
 import { TiktokApiError, type TiktokApi } from '../infrastructure/tiktok-api.js';
 
@@ -191,8 +192,10 @@ export class TiktokShopService {
         await this.importOrders(tenantId, conn, new Date(now.getTime() - 3 * DAY), now, 'update');
       }
       const finance = await this.syncFinance(tenantId, conn, history);
-      this.log.info({ tenantId, connectionId, full, ...finance }, 'TikTok Shop: sincronização concluída');
-      await mark({ status: 'idle', error: finance.warning, backfilled: full, synced: true });
+      const products = await this.syncProducts(tenantId, conn);
+      this.log.info({ tenantId, connectionId, full, ...finance, products: products.count }, 'TikTok Shop: sincronização concluída');
+      const warning = [finance.warning, products.warning].filter(Boolean).join(' ') || null;
+      await mark({ status: 'idle', error: warning, backfilled: full, synced: true });
     } catch (err) {
       this.log.error({ err, tenantId, connectionId }, 'TikTok Shop: sincronização falhou');
       await mark({ status: 'failed', error: err instanceof TiktokApiError ? err.message : 'Falha inesperada na sincronização' }).catch(() => undefined);
@@ -300,6 +303,35 @@ export class TiktokShopService {
       result.warning = `Não consegui ler o financeiro do TikTok (${err.message}). Tarifas e fretes estão provisórios.`;
     }
     if (result.unreadable) this.log.error({ unreadable: result.unreadable }, 'TikTok Shop: transações em que a soma das partes não bateu com o líquido');
+    return result;
+  }
+
+  /**
+   * Catálogo da loja inteiro (situação, preço e estoque), para os anúncios pausados do Dashboard. Se o TikTok recusar
+   * (ex.: app sem a permissão de Produtos), devolve um aviso e o restante da sincronização segue.
+   */
+  private async syncProducts(tenantId: string, conn: TiktokConnectionRow) {
+    const result = { count: 0, warning: null as string | null };
+    try {
+      const startedAt = new Date();
+      let page: string | undefined;
+      do {
+        const { products, next } = await this.api.searchProducts(await this.accessToken(tenantId, conn.id), conn.shop_cipher, page);
+        const rows = products.map(mapTiktokProduct).filter((p): p is TiktokProductRow => p !== null);
+        await this.db.withTenant(tenantId, async (db) => {
+          await this.repo.upsertProducts(db, tenantId, conn.account_id, rows);
+          await this.repo.setSync(db, conn.id, { status: 'running' }); // sinal de vida
+        });
+        result.count += rows.length;
+        page = next ?? undefined;
+        await this.pace();
+      } while (page);
+      await this.db.withTenant(tenantId, (db) => this.repo.pruneProducts(db, conn.account_id, startedAt));
+    } catch (err) {
+      if (!(err instanceof TiktokApiError) || err.code === null || err.status >= 500) throw err;
+      this.log.error({ err, code: err.code }, 'TikTok Shop: leitura dos produtos recusada');
+      result.warning = `Não consegui ler os produtos do TikTok (${err.message}). Os anúncios pausados não aparecem no Dashboard.`;
+    }
     return result;
   }
 

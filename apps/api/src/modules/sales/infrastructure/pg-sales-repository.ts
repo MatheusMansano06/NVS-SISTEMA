@@ -39,8 +39,21 @@ export class PgSalesRepository {
     return { orders: num(r.orders), units: num(r.units), revenue: num(r.revenue), fees: num(r.fees), cost: num(r.cost), tax: num(r.tax) };
   }
 
-  /** Investido em Mercado Ads no período (só Mercado Livre; respeita o filtro de conta). */
+  /**
+   * Investido em anúncios no período (respeita o filtro de conta), igual à Análise Financeira. Mercado Livre: Mercado
+   * Ads. TikTok Shop: anúncios descontados das vendas (ajustes "GMV payment for TikTok Ads" do extrato).
+   */
   async adSpend(db: Queryable, f: SalesFilter): Promise<number> {
+    if (f.marketplace === 'tiktok_shop') {
+      const { rows } = await db.query(
+        `SELECT coalesce(sum(-adjustment), 0) AS cost FROM tiktok_statement_transactions
+          WHERE type = 'GMV_PAYMENT_FOR_TIKTOK_ADS'
+            AND (statement_time AT TIME ZONE 'UTC')::date BETWEEN $1::date AND $2::date
+            AND ($3::uuid IS NULL OR account_id = $3)`,
+        [f.range.from, f.range.to, f.accountId ?? null],
+      );
+      return Math.max(0, num(rows[0]?.cost));
+    }
     if (f.marketplace && f.marketplace !== 'mercado_livre') return 0;
     const { rows } = await db.query(
       `SELECT coalesce(sum(cost), 0) AS cost FROM ad_spend_daily
@@ -115,7 +128,7 @@ export class PgSalesRepository {
   async topProducts(db: Queryable, f: SalesFilter, totalRevenue: number, limit = 5): Promise<TopProduct[]> {
     const { rows } = await db.query(
       `SELECT i.sku, max(i.title) AS title,
-              max(l.picture_url) AS picture_url, max(l.permalink) AS permalink,
+              coalesce(max(l.picture_url), max(i.picture_url)) AS picture_url, max(l.permalink) AS permalink,
               sum(i.quantity) AS units,
               sum(i.quantity * i.unit_price) AS revenue,
               sum(i.quantity * coalesce(i.unit_cost, 0)) AS cost,
@@ -124,7 +137,7 @@ export class PgSalesRepository {
                        - coalesce(i.tax_pct, 0) / 100)
                   - i.quantity * coalesce(i.unit_cost, 0)) AS profit
          FROM order_items i JOIN orders o ON o.id = i.order_id
-         LEFT JOIN listings l ON l.tenant_id = i.tenant_id AND l.external_id = i.listing_id
+         LEFT JOIN listings l ON l.tenant_id = i.tenant_id AND l.marketplace = o.marketplace AND l.external_id = i.listing_id
         WHERE ${WHERE}
         GROUP BY i.sku
         ORDER BY revenue DESC
@@ -153,7 +166,9 @@ export class PgSalesRepository {
 
   /** Pausados (sem estoque primeiro), respeitando filtros de marketplace/conta. */
   async paused(db: Queryable, f: Omit<SalesFilter, 'range'>, limit = 30) {
-    const params = [f.marketplace ?? null, f.accountId ?? null];
+    if (f.marketplace === 'tiktok_shop') return this.pausedTiktok(db, f.accountId, limit);
+    // sem filtro = Mercado Livre (marketplaces nunca misturados)
+    const params = [f.marketplace ?? 'mercado_livre', f.accountId ?? null];
     const where = `l.status = 'paused' AND ($1::text IS NULL OR l.marketplace = $1) AND ($2::uuid IS NULL OR l.account_id = $2)`;
     const oos = `(coalesce(l.available_quantity, 0) = 0 OR 'out_of_stock' = ANY(l.sub_status))`;
     const counts = await db.query(
@@ -182,9 +197,46 @@ export class PgSalesRepository {
     return { total: num(counts.rows[0]?.total), outOfStock: num(counts.rows[0]?.oos), items };
   }
 
+  /**
+   * Produtos desativados no TikTok Shop (pelo vendedor, pela plataforma ou congelados), sem estoque primeiro.
+   * Ficam em `tiktok_products`, fora de `listings`, para não entrarem nas telas que são só do Mercado Livre.
+   * A busca de produtos do TikTok não traz foto: usa a da variação vendida no pedido, quando houver.
+   */
+  private async pausedTiktok(db: Queryable, accountId: string | undefined, limit: number) {
+    const where = `p.status = ANY('{SELLER_DEACTIVATED,PLATFORM_DEACTIVATED,FREEZE}') AND ($1::uuid IS NULL OR p.account_id = $1)`;
+    const oos = 'coalesce(p.available_quantity, 0) = 0';
+    const counts = await db.query(
+      `SELECT count(*) AS total, count(*) FILTER (WHERE ${oos}) AS oos FROM tiktok_products p WHERE ${where}`,
+      [accountId ?? null],
+    );
+    const { rows } = await db.query(
+      `SELECT p.product_id, p.title, p.price, p.available_quantity, ${oos} AS out_of_stock, a.nickname,
+              coalesce(p.picture_url, (SELECT i.picture_url FROM order_items i
+                                        WHERE i.tenant_id = p.tenant_id AND i.listing_id = p.product_id AND i.picture_url IS NOT NULL
+                                        LIMIT 1)) AS picture_url
+         FROM tiktok_products p JOIN marketplace_accounts a ON a.id = p.account_id
+        WHERE ${where}
+        ORDER BY ${oos} DESC, p.updated_at DESC
+        LIMIT $2`,
+      [accountId ?? null, limit],
+    );
+    const items: PausedListing[] = rows.map((r) => ({
+      id: r.product_id,
+      title: r.title,
+      pictureUrl: r.picture_url,
+      permalink: null,
+      price: r.price === null ? null : num(r.price),
+      availableQuantity: r.available_quantity,
+      outOfStock: r.out_of_stock,
+      accountNickname: r.nickname,
+    }));
+    return { total: num(counts.rows[0]?.total), outOfStock: num(counts.rows[0]?.oos), items };
+  }
+
+  /** Contas de todos os marketplaces (a tela mostra as do marketplace escolhido). */
   async accounts(db: Queryable) {
     const { rows } = await db.query<{ id: string; marketplace: Marketplace; nickname: string }>(
-      "SELECT id, marketplace, nickname FROM marketplace_accounts WHERE marketplace = 'mercado_livre' ORDER BY nickname",
+      "SELECT id, marketplace, nickname FROM marketplace_accounts WHERE marketplace IN ('mercado_livre', 'tiktok_shop') ORDER BY nickname",
     );
     return rows;
   }

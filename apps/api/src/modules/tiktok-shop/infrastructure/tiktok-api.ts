@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { TiktokFinanceTx, TiktokOrder } from '../domain/tiktok-order.js';
+import type { TiktokProduct } from '../domain/tiktok-product.js';
 
 export class TiktokApiError extends Error {
   constructor(message: string, readonly status: number, readonly code: number | null) {
@@ -42,12 +43,15 @@ export interface TiktokApi {
   statementTransactions(token: string, cipher: string, statementId: string, pageToken?: string): Promise<{ transactions: TiktokFinanceTx[]; next: string | null }>;
   /** Pedidos ainda sem repasse, com os valores ESTIMADOS pelo TikTok. */
   unsettled(token: string, cipher: string, pageToken?: string): Promise<{ transactions: TiktokFinanceTx[]; next: string | null }>;
+  /** Catálogo da loja (todas as situações), em páginas. */
+  searchProducts(token: string, cipher: string, pageToken?: string): Promise<{ products: TiktokProduct[]; next: string | null }>;
 }
 
 const AUTH_HOST = 'https://auth.tiktok-shops.com';
 const API_HOST = 'https://open-api.tiktokglobalshop.com';
 export const TIKTOK_PAGE_SIZE = 50;
 const FINANCE_PAGE_SIZE = 100;
+const PRODUCT_PAGE_SIZE = 100;
 
 /**
  * Assinatura das chamadas (versões 202309+): HMAC-SHA256 de
@@ -138,6 +142,14 @@ export class HttpTiktokApi implements TiktokApi {
     if (pageToken) query.page_token = pageToken;
     const d = await this.call<{ transactions?: TiktokFinanceTx[]; next_page_token?: string }>('GET', '/finance/202507/orders/unsettled', token, query);
     return { transactions: d.transactions ?? [], next: d.next_page_token || null };
+  }
+
+  async searchProducts(token: string, cipher: string, pageToken?: string) {
+    const query: Record<string, string> = { shop_cipher: cipher, page_size: String(PRODUCT_PAGE_SIZE) };
+    if (pageToken) query.page_token = pageToken;
+    // corpo vazio = todas as situações (ativo, desativado, congelado...)
+    const d = await this.call<{ products?: TiktokProduct[]; next_page_token?: string }>('POST', '/product/202309/products/search', token, query, {});
+    return { products: d.products ?? [], next: d.next_page_token || null };
   }
 
   private async call<T>(method: 'GET' | 'POST', path: string, token: string, query: Record<string, string>, body?: unknown): Promise<T> {

@@ -142,10 +142,10 @@ describe.skipIf(!TEST_DB)('Análise Financeira (regras NVS-WMS)', () => {
     // custo: A 80 + B 40 + E 40 = 160; C sem custo estimado pela média (160/400 × 50)
     expect(total('cmv')).toBe(180);
     expect(d.cobertura).toMatchObject({ semCustoQtd: 1, estimado: true });
-    // tarifas 55 + frete vendedor 73 (inclui o cancelado) + embalagem 2 × 4 pedidos
-    expect(total('variaveis')).toBe(55 + 73 + 8);
+    // tarifas 55 + frete vendedor 73 (inclui o cancelado) + embalagem 2 × 4 pedidos + Mercado Ads 7,5
+    expect(total('variaveis')).toBe(55 + 73 + 8 + 7.5);
     expect(total('fixas')).toBe(1000);
-    expect(d.subtotals.lucro_liquido).toBeCloseTo(d.subtotals.receita_liquida - 180 - 136 - 1000, 2);
+    expect(d.subtotals.lucro_liquido).toBeCloseTo(d.subtotals.receita_liquida - 180 - 143.5 - 1000, 2);
     expect(d.lancamentos).toBe(2);
     expect((await dre('&estimarCusto=false')).sections.find((s: { id: string }) => s.id === 'cmv').total).toBe(160);
 

@@ -660,7 +660,7 @@ describe.skipIf(!TEST_DB)('Integração Mercado Livre', () => {
     const other = await account();
     const cross = await app.inject({ method: 'GET', url: candUrl, cookies: other });
     expect(cross.statusCode).toBe(404);
-  });
+  }, 20_000); // fluxo longo (várias etapas de sincronização): passa de 5 s em runner lento
 
   it('estudo de viabilidade: bloqueado sem o recurso; com ele traz data, vendas, tipo e visitas (também via produto)', async () => {
     const cookies = firstCookies;

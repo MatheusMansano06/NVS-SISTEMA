@@ -37,7 +37,8 @@ export class DashboardService {
     let range = resolvePeriod(q.period, today);
     let prev = previousRange(q.period, range);
     let invoiceLabel: string | null = null;
-    if (q.period === 'invoice') {
+    // fatura é do Mercado Livre: no TikTok Shop o período "fatura" fica no mês corrente
+    if (q.period === 'invoice' && (q.marketplace ?? 'mercado_livre') === 'mercado_livre') {
       // ciclo real da fatura do ML (as contas fecham em dias diferentes): o aberto hoje e o anterior
       const periods = await this.db.withTenant(tenantId, (db) => this.repo.invoicePeriods(db, today, q.accountId));
       const last = periods[0];

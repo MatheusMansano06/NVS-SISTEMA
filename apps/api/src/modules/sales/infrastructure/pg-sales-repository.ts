@@ -2,6 +2,7 @@ import type { Marketplace, PausedListing, SeriesPoint, TopProduct } from '@nvs/s
 import type { Queryable } from '../../../shared/infrastructure/database.js';
 import { TIMEZONE, type DateRange } from '../domain/period.js';
 import type { KpiTotals } from '../domain/kpis.js';
+import { SHOPEE_AD_SPEND_SQL } from './shopee-ads-sql.js';
 
 export interface SalesFilter {
   range: DateRange;
@@ -41,7 +42,7 @@ export class PgSalesRepository {
 
   /**
    * Investido em anúncios no período (respeita o filtro de conta), igual à Análise Financeira. Mercado Livre: Mercado
-   * Ads. TikTok Shop: anúncios descontados das vendas (ajustes "GMV payment for TikTok Ads" do extrato).
+   * Ads. TikTok Shop: anúncios descontados das vendas (ajustes "GMV payment for TikTok Ads" do extrato). Shopee: Shopee Ads.
    */
   async adSpend(db: Queryable, f: SalesFilter): Promise<number> {
     if (f.marketplace === 'tiktok_shop') {
@@ -52,6 +53,10 @@ export class PgSalesRepository {
             AND ($3::uuid IS NULL OR account_id = $3)`,
         [f.range.from, f.range.to, f.accountId ?? null],
       );
+      return Math.max(0, num(rows[0]?.cost));
+    }
+    if (f.marketplace === 'shopee') {
+      const { rows } = await db.query(SHOPEE_AD_SPEND_SQL, [f.range.from, f.range.to, f.accountId ?? null]);
       return Math.max(0, num(rows[0]?.cost));
     }
     if (f.marketplace && f.marketplace !== 'mercado_livre') return 0;
@@ -167,6 +172,7 @@ export class PgSalesRepository {
   /** Pausados (sem estoque primeiro), respeitando filtros de marketplace/conta. */
   async paused(db: Queryable, f: Omit<SalesFilter, 'range'>, limit = 30) {
     if (f.marketplace === 'tiktok_shop') return this.pausedTiktok(db, f.accountId, limit);
+    if (f.marketplace === 'shopee') return this.pausedShopee(db, f.accountId, limit);
     // sem filtro = Mercado Livre (marketplaces nunca misturados)
     const params = [f.marketplace ?? 'mercado_livre', f.accountId ?? null];
     const where = `l.status = 'paused' AND ($1::text IS NULL OR l.marketplace = $1) AND ($2::uuid IS NULL OR l.account_id = $2)`;
@@ -233,10 +239,45 @@ export class PgSalesRepository {
     return { total: num(counts.rows[0]?.total), outOfStock: num(counts.rows[0]?.oos), items };
   }
 
+  /** Anúncios da Shopee fora do ar (deslistados ou bloqueados), sem estoque primeiro. Tabela própria, fora de `listings`. */
+  private async pausedShopee(db: Queryable, accountId: string | undefined, limit: number) {
+    const where = '($1::uuid IS NULL OR p.account_id = $1)';
+    const oos = 'coalesce(p.available_quantity, 0) = 0';
+    const counts = await db.query(`SELECT count(*) AS total, count(*) FILTER (WHERE ${oos}) AS oos FROM shopee_products p WHERE ${where}`, [accountId ?? null]);
+    const { rows } = await db.query(
+      `SELECT p.item_id, p.title, p.price, p.available_quantity, p.picture_url, ${oos} AS out_of_stock, a.nickname
+         FROM shopee_products p JOIN marketplace_accounts a ON a.id = p.account_id
+        WHERE ${where}
+        ORDER BY ${oos} DESC, p.updated_at DESC
+        LIMIT $2`,
+      [accountId ?? null, limit],
+    );
+    const items: PausedListing[] = rows.map((r) => ({
+      id: r.item_id,
+      title: r.title,
+      pictureUrl: r.picture_url,
+      permalink: null,
+      price: r.price === null ? null : num(r.price),
+      availableQuantity: r.available_quantity,
+      outOfStock: r.out_of_stock,
+      accountNickname: r.nickname,
+    }));
+    return { total: num(counts.rows[0]?.total), outOfStock: num(counts.rows[0]?.oos), items };
+  }
+
+  /** Leitura do Shopee Ads recusada nas contas do filtro (motivo), se houver. */
+  async shopeeAdsError(db: Queryable, accountId?: string): Promise<string | null> {
+    const { rows } = await db.query<{ ads_error: string | null }>(
+      'SELECT ads_error FROM shopee_connections WHERE ads_error IS NOT NULL AND ($1::uuid IS NULL OR account_id = $1) LIMIT 1',
+      [accountId ?? null],
+    );
+    return rows[0]?.ads_error ?? null;
+  }
+
   /** Contas de todos os marketplaces (a tela mostra as do marketplace escolhido). */
   async accounts(db: Queryable) {
     const { rows } = await db.query<{ id: string; marketplace: Marketplace; nickname: string }>(
-      "SELECT id, marketplace, nickname FROM marketplace_accounts WHERE marketplace IN ('mercado_livre', 'tiktok_shop') ORDER BY nickname",
+      "SELECT id, marketplace, nickname FROM marketplace_accounts WHERE marketplace IN ('mercado_livre', 'tiktok_shop', 'shopee') ORDER BY nickname",
     );
     return rows;
   }

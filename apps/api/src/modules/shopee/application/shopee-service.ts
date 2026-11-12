@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import type { ShopeeStatusDto } from '@nvs/shared';
+import type { ShopeeFunnelDto, ShopeeStatusDto } from '@nvs/shared';
 import type { Database } from '../../../shared/infrastructure/database.js';
 import type { TokenCipher } from '../../../shared/infrastructure/token-cipher.js';
 import { AppError } from '../../../shared/kernel/errors.js';
 import { retentionCutoff, type IncomingOrder, type SalesIngestion } from '../../sales/index.js';
+import { mapAdsDay, mapShopeeItem } from '../domain/shopee-ads.js';
 import { mapShopeeEscrow } from '../domain/shopee-escrow.js';
-import { mapShopeeOrder, wasPaid } from '../domain/shopee-order.js';
+import { mapShopeeOrder, placedOrder, wasPaid } from '../domain/shopee-order.js';
 import type { EscrowWrite, PgShopeeRepository, ShopeeConnectionRow } from '../infrastructure/pg-shopee-repository.js';
 import { SHOPEE_BATCH, ShopeeApiError, type ShopeeApi } from '../infrastructure/shopee-api.js';
 
@@ -31,6 +32,10 @@ const TOKEN_MEMO_MS = 5 * 60_000;
 const WINDOW_MS = 15 * DAY - 60_000;
 /** Sem sinal de vida por 10 min, a sincronização é dada como interrompida (servidor reiniciou). */
 const STALE_MS = 10 * 60_000;
+/** Janela de cada leitura do Shopee Ads (a Shopee aceita até um mês). */
+const ADS_WINDOW_DAYS = 30;
+/** Situações de anúncio que contam como pausado no Dashboard. */
+const PAUSED_STATUSES = ['UNLIST', 'BANNED'];
 /** Erros da Shopee que significam autorização acabada (não instabilidade). */
 const AUTH_ERRORS = /error_auth|invalid_acc?ess_token|invalid_refresh_token|partner_shop_no_link|shop_no_linked|error_partner_key_expired|shop_banned/;
 
@@ -158,6 +163,16 @@ export class ShopeeService {
     };
   }
 
+  // ================= Funil Pedido Feito × Pedido Pago
+  async funnel(tenantId: string, from: string, to: string, accountId?: string): Promise<ShopeeFunnelDto> {
+    if (!(await this.repo.hasFeature(tenantId))) throw new FeatureLockedError();
+    const r = await this.db.withTenant(tenantId, (db) => this.repo.funnel(db, from, to, accountId));
+    return {
+      feitos: { pedidos: r.feitos, valor: Number(r.feitos_valor) },
+      pagos: { pedidos: r.pagos, valor: Number(r.pagos_valor) },
+    };
+  }
+
   // ================= Sincronização
   /** Inicia em segundo plano (histórico completo na primeira vez; depois, só o que mudou). */
   startSync(tenantId: string, connectionId: string): void {
@@ -193,11 +208,14 @@ export class ShopeeService {
         await this.importOrders(tenantId, conn, new Date(now.getTime() - 3 * DAY), now, 'update_time');
       }
       const escrow = await this.syncEscrow(tenantId, conn, history, now);
+      const ads = await this.syncAds(tenantId, conn, full, now);
+      const products = await this.syncProducts(tenantId, conn);
       // renova a validade da autorização mostrada em Integrações
       const info = await this.api.shopInfo(await this.accessToken(tenantId, conn.id), conn.shop_id).catch(() => null);
       if (info) await this.db.withTenant(tenantId, (db) => this.repo.setAuthExpiry(db, conn.id, info.authExpiresAt));
-      this.log.info({ tenantId, connectionId, full, ...escrow }, 'Shopee: sincronização concluída');
-      await mark({ status: 'idle', error: escrow.warning, backfilled: full, synced: true });
+      this.log.info({ tenantId, connectionId, full, ...escrow, adsDays: ads.days, paused: products.count }, 'Shopee: sincronização concluída');
+      const warning = [escrow.warning, products.warning].filter(Boolean).join(' ') || null;
+      await mark({ status: 'idle', error: warning, backfilled: full, synced: true });
     } catch (err) {
       this.log.error({ err, tenantId, connectionId }, 'Shopee: sincronização falhou');
       await mark({ status: 'failed', error: err instanceof ShopeeApiError ? err.message : 'Falha inesperada na sincronização' }).catch(() => undefined);
@@ -215,6 +233,7 @@ export class ShopeeService {
         const mapped = orders.map(mapShopeeOrder).filter((o): o is IncomingOrder => o !== null);
         await this.db.withTenant(tenantId, async (db) => {
           await this.sales.upsertOrders(db, tenantId, conn.account_id, 'shopee', mapped);
+          await this.repo.upsertPlaced(db, tenantId, conn.account_id, orders.map(placedOrder));
           await this.repo.deleteOrders(db, conn.account_id, orders.filter((o) => !wasPaid(o)).map((o) => o.order_sn));
           await this.repo.closeCancelled(db, conn.account_id);
           // a reimportação volta aos valores do pedido: o escrow já lido é reaplicado na hora
@@ -289,6 +308,61 @@ export class ShopeeService {
       result.warning = `Não consegui ler o repasse da Shopee (${err.message}). Tarifas e fretes estão provisórios.`;
     }
     if (result.unreadable) this.log.error({ unreadable: result.unreadable }, 'Shopee: escrows sem order_income');
+    return result;
+  }
+
+  /**
+   * Gasto diário do Shopee Ads (todas as campanhas), como o Mercado Ads. Primeira vez: 6 meses (o que a Shopee guarda);
+   * depois, os últimos 7 dias (o dia de hoje ainda muda). Recusa da Shopee (ex.: app sem a permissão de Ads) fica
+   * registrada na conexão e o Ads cai na recarga descontada dos repasses.
+   */
+  private async syncAds(tenantId: string, conn: ShopeeConnectionRow, full: boolean, now: Date) {
+    const result = { days: 0 };
+    const iso = (d: Date) => new Date(d.getTime() - 3 * 3_600_000).toISOString().slice(0, 10); // dia de São Paulo
+    try {
+      const today = iso(now);
+      for (let from = new Date(now.getTime() - (full || conn.ads_error ? 180 : 7) * DAY); iso(from) <= today; from = new Date(from.getTime() + ADS_WINDOW_DAYS * DAY)) {
+        const last = iso(new Date(from.getTime() + (ADS_WINDOW_DAYS - 1) * DAY));
+        const perf = await this.api.adsDaily(await this.accessToken(tenantId, conn.id), conn.shop_id, iso(from), last < today ? last : today);
+        const days = perf.map(mapAdsDay).filter((d): d is NonNullable<typeof d> => d !== null);
+        await this.db.withTenant(tenantId, (db) => this.repo.upsertAdsDaily(db, tenantId, conn.account_id, days));
+        result.days += days.length;
+        await this.pace();
+      }
+      await this.db.withTenant(tenantId, (db) => this.repo.setAds(db, conn.id, null));
+    } catch (err) {
+      if (!(err instanceof ShopeeApiError) || !err.code || AUTH_ERRORS.test(err.code)) throw err;
+      this.log.error({ err, code: err.code }, 'Shopee: leitura do Shopee Ads recusada');
+      await this.db.withTenant(tenantId, (db) => this.repo.setAds(db, conn.id, `Não consegui ler o Shopee Ads (${err.message}).`));
+    }
+    return result;
+  }
+
+  /** Anúncios fora do ar (deslistados ou bloqueados), para os pausados do Dashboard. Recusa vira aviso. */
+  private async syncProducts(tenantId: string, conn: ShopeeConnectionRow) {
+    const result = { count: 0, warning: null as string | null };
+    try {
+      const startedAt = new Date();
+      for (const status of PAUSED_STATUSES) {
+        let offset: number | null = 0;
+        while (offset !== null) {
+          const page = await this.api.itemList(await this.accessToken(tenantId, conn.id), conn.shop_id, status, offset);
+          for (let i = 0; i < page.itemIds.length; i += SHOPEE_BATCH) {
+            const items = await this.api.itemInfo(await this.accessToken(tenantId, conn.id), conn.shop_id, page.itemIds.slice(i, i + SHOPEE_BATCH));
+            const rows = items.map((it) => mapShopeeItem(it, status));
+            await this.db.withTenant(tenantId, (db) => this.repo.upsertProducts(db, tenantId, conn.account_id, rows));
+            result.count += rows.length;
+          }
+          offset = page.next;
+          await this.pace();
+        }
+      }
+      await this.db.withTenant(tenantId, (db) => this.repo.pruneProducts(db, conn.account_id, startedAt));
+    } catch (err) {
+      if (!(err instanceof ShopeeApiError) || !err.code || AUTH_ERRORS.test(err.code)) throw err;
+      this.log.error({ err, code: err.code }, 'Shopee: leitura dos anúncios recusada');
+      result.warning = `Não consegui ler os anúncios da Shopee (${err.message}). Os pausados não aparecem no Dashboard.`;
+    }
     return result;
   }
 

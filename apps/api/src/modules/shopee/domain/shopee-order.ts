@@ -71,7 +71,8 @@ export function mapShopeeOrder(o: ShopeeOrder): IncomingOrder | null {
   return {
     externalId: o.order_sn,
     status,
-    orderedAt: new Date(o.create_time * 1000).toISOString(),
+    // datada pelo pagamento, como o filtro padrão "Pedido Pago" do Seller Center (a criação fica no funil)
+    orderedAt: new Date((o.pay_time || o.create_time) * 1000).toISOString(),
     gross: round2(items.reduce((s, i) => s + i.unitPrice * i.quantity, 0)),
     fee: 0,
     units: items.reduce((s, i) => s + i.quantity, 0),
@@ -82,5 +83,21 @@ export function mapShopeeOrder(o: ShopeeOrder): IncomingOrder | null {
     paymentType: o.payment_method ?? null,
     gmv: o.total_amount != null ? round2(num(o.total_amount)) : null,
     items,
+  };
+}
+
+/** Linha do funil Pedido Feito × Pedido Pago: todo pedido, pago ou não. */
+export function placedOrder(o: ShopeeOrder) {
+  const amount = (o.item_list ?? []).reduce(
+    (s, it) => s + num(it.model_discounted_price ?? it.model_original_price) * Math.max(1, num(it.model_quantity_purchased)),
+    0,
+  );
+  return {
+    order_sn: o.order_sn,
+    placed_at: new Date(o.create_time * 1000).toISOString(),
+    paid_at: o.pay_time ? new Date(o.pay_time * 1000).toISOString() : null,
+    status: o.order_status,
+    amount: round2(amount),
+    total_amount: o.total_amount != null ? round2(num(o.total_amount)) : null,
   };
 }

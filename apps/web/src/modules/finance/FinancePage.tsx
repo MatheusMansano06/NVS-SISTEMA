@@ -15,6 +15,7 @@ import { Donut } from './components/Donut';
 import { FinanceTable } from './components/FinanceTable';
 import { TaxImpact } from './components/TaxImpact';
 import { LivePanel } from './components/LivePanel';
+import { ShopeeFunnel } from './components/ShopeeFunnel';
 import { Modal } from '../../shared/ui/Modal';
 import { PRESETS, presetRange, shortDay, type PresetId } from './dates';
 import { financeApi, type FinanceFilters, type LineFilters } from './finance-api';
@@ -275,7 +276,7 @@ export function FinancePage() {
           <>
             <section className="fin-grid">
               <article className="fin-hero">
-                <span className="fin-label">Vendas aprovadas</span>
+                <span className="fin-label">Vendas aprovadas{isShopee && <small> · pedido pago</small>}</span>
                 <p className="fin-big money">{money(c.vendasAprovadas)}</p>
                 <p className="fin-sub">
                   Cancel. <b className="money">{money(c.vendasCanceladas)}</b> · Dev. parcial <b className="money">{money(c.devolucoesParciais)}</b>{' '}
@@ -326,11 +327,13 @@ export function FinancePage() {
               </article>
             </section>
 
-            {(isMl || adSpend > 0) && (
-            <section className="ads-bar" aria-label={isTiktok ? 'TikTok Ads' : 'Mercado Ads'}>
+            {isShopee && <ShopeeFunnel from={range.from} to={range.to} accountId={accountId || undefined} version={version} />}
+
+            {(isMl || isShopee || adSpend > 0) && (
+            <section className="ads-bar" aria-label={isTiktok ? 'TikTok Ads' : isShopee ? 'Shopee Ads' : 'Mercado Ads'}>
               <div className="ads-bar-title">
-                <strong>{isTiktok ? 'TikTok Ads' : 'Mercado Ads'}</strong>
-                <small>{isTiktok ? 'descontado das vendas no extrato' : 'mesmo período do filtro'}</small>
+                <strong>{isTiktok ? 'TikTok Ads' : isShopee ? 'Shopee Ads' : 'Mercado Ads'}</strong>
+                <small>{isTiktok ? 'descontado das vendas no extrato' : isShopee ? 'gasto das campanhas no período' : 'mesmo período do filtro'}</small>
               </div>
               <div className="ads-num">
                 <span>Investido em Ads</span>

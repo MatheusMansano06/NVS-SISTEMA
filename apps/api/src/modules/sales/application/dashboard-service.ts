@@ -73,6 +73,7 @@ export class DashboardService {
       const prevFilter = { ...filter, range: prev };
       const previous = { ...(await this.repo.totals(db, prevFilter)), ads: await this.repo.adSpend(db, prevFilter) };
       const adRows = await this.repo.adsInfo(db, q.accountId);
+      const shopeeAdsError = q.marketplace === 'shopee' ? await this.repo.shopeeAdsError(db, q.accountId) : null;
       const series = await this.repo.series(db, filter, granularity);
       const topProducts = await this.repo.topProducts(db, filter, current.revenue);
       const paused = await this.repo.paused(db, filter);
@@ -90,7 +91,9 @@ export class DashboardService {
         accounts,
         isDemo,
         missingCosts,
-        ads: adsInfo(adRows, q.marketplace),
+        ads: shopeeAdsError
+          ? { status: 'erro', message: `${shopeeAdsError} O Ads mostrado é a recarga de Ads descontada dos repasses.` }
+          : adsInfo(adRows, q.marketplace),
         invoiceLabel,
         generatedAt: now.toISOString(),
       } satisfies DashboardDto;

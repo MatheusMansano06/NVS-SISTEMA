@@ -39,6 +39,31 @@ export interface ShopeeApi {
   escrowDetails(token: string, shopId: string, orderSns: string[]): Promise<ShopeeEscrowDetail[]>;
   /** Repasses liberados em [from, to] (no máximo 15 dias), em páginas. */
   escrowList(token: string, shopId: string, from: Date, to: Date, page: number): Promise<{ released: { orderSn: string; payout: number; releasedAt: Date }[]; more: boolean }>;
+  /** Desempenho diário de todos os anúncios (Shopee Ads) entre dois dias (AAAA-MM-DD), no máximo 30 dias. */
+  adsDaily(token: string, shopId: string, from: string, to: string): Promise<ShopeeAdsPerformance[]>;
+  /** Ids dos anúncios numa situação (UNLIST, BANNED...), em páginas. */
+  itemList(token: string, shopId: string, status: string, offset: number): Promise<{ itemIds: string[]; next: number | null }>;
+  /** Dados básicos de até 50 anúncios. */
+  itemInfo(token: string, shopId: string, itemIds: string[]): Promise<ShopeeItem[]>;
+}
+
+/** Linha diária do v2.ads.get_all_cpc_ads_daily_performance (data em DD-MM-AAAA). */
+export interface ShopeeAdsPerformance {
+  date?: string;
+  expense?: number | string | null;
+  broad_gmv?: number | string | null;
+  clicks?: number | string | null;
+  impression?: number | string | null;
+}
+
+/** Subconjunto do v2.product.get_item_base_info. */
+export interface ShopeeItem {
+  item_id: number | string;
+  item_name?: string | null;
+  item_status?: string | null;
+  price_info?: { current_price?: number | null; original_price?: number | null }[] | null;
+  stock_info_v2?: { summary_info?: { total_available_stock?: number | null } | null } | null;
+  image?: { image_url_list?: string[] | null } | null;
 }
 
 const API_HOST = 'https://partner.shopeemobile.com';
@@ -146,6 +171,28 @@ export class HttpShopeeApi implements ShopeeApi {
       released: (d.escrow_list ?? []).map((e) => ({ orderSn: e.order_sn, payout: Number(e.payout_amount) || 0, releasedAt: new Date(e.escrow_release_time * 1000) })),
       more: Boolean(d.more),
     };
+  }
+
+  async adsDaily(token: string, shopId: string, from: string, to: string): Promise<ShopeeAdsPerformance[]> {
+    const br = (d: string) => d.split('-').reverse().join('-'); // AAAA-MM-DD → DD-MM-AAAA
+    const d = await this.shop<unknown>('GET', '/api/v2/ads/get_all_cpc_ads_daily_performance', token, shopId, { start_date: br(from), end_date: br(to) });
+    if (Array.isArray(d)) return d as ShopeeAdsPerformance[];
+    const o = (d ?? {}) as Record<string, unknown>;
+    const list = o.list ?? o.performance_list ?? o.daily_performance_list;
+    return Array.isArray(list) ? (list as ShopeeAdsPerformance[]) : [];
+  }
+
+  async itemList(token: string, shopId: string, status: string, offset: number) {
+    const d = await this.shop<{ item?: { item_id: number | string }[]; has_next_page?: boolean; next_offset?: number }>('GET', '/api/v2/product/get_item_list', token, shopId, {
+      offset: String(offset), page_size: String(PAGE_SIZE), item_status: status,
+    });
+    return { itemIds: (d.item ?? []).map((i) => String(i.item_id)), next: d.has_next_page && d.next_offset ? d.next_offset : null };
+  }
+
+  async itemInfo(token: string, shopId: string, itemIds: string[]): Promise<ShopeeItem[]> {
+    if (!itemIds.length) return [];
+    const d = await this.shop<{ item_list?: ShopeeItem[] }>('GET', '/api/v2/product/get_item_base_info', token, shopId, { item_id_list: itemIds.join(',') });
+    return d.item_list ?? [];
   }
 
   private shop<T>(method: 'GET' | 'POST', path: string, token: string, shopId: string, query: Record<string, string>, body?: unknown): Promise<T> {

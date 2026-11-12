@@ -154,19 +154,23 @@ export interface ShopeeOrderFinance {
 }
 
 /**
- * Converte o escrow nos campos do pedido. Venda: tarifa líquida (menos o crédito da Shopee); o que sobrar de crédito
+ * Converte o escrow nos campos do pedido. A recarga de Ads (`ads_fee`) não é tarifa: o Ads é descontado à parte. Venda: tarifa líquida (menos o crédito da Shopee); o que sobrar de crédito
  * abate o frete do vendedor. Devolvida com reembolso: a venda inteira volta (devolução = produto) e o que a Shopee
  * repassou ou cobrou depois dos ajustes (ex.: compensação por extravio) fica no frete/tarifa.
  * `itemsGross` = soma dos itens do pedido, para a devolução quando o escrow já veio zerado.
  */
-export function orderFinance(e: Pick<ShopeeEscrowRow, 'produto' | 'cupom' | 'tarifa' | 'tarifa_refund' | 'frete_comprador' | 'frete_vendedor' | 'ajuste' | 'returned' | 'escrow_after_adjustment'>, itemsGross: number): ShopeeOrderFinance {
+export function orderFinance(
+  e: Pick<ShopeeEscrowRow, 'produto' | 'cupom' | 'tarifa' | 'tarifa_refund' | 'frete_comprador' | 'frete_vendedor' | 'ajuste' | 'returned' | 'escrow_after_adjustment'> & { ads_fee?: number },
+  itemsGross: number,
+): ShopeeOrderFinance {
   const c = (v: number) => Math.round(v * 100);
   if (e.returned) {
     const gross = Math.max(c(e.produto), c(itemsGross));
     const net = c(e.escrow_after_adjustment);
     return { status: 'returned', gross: reais(gross), coupon: 0, refund: reais(gross), buyerShipping: 0, fee: reais(Math.max(0, -net)), shipping: reais(-Math.max(0, net)) };
   }
-  const tarifa = c(e.tarifa) - c(e.tarifa_refund) - c(e.ajuste);
+  // a recarga de Ads tirada do repasse vai para a carteira de anúncios: o custo entra pelo gasto do Shopee Ads
+  const tarifa = c(e.tarifa) - c(e.ads_fee ?? 0) - c(e.tarifa_refund) - c(e.ajuste);
   return {
     status: 'paid',
     gross: e.produto,

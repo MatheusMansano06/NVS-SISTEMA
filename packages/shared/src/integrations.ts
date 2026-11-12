@@ -82,6 +82,12 @@ export interface ShopeeConnectionDto extends TiktokConnectionDto {
   authExpiresAt: string | null;
 }
 
+/** Funil do Seller Center no período: pedidos feitos (pela criação, inclusive os nunca pagos) e pagos (pelo pagamento). */
+export interface ShopeeFunnelDto {
+  feitos: { pedidos: number; valor: number };
+  pagos: { pedidos: number; valor: number };
+}
+
 export interface ShopeeStatusDto {
   /** Integração configurada no ambiente E liberada para a empresa. */
   configured: boolean;

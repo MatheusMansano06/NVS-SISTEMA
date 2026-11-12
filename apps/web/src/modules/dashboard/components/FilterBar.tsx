@@ -4,7 +4,7 @@ import type { DashboardFilters } from '../dashboard-api';
 
 const MARKETPLACE_OPTIONS: { id: Marketplace; label: string; soon?: boolean }[] = [
   { id: 'mercado_livre', label: 'Mercado Livre' },
-  { id: 'shopee', label: 'Shopee', soon: true },
+  { id: 'shopee', label: 'Shopee' },
   { id: 'tiktok_shop', label: 'TikTok Shop' },
 ];
 
@@ -14,6 +14,8 @@ interface Props {
   accounts: DashboardDto['accounts'];
   /** Empresa com o TikTok Shop liberado (recurso `tiktok_shop`). */
   tiktok: boolean;
+  /** Empresa com a Shopee liberada (recurso `shopee`). */
+  shopee: boolean;
   hidden: boolean;
   onToggleHidden: () => void;
   onRefresh: () => void;
@@ -21,14 +23,14 @@ interface Props {
   updatedAt?: string;
 }
 
-export function FilterBar({ filters, onChange, accounts, tiktok, hidden, onToggleHidden, onRefresh, loading, updatedAt }: Props) {
+export function FilterBar({ filters, onChange, accounts, tiktok, shopee, hidden, onToggleHidden, onRefresh, loading, updatedAt }: Props) {
   // um marketplace por vez, nunca somados: sem escolha = Mercado Livre
   const marketplace = filters.marketplace ?? 'mercado_livre';
   // fatura é do Mercado Livre
   const periods: readonly Period[] = marketplace === 'mercado_livre' ? PERIODS : PERIODS.filter((p) => p !== 'invoice');
   const activeIndex = periods.indexOf(filters.period);
   const visibleAccounts = accounts.filter((a) => a.marketplace === marketplace);
-  const options = MARKETPLACE_OPTIONS.filter((m) => m.id !== 'tiktok_shop' || tiktok);
+  const options = MARKETPLACE_OPTIONS.filter((m) => (m.id === 'tiktok_shop' ? tiktok : m.id === 'shopee' ? shopee : true));
 
   return (
     <div className="filters" role="toolbar" aria-label="Filtros do dashboard">

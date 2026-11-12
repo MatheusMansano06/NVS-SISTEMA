@@ -18,6 +18,7 @@ import type { Database, Queryable } from '../../../shared/infrastructure/databas
 import { contributionMargin, keepsBuyerFreight } from '../domain/contribution.js';
 import type { DreSales } from '../domain/dre.js';
 import { TIMEZONE } from '../domain/period.js';
+import { SHOPEE_AD_SPEND_SQL } from '../infrastructure/shopee-ads-sql.js';
 
 interface Row {
   id: string;
@@ -458,7 +459,7 @@ export class FinanceService {
   /**
    * Investido em anúncios no período (respeita o filtro de conta). Mercado Livre: Mercado Ads, igual ao Dashboard.
    * TikTok Shop: anúncios que o TikTok descontou das vendas (ajustes "GMV payment for TikTok Ads" do extrato);
-   * anúncio pago por cartão ou saldo de anúncios não passa pelo extrato da loja.
+   * anúncio pago por cartão ou saldo de anúncios não passa pelo extrato da loja. Shopee: gasto do Shopee Ads.
    */
   private async adSpend(tenantId: string, q: FinanceQuery): Promise<number> {
     // o extrato não diz para qual live/vídeo foi o anúncio: com filtro de canal, não há como atribuir
@@ -473,6 +474,10 @@ export class FinanceService {
           [q.from, q.to, q.accountId ?? null],
         ),
       );
+      return Math.max(0, n(rows[0]?.cost ?? 0));
+    }
+    if (q.marketplace === 'shopee') {
+      const { rows } = await this.db.withTenant(tenantId, (db) => db.query<{ cost: string }>(SHOPEE_AD_SPEND_SQL, [q.from, q.to, q.accountId ?? null]));
       return Math.max(0, n(rows[0]?.cost ?? 0));
     }
     if (q.marketplace && q.marketplace !== 'mercado_livre') return 0;

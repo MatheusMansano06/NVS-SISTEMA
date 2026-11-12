@@ -1,4 +1,4 @@
-import type { ShopeeStatusDto } from '@nvs/shared';
+import type { ShopeeFunnelDto, ShopeeStatusDto } from '@nvs/shared';
 import { http } from '../../shared/http';
 
 const base = '/api/v1/integrations/shopee';
@@ -6,6 +6,8 @@ const base = '/api/v1/integrations/shopee';
 export const shopeeApi = {
   connectUrl: () => http<{ url: string }>(`${base}/connect`),
   status: () => http<ShopeeStatusDto>(`${base}/status`),
+  funnel: (from: string, to: string, accountId?: string) =>
+    http<ShopeeFunnelDto>(`${base}/funnel?${new URLSearchParams({ from, to, ...(accountId ? { accountId } : {}) })}`),
   sync: (connectionId?: string) => http<{ ok: true }>(`${base}/sync`, { body: { connectionId } }),
 };
 

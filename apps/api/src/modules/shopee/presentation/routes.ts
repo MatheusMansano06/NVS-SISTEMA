@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { ShopeeStatusDto } from '@nvs/shared';
-import { AppError } from '../../../shared/kernel/errors.js';
+import type { ShopeeFunnelDto, ShopeeStatusDto } from '@nvs/shared';
+import { AppError, ValidationError } from '../../../shared/kernel/errors.js';
 import type { ShopeeService } from '../application/shopee-service.js';
 
 class NotConfiguredError extends AppError {
@@ -37,6 +37,14 @@ export function shopeeRoutes(service: ShopeeService | null) {
     app.get(`${base}/status`, { preHandler: app.authenticate }, async (req): Promise<ShopeeStatusDto> => {
       if (!service) return { configured: false, connections: [] };
       return service.status(req.user.tenantId);
+    });
+
+    app.get(`${base}/funnel`, { preHandler: app.authenticate }, async (req): Promise<ShopeeFunnelDto> => {
+      const q = req.query as { from?: string; to?: string; accountId?: string };
+      const day = /^\d{4}-\d{2}-\d{2}$/;
+      if (!q.from || !q.to || !day.test(q.from) || !day.test(q.to)) throw new ValidationError('Informe o período (from e to)');
+      const uuid = /^[0-9a-f-]{36}$/i;
+      return require().funnel(req.user.tenantId, q.from, q.to, q.accountId && uuid.test(q.accountId) ? q.accountId : undefined);
     });
 
     app.post(`${base}/sync`, { preHandler: app.authenticate }, async (req, reply) => {

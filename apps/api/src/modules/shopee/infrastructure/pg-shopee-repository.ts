@@ -1,4 +1,5 @@
 import type { Database, Queryable } from '../../../shared/infrastructure/database.js';
+import { TIMEZONE } from '../../sales/index.js';
 import { orderFinance, type ShopeeEscrowRow } from '../domain/shopee-escrow.js';
 
 export interface ShopeeConnectionRow {
@@ -19,6 +20,7 @@ export interface ShopeeConnectionRow {
   backfilled: boolean;
   last_synced_at: Date | null;
   escrow_until: Date | null;
+  ads_error: string | null;
   updated_at: Date;
 }
 
@@ -31,7 +33,7 @@ export interface EscrowWrite extends ShopeeEscrowRow {
 
 const COLS = `c.id, c.tenant_id, c.account_id, c.shop_id, a.nickname, c.access_token_enc, c.refresh_token_enc, c.expires_at,
   c.auth_expires_at, c.status, c.last_error, c.sync_status, c.sync_error, c.orders_imported, c.backfilled, c.last_synced_at,
-  c.escrow_until, c.updated_at`;
+  c.escrow_until, c.ads_error, c.updated_at`;
 const FROM = 'FROM shopee_connections c JOIN marketplace_accounts a ON a.id = c.account_id';
 
 export class PgShopeeRepository {
@@ -224,10 +226,11 @@ export class PgShopeeRepository {
     if (!orderSns.length) return [];
     const { rows } = await db.query<{
       id: string; order_sn: string; settled: boolean; items_gross: string; produto: string; cupom: string; tarifa: string; tarifa_refund: string;
-      frete_comprador: string; frete_vendedor: string; ajuste: string; returned: boolean; after: string | null; escrow_amount: string;
+      frete_comprador: string; frete_vendedor: string; ajuste: string; returned: boolean; after: string | null; escrow_amount: string; ads_fee: string | null;
     }>(
       `SELECT o.id, e.order_sn, e.settled, e.produto, e.cupom, e.tarifa, e.tarifa_refund, e.frete_comprador, e.frete_vendedor,
               e.ajuste, e.returned, e.escrow_amount, e.income->>'escrow_amount_after_adjustment' AS after,
+              e.tarifas->>'ads_fee' AS ads_fee,
               (SELECT coalesce(sum(i.quantity * i.unit_price), 0) FROM order_items i WHERE i.order_id = o.id) AS items_gross
          FROM shopee_escrows e JOIN orders o ON o.account_id = e.account_id AND o.marketplace = 'shopee' AND o.external_id = e.order_sn
         WHERE e.account_id = $1 AND e.order_sn = ANY($2) AND o.status <> 'cancelled'`,
@@ -240,6 +243,7 @@ export class PgShopeeRepository {
         {
           produto: n(r.produto), cupom: n(r.cupom), tarifa: n(r.tarifa), tarifa_refund: n(r.tarifa_refund), frete_comprador: n(r.frete_comprador),
           frete_vendedor: n(r.frete_vendedor), ajuste: n(r.ajuste), returned: r.returned, escrow_after_adjustment: n(r.after ?? r.escrow_amount),
+          ads_fee: n(r.ads_fee ?? 0),
         },
         n(r.items_gross),
       );
@@ -257,4 +261,103 @@ export class PgShopeeRepository {
     );
     return rows.map((r) => r.id);
   }
+
+  // ---------- funil Pedido Feito × Pedido Pago
+  /** Guarda todo pedido lido (pago ou não), com criação, pagamento e valor. */
+  async upsertPlaced(db: Queryable, tenantId: string, accountId: string, orders: PlacedWrite[]): Promise<void> {
+    if (!orders.length) return;
+    await db.query(
+      `INSERT INTO shopee_placed_orders (tenant_id, account_id, order_sn, placed_at, paid_at, status, amount, total_amount)
+       SELECT $1, $2, x.order_sn, x.placed_at, x.paid_at, x.status, x.amount, x.total_amount
+         FROM jsonb_to_recordset($3::jsonb) AS x(order_sn text, placed_at timestamptz, paid_at timestamptz, status text, amount numeric, total_amount numeric)
+       ON CONFLICT (tenant_id, account_id, order_sn) DO UPDATE
+         SET placed_at = EXCLUDED.placed_at, paid_at = EXCLUDED.paid_at, status = EXCLUDED.status,
+             amount = EXCLUDED.amount, total_amount = EXCLUDED.total_amount, updated_at = now()`,
+      [tenantId, accountId, JSON.stringify(orders)],
+    );
+  }
+
+  /** Pedidos feitos (pela criação) e pagos (pelo pagamento) entre dois dias de São Paulo, como o Seller Center conta. */
+  async funnel(db: Queryable, from: string, to: string, accountId?: string): Promise<{ feitos: number; feitos_valor: string; pagos: number; pagos_valor: string }> {
+    const range = (col: string) =>
+      `${col} >= ($1::date)::timestamp AT TIME ZONE '${TIMEZONE}' AND ${col} < ($2::date + 1)::timestamp AT TIME ZONE '${TIMEZONE}'`;
+    const acc = accountId ? 'AND account_id = $3' : '';
+    const { rows } = await db.query<{ feitos: number; feitos_valor: string; pagos: number; pagos_valor: string }>(
+      `SELECT count(*) FILTER (WHERE ${range('placed_at')})::int AS feitos,
+              coalesce(sum(amount) FILTER (WHERE ${range('placed_at')}), 0) AS feitos_valor,
+              count(*) FILTER (WHERE ${range('paid_at')})::int AS pagos,
+              coalesce(sum(amount) FILTER (WHERE ${range('paid_at')}), 0) AS pagos_valor
+         FROM shopee_placed_orders
+        WHERE (${range('placed_at')} OR ${range('paid_at')}) ${acc}`,
+      accountId ? [from, to, accountId] : [from, to],
+    );
+    return rows[0]!;
+  }
+
+  // ---------- Shopee Ads
+  async upsertAdsDaily(db: Queryable, tenantId: string, accountId: string, days: ShopeeAdsDay[]): Promise<void> {
+    if (!days.length) return;
+    await db.query(
+      `INSERT INTO shopee_ads_daily (tenant_id, account_id, day, expense, gmv, clicks, impressions)
+       SELECT $1, $2, x.day, x.expense, x.gmv, x.clicks, x.impressions
+         FROM jsonb_to_recordset($3::jsonb) AS x(day date, expense numeric, gmv numeric, clicks integer, impressions integer)
+       ON CONFLICT (tenant_id, account_id, day) DO UPDATE
+         SET expense = EXCLUDED.expense, gmv = EXCLUDED.gmv, clicks = EXCLUDED.clicks, impressions = EXCLUDED.impressions, updated_at = now()`,
+      [tenantId, accountId, JSON.stringify(days)],
+    );
+  }
+
+  async setAds(db: Queryable, id: string, error: string | null): Promise<void> {
+    await db.query(
+      `UPDATE shopee_connections SET ads_error = $2, ads_synced_at = CASE WHEN $2::text IS NULL THEN now() ELSE ads_synced_at END WHERE id = $1`,
+      [id, error],
+    );
+  }
+
+  // ---------- anúncios fora do ar (pausados do Dashboard)
+  async upsertProducts(db: Queryable, tenantId: string, accountId: string, rows: ShopeeProductRow[]): Promise<void> {
+    if (!rows.length) return;
+    await db.query(
+      `INSERT INTO shopee_products (tenant_id, account_id, item_id, title, status, picture_url, price, available_quantity, updated_at)
+       SELECT $1, $2, x.item_id, x.title, x.status, x.picture_url, x.price, x.available_quantity, now()
+         FROM jsonb_to_recordset($3::jsonb) AS x(item_id text, title text, status text, picture_url text, price numeric, available_quantity integer)
+       ON CONFLICT (tenant_id, account_id, item_id) DO UPDATE
+         SET title = EXCLUDED.title, status = EXCLUDED.status, picture_url = EXCLUDED.picture_url, price = EXCLUDED.price,
+             available_quantity = EXCLUDED.available_quantity, updated_at = now()`,
+      [tenantId, accountId, JSON.stringify(rows)],
+    );
+  }
+
+  /** Depois da leitura completa: o que voltou ao ar (ou foi excluído) sai. */
+  async pruneProducts(db: Queryable, accountId: string, before: Date): Promise<void> {
+    await db.query('DELETE FROM shopee_products WHERE account_id = $1 AND updated_at < $2', [accountId, before]);
+  }
+}
+
+export interface ShopeeAdsDay {
+  day: string;
+  expense: number;
+  gmv: number;
+  clicks: number;
+  impressions: number;
+}
+
+export interface ShopeeProductRow {
+  item_id: string;
+  title: string;
+  status: string;
+  picture_url: string | null;
+  price: number | null;
+  available_quantity: number | null;
+}
+
+
+/** Pedido para o funil (datas ISO). */
+export interface PlacedWrite {
+  order_sn: string;
+  placed_at: string;
+  paid_at: string | null;
+  status: string;
+  amount: number;
+  total_amount: number | null;
 }

@@ -261,3 +261,15 @@
 .live-table .num { text-align: right; }
 .live-table small { color: var(--gray-500); }
 .live-band { font-weight: 700; }
+
+/* Shopee: funil pedido pago × pedido feito */
+.shopee-funnel { margin-top: 16px; }
+.funnel-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.funnel-rows div { display: grid; gap: 2px; }
+.funnel-rows span { font-size: .82rem; font-weight: 650; color: var(--navy); }
+.funnel-rows b { font-size: 1.5rem; font-weight: 750; letter-spacing: -0.03em; color: var(--navy); font-variant-numeric: tabular-nums; }
+.funnel-rows small { color: var(--gray-500); font-size: .78rem; }
+.funnel-rows .funnel-muted b { color: var(--gray-500); }
+.funnel-bar { height: 14px; border-radius: 999px; background: var(--gray-100); overflow: hidden; margin: 6px 0 2px; }
+.funnel-bar i { display: block; height: 100%; border-radius: 999px; background: var(--blue); transition: width .5s; }
+.fin-note { margin: 0; font-size: .74rem; color: var(--gray-500); }

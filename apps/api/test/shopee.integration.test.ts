@@ -82,6 +82,19 @@ describe.skipIf(!TEST_DB)('Shopee: conexão, histórico, escrow e Análise Finan
       released: from.getTime() <= Date.now() - 2 * DAY && Date.now() - 2 * DAY <= to.getTime() ? [{ orderSn: sn('A'), payout: 53.91, releasedAt: new Date(Date.now() - 2 * DAY) }] : [],
       more: false,
     }),
+    // Shopee Ads: R$ 10 por dia em todos os dias pedidos
+    adsDaily: async (_t, _s, from, to) => {
+      const out = [];
+      for (let d = Date.parse(from); d <= Date.parse(to); d += DAY) {
+        const [y, m, dd] = new Date(d).toISOString().slice(0, 10).split('-');
+        out.push({ date: `${dd}-${m}-${y}`, expense: 10, broad_gmv: 50, clicks: 3, impression: 100 });
+      }
+      return out;
+    },
+    // um anúncio deslistado (sem estoque) e um bloqueado
+    itemList: async (_t, _s, status) => ({ itemIds: status === 'UNLIST' ? ['901'] : ['902'], next: null }),
+    itemInfo: async (_t, _s, ids) =>
+      ids.map((id) => ({ item_id: id, item_name: `Item ${id}`, item_status: id === '901' ? 'UNLIST' : 'BANNED', price_info: [{ current_price: 40 }], stock_info_v2: { summary_info: { total_available_stock: id === '901' ? 0 : 5 } } })),
   };
 
   beforeAll(async () => {
@@ -145,7 +158,8 @@ describe.skipIf(!TEST_DB)('Shopee: conexão, histórico, escrow e Análise Finan
         ).rows.map(({ k, ...r }) => [k, r]),
       );
     const fin = (k: string, itemsGross: number) => {
-      const f = orderFinance(mapShopeeEscrow(escrows[sn(k)]!), itemsGross);
+      const e = mapShopeeEscrow(escrows[sn(k)]!);
+      const f = orderFinance({ ...e, ads_fee: e.tarifas.ads_fee }, itemsGross);
       return { status: f.status, gross: f.gross, coupon: f.coupon, fee: f.fee, shipping: f.shipping, fc: f.buyerShipping, refund: f.refund };
     };
     const expected = {
@@ -155,8 +169,8 @@ describe.skipIf(!TEST_DB)('Shopee: conexão, histórico, escrow e Análise Finan
       D: { status: 'cancelled', gross: 50, coupon: 0, fee: 0, shipping: 0, fc: 0, refund: 0, settled: true },
     };
     expect(await rows()).toEqual(expected);
-    // a margem (sem custo) fecha com o repasse: A 53,91
-    expect(expected.A.gross + expected.A.fc - expected.A.coupon - expected.A.fee - expected.A.shipping).toBeCloseTo(53.91, 2);
+    // a margem (sem custo) fecha com o repasse (A 53,91) mais a recarga de Ads (1,55), que vai para a linha de Ads
+    expect(expected.A.gross + expected.A.fc - expected.A.coupon - expected.A.fee - expected.A.shipping).toBeCloseTo(53.91 + 1.55, 2);
     expect(expected.C).toMatchObject({ status: 'returned', refund: 79.99 });
 
     const today = todayIn();
@@ -170,6 +184,28 @@ describe.skipIf(!TEST_DB)('Shopee: conexão, histórico, escrow e Análise Finan
     expect(sh.enriquecimentoPendente).toBe(2);
     const lines = (await get(`/api/v1/finance/lines?${range}&marketplace=shopee&offset=0&limit=50`)).json().items as { sku: string; pictureUrl: string | null; listingType: string | null }[];
     expect(lines.find((l) => l.sku === 'PROESCTW')).toMatchObject({ pictureUrl: 'https://cf.shopee.com.br/file/x', listingType: 'shopee_seller' });
+
+    // funil do Seller Center: feito conta todos (inclusive não pagos); pago conta pela data do pagamento
+    expect((await get(`${base}/funnel?from=${from}&to=${today}`)).json()).toEqual({
+      feitos: { pedidos: 6, valor: 390.52 },
+      pagos: { pedidos: 4, valor: 290.52 },
+    });
+    expect((await get(`${base}/funnel?from=${today}&to=${today}`)).json()).toEqual({ feitos: { pedidos: 0, valor: 0 }, pagos: { pedidos: 0, valor: 0 } });
+    expect((await get(`${base}/funnel?from=x`)).statusCode).toBe(400);
+
+    // Shopee Ads: gasto das campanhas, dia a dia (11 dias × R$ 10), na Análise Financeira e no Dashboard
+    expect(sh.adSpend).toBe(110);
+    const dashSh = (await get('/api/v1/dashboard/summary?period=30d&marketplace=shopee&fresh=true')).json();
+    expect(dashSh.kpis).toMatchObject({ orders: 2, adSpend: 300 });
+    expect(dashSh.ads).toEqual({ status: 'ok', message: null });
+    expect(dashSh.accounts.some((a: { marketplace: string }) => a.marketplace === 'shopee')).toBe(true);
+    expect(dashSh.paused).toMatchObject({ total: 2, outOfStock: 1 });
+    expect(dashSh.paused.items[0]).toMatchObject({ id: '901', title: 'Item 901', price: 40, availableQuantity: 0, outOfStock: true });
+
+    // Ads ainda não lido (ex.: app sem a permissão): vale a recarga descontada dos repasses das vendas (A 1,55 + B 1,88)
+    await db.withTenant(tenantId, (c) => c.query('UPDATE shopee_connections SET ads_synced_at = NULL WHERE shop_id = $1', [shopId]));
+    expect((await summary('&marketplace=shopee')).adSpend).toBeCloseTo(3.43, 2);
+    await db.withTenant(tenantId, (c) => c.query('UPDATE shopee_connections SET ads_synced_at = now() WHERE shop_id = $1', [shopId]));
 
     // sem filtro (Mercado Livre): os pedidos da Shopee não entram
     expect((await summary()).cards).toMatchObject({ vendasAprovadas: 0, qtdAprovadas: 0 });
